@@ -178,15 +178,17 @@ function renderPickCard(p){
 }
 function renderAutomaticResults(items,failures,completed){
   if(!items.length){
+    allPickCards=[];
+    el("pickFilters").hidden=true;
     el("scanOutput").innerHTML=
       '<div class="empty">No verified 100% historical OVER research thresholds returned.<p class="muted">The historical source may lack the player’s position, comparable defenses, or enough completed boxscores. Try Recent Games or a one-season scan. A blank result does not mean a failed bet or a guaranteed outcome.</p></div>'+
       failures.map(e=>'<p class="error">'+safe(e)+'</p>').join("");
     return;
   }
-  const all=items.flatMap(x=>x.results.map(p=>({...p,sourceGame:x.game,provider:x.provider})))
-    .sort((a,b)=>(a.scanMode==="similar"?0:1)-(b.scanMode==="similar"?0:1)||b.sample-a.sample || b.recentHits-a.recentHits || b.line-a.line);
+  const all=items.flatMap(x=>(x.results||[]).map(p=>({...p,sourceGame:x.game,provider:x.provider})));
+  allPickCards=all;
+  refreshPickFilterChoices(all);
 
-  const message=all.length>100?'<p class="muted">Showing the first 100 of '+all.length+' results.</p>':"";
   const pendingCareerCount=items.reduce((n,x)=>n+(x.careerPlayersRemaining||0),0);
   const coverage=items.map(x=>{
     const requested=(x.yearsRequested||[]).join(", ");
@@ -209,18 +211,22 @@ function renderAutomaticResults(items,failures,completed){
     (failures.length?'<div class="warning">'+safe(failures.length)+' games or partial data sources could not be analyzed. '+failures.slice(0,5).map(safe).join(" · ")+'</div>':"")+
     (pendingCareerCount?'<p class="warning">Career data was prioritized for active players. '+pendingCareerCount+
       ' additional player histories can still be checked.</p><button id="scanMoreCareers" class="gold">Scan more player careers ('+pendingCareerCount+' remaining)</button>':"")+
-    message+(all.length?'<div class="scan-grid">'+cards+'</div>':
-      '<div class="empty">No qualifying historical 100% OVER trends were found in the available season batches. This may reflect incomplete historical data or no comparable defenses, not a predicted result.</div>');
+    (all.length?'<div id="pickCardMount"></div>':
+      '<div class="empty">No qualifying 100% OVER research cards were found in the available season data. Missing historical boxscores or comparable opponents can also cause an empty scan.</div>');
+  drawFilteredPickCards();
 }
 scanBtn.addEventListener("click",async()=>{
   const chosen=games.filter(g=>selected.has(g.id));
   if(!chosen.length){
     scanProgress.textContent="Select at least one matchup first.";
+    clearAutomaticResearch();
     el("scanOutput").innerHTML='<div class="empty">Select one or more games, then press Scan Selected Games.</div>';
     return;
   }
   const sport=current,date=el("date").value,league=el("league").value;
   const mode=FIXED_SCAN.mode,window=FIXED_SCAN.window; // Always both trends, three seasons, OVER-only.
+  resetPickFilterInputs();
+  clearAutomaticResearch();
   const failures=[],states=[];
   let completed=0,cursor=0,seasonBatchesDone=0,careerBatchesDone=0;
   scanBtn.disabled=true;scanBtn.textContent="Scanning matchups…";
