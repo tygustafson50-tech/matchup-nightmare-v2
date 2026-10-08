@@ -10,7 +10,8 @@ import {
 } from "../../lib/auto-scan.js";
 
 const ESPN="https://site.api.espn.com/apis/site/v2/sports/";
-const MAX_PRIOR_GAMES=7;
+// Look beyond the last five to locate up to four genuinely comparable opponents.
+const MAX_PRIOR_GAMES=10;
 const CONCURRENCY=5;
 
 const respond=(data,status=200)=>new Response(JSON.stringify(data),{
