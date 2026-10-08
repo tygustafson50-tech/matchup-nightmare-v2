@@ -9,19 +9,19 @@
 <section class="panel"><h2>02 / Scan settings</h2>
 <p class="muted">Select games on the left and click <b>Scan Selected Games</b>. The app retrieves historical player box scores automatically where available.</p>
 <label>Historical 100% filter
-<select id="scanMode"><option value="both" selected>Both: similar defenses + recent games</option><option value="similar">Similar defenses only</option><option value="recent">Recent games only</option></select>
+<select id="scanMode"><option value="both" selected>Both: similar defense vs position + recent</option><option value="similar">Similar defenses vs position only</option><option value="recent">Recent games only</option></select>
 </label>
 <div class="warning">Automatically calculated alternative thresholds are research-only, NOT actual PrizePicks lines. Connecting an authorized PrizePicks or sportsbook data provider is a separate step.</div>
-<div class="scanner-info"><b>Scan rules</b><p class="muted">OVERS ONLY · 100% historical samples · minimum 3 qualifying games · last 5 recorded appearances · only completed games before kickoff. The app labels similar-opponent and recent-only trends separately.</p></div>
+<div class="scanner-info"><b>Scan rules</b><p class="muted">OVERS ONLY · 100% historical samples · minimum 3 qualifying games · last 5 recorded appearances · only completed games before kickoff. Positional-defense comparisons use the selected stat (WR receiving yards, guard points, etc.) and require actual past box scores. Recent-only trends are labeled separately.</p></div>
 <details class="manual-research"><summary>Optional: manual player research</summary>
 <p class="muted">You can still enter your own sourced historical game logs. This is separate from the automatic game scanner.</p>
 <div class="cols"><label>Player<input id="player" placeholder="Player name"></label><label>Market<select id="market"></select></label></div>
-<div class="cols"><label>OVER line<input id="line" type="number" step=".5" min="0" placeholder="49.5"></label><label>Upcoming team points/goals allowed per game (optional)<input id="defense" type="number" min=".1" step=".1" placeholder="For basic matchup comparison"></label></div>
-<label>Historical games: date, opponent, player stat, opponent points/goals allowed before that game
+<div class="cols"><label>OVER line<input id="line" type="number" step=".5" min="0" placeholder="49.5"></label><label>Opponent: same stat allowed to this position per game (optional)<input id="defense" type="number" min=".1" step=".1" placeholder="For basic matchup comparison"></label></div>
+<label>Historical games: date, opponent, player stat, same stat allowed to position before that game
 <textarea id="logs" rows="6" placeholder="YYYY-MM-DD,Opponent,Statistic,OpponentDefense"></textarea></label>
 <label class="check"><input id="perfect" type="checkbox"> 100% historical comparable trend filter (at least 3 games)</label>
 <button id="scan" class="gold">Analyze OVER →</button>
-<p class="muted">This basic comparison uses team scoring allowed, NOT true defense-versus-position. Historical percentages are not predictions.</p></details></section>
+<p class="muted">Manual comparison uses position-specific stat allowed that you provide. These numbers are unverified and historical percentages are not predictions.</p></details></section>
 </div>
 <section class="panel results" id="autoResults"><h2>03 / Automatic scan results</h2><div id="scanOutput" class="empty">Select up to 16 games, then click Scan Selected Games.</div></section>
 <section class="panel results" id="manualResults" hidden><h2>Manual research results</h2><div id="output" class="empty">Enter a player, market, OVER line, and sourced historical games to analyze.</div></section>
