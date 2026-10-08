@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {combineSeasonBatches,seasonsFor} from "../public/lib/three-seasons.js";
-import {scanTrends} from "../lib/auto-scan.js";
+import {scanTrends,CONFIG,matchupRole} from "../lib/auto-scan.js";
 
 const game={id:"123456789",date:"2026-10-08T19:00:00Z",away:{name:"B"},home:{name:"A"}};
 const teams=[
@@ -161,4 +161,40 @@ test("an empty 2024 response is not counted as a loaded historical season",()=>{
   assert.deepEqual(result.yearsLoaded,[2026,2025]);
   assert.deepEqual(result.yearsMissing,[2024]);
   assert.match(result.notes.join(" "),/without usable player records/);
+});
+
+
+test("three-season position-specific comparison works for all six sports",()=>{
+  const currentPosition={nfl:"QB",nba:"PG",mlb:"DH",ncaaf:"QB",ncaab:"PG",soccer:"FW"};
+  for(const sport of Object.keys(CONFIG)){
+    const [stat,,min]=CONFIG[sport].markets[0];
+    const position=currentPosition[sport];
+    const role=matchupRole(sport,position,stat);
+    assert.ok(role,"Missing role for "+sport);
+    const key=stat+"|"+role.role;
+    const seasons=[2026,2025,2024].map(year=>{
+      const data=batch(year);
+      data.sport=sport;
+      for(const rowset of Object.values(data.seasonBatch.records)){
+        for(const record of rowset){
+          record.players=record.players.map(p=>({
+            ...p,position,stats:{[stat]:min+10+(2026-year)*3}
+          }));
+        }
+      }
+      for(const obj of Object.values(data.seasonBatch.defenseProfiles)){
+        for(const id of Object.keys(obj)){
+          const old=obj[id]["receivingYards|WR"];
+          obj[id]={[key]:old};
+        }
+      }
+      return data;
+    });
+    const result=combineSeasonBatches(seasons,{sport,window:3,mode:"similar"});
+    const pick=result.results.find(p=>p.teamId==="1"&&p.stat===stat);
+    assert.ok(pick,"No comparable historical matches for "+sport);
+    assert.equal(pick.sample,4,sport);
+    assert.deepEqual(pick.matchedSeasons,[2025,2024],sport);
+    assert.equal(pick.matchupPosition,role.label,sport);
+  }
 });
