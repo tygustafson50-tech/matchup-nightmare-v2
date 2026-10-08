@@ -8,49 +8,23 @@
 
 <section class="panel results" id="autoResults">
   <div class="results-heading">
-    <div><h2>02 / Matchup picks</h2><p class="muted">Filter your OVER research cards instantly—no rescan needed.</p></div>
+    <div><h2>02 / Matchup picks</h2><p class="muted">Filter picks by stat, team, or position—no rescan needed.</p></div>
     <span class="results-sport-tag">ALL SPORTS · SAME LOGIC</span>
   </div>
   <div id="pickFilters" class="pick-filters" hidden>
-    <div class="pick-filter-top">
-      <label class="filter-search-label" for="filterSearch">Find a player or stat
-        <input id="filterSearch" type="search" autocomplete="off" spellcheck="false" placeholder="Search player, team or stat…">
-      </label>
-      <button id="filterReset" type="button" class="secondary filter-reset">Reset filters</button>
-    </div>
-    <div id="pickTrendChips" class="pick-trend-tabs" role="group" aria-label="Trend type">
-      <button type="button" class="active" data-trend="all" aria-pressed="true">All picks</button>
-      <button type="button" data-trend="similar" aria-pressed="false">100% similar defense</button>
-      <button type="button" data-trend="recent" aria-pressed="false">100% recent games</button>
-    </div>
     <div class="pick-filter-grid">
-      <label>Stat category<select id="filterMarket"><option value="all">All stats</option></select></label>
-      <label>Matchup<select id="filterGame"><option value="all">All games</option></select></label>
-      <label>Team<select id="filterTeam"><option value="all">All teams</option></select></label>
-      <label>Position<select id="filterPosition"><option value="all">All positions</option></select></label>
-      <label>Matchup evidence
-        <select id="filterEvidence">
-          <option value="all">All available evidence</option>
-          <option value="similar-any">With similar-defense games</option>
-          <option value="similar-perfect">4/4 similar-defense OVER</option>
-          <option value="recent-five-perfect">5/5 recent-games OVER</option>
-        </select>
+      <label>Stats
+        <select id="filterMarket"><option value="all">All stats</option></select>
       </label>
-      <label>Sort picks
-        <select id="filterSort">
-          <option value="similar">Similar-defense trends first</option>
-          <option value="sample">Largest qualifying sample</option>
-          <option value="player">Player A–Z</option>
-          <option value="market">Stat A–Z</option>
-          <option value="line-high">Highest research OVER line</option>
-          <option value="line-low">Lowest research OVER line</option>
-          <option value="game-time">Earliest game first</option>
-        </select>
+      <label>Team
+        <select id="filterTeam"><option value="all">All teams</option></select>
+      </label>
+      <label>Position
+        <select id="filterPosition"><option value="all">All positions</option></select>
       </label>
     </div>
     <div class="pick-filter-footer">
-      <span id="pickResultCount" role="status" aria-live="polite">Scan games to load pick filters.</span>
-      <span class="pick-filter-hint">Filters change only which cards you see—not the research calculation.</span>
+      <span id="pickResultCount" role="status" aria-live="polite">Scan games to view picks.</span>
     </div>
   </div>
   <div id="scanOutput" class="scan-output"><div class="empty">Select up to 16 games, then click Scan Selected Games.</div></div>
