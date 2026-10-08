@@ -11,8 +11,14 @@
 <label>Historical 100% filter
 <select id="scanMode"><option value="both" selected>Both: similar defense vs position + recent</option><option value="similar">Similar defenses vs position only</option><option value="recent">Recent games only</option></select>
 </label>
+<label>Similar-defense history
+<select id="historyWindow">
+  <option value="3" selected>Last 3 seasons (selected season + previous 2)</option>
+  <option value="1">Selected season only — faster</option>
+</select>
+</label>
 <div class="warning">Automatically calculated alternative thresholds are research-only, NOT actual PrizePicks lines. Connecting an authorized PrizePicks or sportsbook data provider is a separate step.</div>
-<div class="scanner-info"><b>Scan rules</b><p class="muted">OVERS ONLY · 100% historical samples · minimum 3 qualifying games · last 5 recorded appearances · only completed games before kickoff. Positional-defense comparisons use the selected stat (WR receiving yards, guard points, etc.) and require actual past box scores. Recent-only trends are labeled separately.</p></div>
+<div class="scanner-info"><b>Scan rules</b><p class="muted">OVERS ONLY · 100% historical samples · minimum 3 qualifying games · last 5 recent appearances shown separately · search previous two seasons for similar positional defenses · only completed games before kickoff. Positional-defense comparisons use the selected stat (WR receiving yards, guard points, etc.) and require actual past box scores. Recent-only trends are labeled separately.</p></div>
 <details class="manual-research"><summary>Optional: manual player research</summary>
 <p class="muted">You can still enter your own sourced historical game logs. This is separate from the automatic game scanner.</p>
 <div class="cols"><label>Player<input id="player" placeholder="Player name"></label><label>Market<select id="market"></select></label></div>
