@@ -67,10 +67,10 @@ function renderAutomaticResults(items,failures,completed){
       :'<div class="player-initial">'+safe(p.player.split(" ").map(x=>x[0]).slice(0,2).join(""))+'</div>';
     // Always display recorded performance, opponent and result on the front of each card.
     // The same table renderer is shared by NFL, NBA, MLB, NCAAF, NCAAB and soccer.
-    const recent=renderGameHistory(p.history,p.line,p.market,{heading:"Current season "+safe(p.recentSeason??"")+" · Last "+(p.history?.length||0)+" games",limit:5});
+    const recent=renderGameHistory(p.history,p.line,p.market,{heading:"Current-season games · Last "+(p.history?.length||0)+" recorded",limit:5});
     const compared=(p.similarGames||[]).filter(g=>Number.isFinite(g.value)).slice(0,4);
     const lastFourSimilar=renderGameHistory(compared,p.line,p.market,{
-      heading:"Last 4 vs similar positional defenses · 3-season career",
+      heading:"Last 4 similar-defense matchups · 3-season career",
       limit:4,
       countLabel:compared.length+" of 4 available",
       showOpponentDefense:true,
@@ -230,7 +230,7 @@ scanBtn.addEventListener("click",async()=>{
         // The first six per team get automatic old-team history scans.
         const candidates=eligibleCareerPlayers(currentBatch,sport,window===3?6:0);
         const state={game,responses,years,careerBatches:[],
-          candidateCount:candidates.total,pendingPlayers:window===3?candidates.remaining:[],
+          candidateCount:window===3?candidates.total:0,pendingPlayers:window===3?candidates.remaining:[],
           errors};
         states.push(state);
         if(window===3&&candidates.prioritized.length){
