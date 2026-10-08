@@ -60,6 +60,8 @@ export function combineSeasonBatches(responses,{
     collected[t.id]=[];
   }
   const warnings=[];
+  const positionCoverage={rosterLookups:0,rostersWithPositions:0,
+    missingPositionRows:0,resolvedPositionRows:0,defenseProfileStatTypes:0};
   let missingBoxscores=0;
   for(const year of loaded){
     const response=bySeason.get(year);
@@ -85,6 +87,11 @@ export function combineSeasonBatches(responses,{
       }
     }
     const d=response.diagnostics||{};
+    positionCoverage.rosterLookups+=(d.rosterLookups||0);
+    positionCoverage.rostersWithPositions+=(d.rosterLookupsSucceeded||0);
+    positionCoverage.missingPositionRows+=(d.positionRowsMissing||0);
+    positionCoverage.resolvedPositionRows+=(d.positionRowsResolved||0);
+    positionCoverage.defenseProfileStatTypes+=(d.defenseProfileStatTypes||0);
     missingBoxscores+=(d.missingOffenseBoxscores||0)+(d.missingDefenseBoxscores||0);
     if(d.offenseSchedules<2)warnings.push(year+": one or more team schedules unavailable.");
     if(d.missingOffenseBoxscores||d.missingDefenseBoxscores)
@@ -207,6 +214,12 @@ export function combineSeasonBatches(responses,{
   }
 
   const uniqueNotes=unique(warnings);
+  if(positionCoverage.missingPositionRows)
+    uniqueNotes.push(positionCoverage.missingPositionRows+
+      " sampled player stat rows lacked verified positions; comparable matchup calculations excluded these rows.");
+  if(positionCoverage.rosterLookups)
+    uniqueNotes.push("Position lookup: "+positionCoverage.rostersWithPositions+
+      " verified roster responses out of "+positionCoverage.rosterLookups+" attempts.");
   uniqueNotes.push("Recent games show only the selected season; similar-defense history may span three seasons.");
   uniqueNotes.push("Career sources may include previous franchises, but only sampled games and verified boxscores are included.");
   if(careerEligibleCount && careerByPlayer.size<careerEligibleCount)
@@ -227,7 +240,7 @@ export function combineSeasonBatches(responses,{
     yearsRequested:expected,yearsLoaded:scannedSeasons,yearsMissing:missingSeasons,
     careerPlayersEnriched:careerByPlayer.size,careerEligibleCount,
     rosterEvidencePlayers:currentRosterEvidenceCount,
-    notes:uniqueNotes,
+    positionCoverage,notes:uniqueNotes,
     provider:"ESPN provisional historical player and position-concession boxscores",
     prizesPicksConnected:false,realOddsConnected:false
   };
