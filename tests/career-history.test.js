@@ -151,3 +151,50 @@ test("current-season career lookup skips known games and finds a pre-trade appea
     assert.equal(skippedFetched,false);
   }finally{globalThis.fetch=prior;}
 });
+
+
+test("historical career player position is recovered from his former team's verified roster",async()=>{
+  const previous=globalThis.fetch;
+  const oldGame={
+    header:{events:[{id:"401100009",date:"2025-09-12T19:00:00Z",season:{year:2025}}]},
+    boxscore:{players:[
+      {team:{id:"88",displayName:"Old Club"},statistics:[{
+        name:"receiving",labels:["REC","YDS"],athletes:[{
+          athlete:{id:"77777",displayName:"Former Team WR"},stats:["6","84"]
+        }]
+      }]},
+      {team:{id:"44",displayName:"Defense"},statistics:[{
+        name:"receiving",labels:["REC","YDS"],athletes:[{
+          athlete:{id:"44444",displayName:"Other receiver",position:{abbreviation:"WR"}},stats:["2","30"]
+        }]
+      }]}
+    ]}
+  };
+  globalThis.fetch=async(url)=>{
+    const u=String(url);let data;
+    if(u.includes("/scoreboard?"))data={events:[
+      {id:"123456789",date:"2026-10-08T19:00:00Z",season:{year:2026}}
+    ]};
+    else if(u.includes("/athletes/77777/gamelog"))
+      data={events:{"401100009":{id:"401100009",date:"2025-09-12T19:00:00Z"}}};
+    else if(u.includes("/summary?event=401100009"))data=oldGame;
+    else if(u.includes("/teams/44/schedule"))data={events:[]};
+    else if(u.includes("/teams/88/roster"))
+      data={athletes:[{position:"offense",items:[{
+        id:"77777",displayName:"Former Team WR",position:{abbreviation:"WR"}
+      }]}]};
+    else throw Error("Unexpected fixture request: "+u);
+    return new Response(JSON.stringify(data),{headers:{"content-type":"application/json"}});
+  };
+  try{
+    const response=await onRequestGet({request:new Request(
+      "https://example.pages.dev/api/career?sport=nfl&date=2026-10-08&gameId=123456789&playerId=77777&season=2025"
+    )});
+    assert.equal(response.status,200);
+    const payload=await response.json();
+    assert.equal(payload.careerBatch.records.length,1);
+    assert.equal(payload.careerBatch.records[0].players[0].position,"WR");
+    assert.equal(payload.careerBatch.records[0].players[0].stats.receivingYards,84);
+    assert.equal(payload.diagnostics.rostersWithPositions,1);
+  }finally{globalThis.fetch=previous;}
+});
