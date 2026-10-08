@@ -146,3 +146,8 @@
 @media (max-width: 540px) {
   .similar-history { padding: 2px 7px 9px; }
 }
+
+/* Supporting evidence: how much the historical opponent conceded to the selected role. */
+.game-log-opponent-defense{display:block;margin-top:4px;font-size:10px;line-height:1.4;color:#cbb88d;font-weight:400;white-space:normal;overflow-wrap:anywhere}
+.similar-history .game-log-row{min-height:55px}
+.scan-stats small{overflow-wrap:anywhere}
