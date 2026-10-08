@@ -101,3 +101,54 @@ test("scanner rejects fabricated/unlisted games",async()=>{
     assert.equal(response.status,404);
   }finally{globalThis.fetch=old;}
 });
+
+
+test("similar-defense sample uses latest four matches even when some are older than last five",()=>{
+  const team={id:"1",name:"Team A",targetOpponentId:"2"};
+  const game={id:"up",date:"2026-10-08T18:00:00Z",sport:"nfl"};
+  const profiles={"2":{target:20}};
+  const comparableIndices=new Set([0,3,6,8,9]);
+  const records=Array.from({length:10},(_,i)=>{
+    const id="game"+i,opponentId=String(100+i);
+    const date="2026-09-"+String(i+1).padStart(2,"0")+"T12:00:00Z";
+    profiles[opponentId]={[id]:comparableIndices.has(i)?21:35};
+    return {id,date,opponent:"Opponent "+i,opponentId,players:[{
+      id:"player1",name:"Example Player",position:"QB",stats:{passingYards:175+i*4}
+    }]};
+  });
+  const result=scanTrends(records,team,game,profiles,"similar",3)
+    .find(p=>p.stat==="passingYards");
+  assert.ok(result);
+  assert.deepEqual(result.similarGames.map(g=>g.opponent),[
+    "Opponent 9","Opponent 8","Opponent 6","Opponent 3"
+  ]);
+  assert.equal(result.matched,4);
+  assert.equal(result.sample,4);
+  assert.equal(result.similarHits,4);
+  assert.equal(result.similarSample,4);
+  assert.equal(result.history.length,5);
+  assert.equal(result.qualifyingGames.length,4);
+  assert.equal(result.similarTarget,4);
+});
+
+test("recent-only cards also report the actual available similar opponents without inventing four",()=>{
+  for(const sport of Object.keys(CONFIG)){
+    const [stat,,minValue]=CONFIG[sport].markets[0];
+    const records=Array.from({length:6},(_,i)=>({
+      id:"match"+i,date:"2026-09-"+String(i+1).padStart(2,"0")+"T12:00:00Z",
+      opponent:"Opponent "+i,opponentId:String(i+10),
+      players:[{id:"athlete",name:"Example",stats:{[stat]:minValue+2+i}}]
+    }));
+    const profiles={"2":{target:20},"10":{"match0":22},"11":{"match1":21}};
+    const team={id:"1",name:"Team",targetOpponentId:"2"};
+    const game={sport,id:"upcoming",date:"2026-10-08T18:00:00Z"};
+    const recent=scanTrends(records,team,game,profiles,"recent",3)[0];
+    assert.ok(recent, sport+" should return a recent-only research result");
+    assert.equal(recent.similarGames.length,2);
+    assert.equal(recent.similarSample,2);
+    assert.equal(recent.similarTarget,4);
+    assert.equal(recent.similarGames[0].opponent,"Opponent 1");
+    assert.equal(recent.similarGames[1].opponent,"Opponent 0");
+    assert.equal(scanTrends(records,team,game,profiles,"similar",3).length,0);
+  }
+});
