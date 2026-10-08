@@ -169,3 +169,14 @@
 }
 
 .game-log-career-team{display:block;font-size:10px;color:#d8b6ee;font-weight:500;margin-top:3px;white-space:normal}
+
+/* No fabricated positional data: use a compact explicit unavailable state. */
+.similar-history-missing {
+  background:#171716;
+  border-color:#544733;
+  padding:10px 12px;
+}
+.similar-empty{display:flex;flex-direction:column;gap:5px;padding:10px 4px;text-align:left}
+.similar-empty strong{color:#f1d78f;font-size:13px;line-height:1.5}
+.similar-empty span{color:#d9c49a;font-size:11px;font-weight:700}
+.similar-empty p{color:#b3b0ac;font-size:11px;line-height:1.65;margin:5px 0 0}
