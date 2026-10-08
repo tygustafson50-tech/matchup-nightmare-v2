@@ -54,7 +54,7 @@ function clearAutomaticResearch(){
 function renderAutomaticResults(items,failures,completed){
   if(!items.length){
     el("scanOutput").innerHTML=
-      '<div class="empty">No verified 100% historical OVER research thresholds returned.<p class="muted">The historical source may lack the player's position, comparable defenses, or enough completed boxscores. Try Recent Games or a one-season scan. A blank result does not mean a failed bet or a guaranteed outcome.</p></div>'+
+      '<div class="empty">No verified 100% historical OVER research thresholds returned.<p class="muted">The historical source may lack the player’s position, comparable defenses, or enough completed boxscores. Try Recent Games or a one-season scan. A blank result does not mean a failed bet or a guaranteed outcome.</p></div>'+
       failures.map(e=>'<p class="error">'+safe(e)+'</p>').join("");
     return;
   }
