@@ -39,12 +39,14 @@ test("NFL receiving allowed isolates receivers from tight ends and running backs
   assert.equal(values["receivingYards|RB"].value,10);
 });
 
-test("NBA guard points conceded are distinct from centers",()=>{
+test("NBA PG and SG concessions are measured separately from centers",()=>{
   const box=teamBox(1,2,[["a","PG",21,4,5],["b","SG",15,2,3],["c","C",12,11,2]],[["z","PG",16,4,5]],
     "starters",["PTS","REB","AST"]);
   const values=positionAllowedByGame(box,"nba",2);
-  assert.equal(values["points|G"].value,36);
+  assert.equal(values["points|PG"].value,21);
+  assert.equal(values["points|SG"].value,15);
   assert.equal(values["points|C"].value,12);
+  assert.equal(values["points|G"],undefined);
   assert.equal(values["rebounds|C"].value,11);
 });
 
