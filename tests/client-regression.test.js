@@ -19,9 +19,41 @@ test("automatic scan includes both history sections and transparent unavailable 
   assert.match(app,/scanMoreCareers/);
 });
 
-test("client scanner preserves 3-season default and does not fake PrizePicks markets",()=>{
+test("client scanner has one fixed OVER-only 3-season history configuration",()=>{
   const html=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
-  assert.match(html,/value="3" selected/);
+  const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
+  assert.match(html,/One-click scan:/);
   assert.match(html,/Scan Selected Games/);
-  assert.match(html,/research-only, NOT actual PrizePicks lines/i);
+  assert.doesNotMatch(html,/id="scanMode"|id="historyWindow"|02 \/ Scan settings/);
+  assert.match(app,/const mode=FIXED_SCAN\.mode,window=FIXED_SCAN\.window/);
+  assert.match(html,/not live PrizePicks lines/i);
+});
+
+test("all six sports share a searchable and sortable pick-filter toolbar",()=>{
+  const html=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
+  for(const id of [
+    "pickFilters","filterSearch","filterMarket","filterGame","filterTeam",
+    "filterPosition","filterEvidence","filterSort","filterReset",
+    "pickTrendChips","pickResultCount"
+  ])assert.match(html,new RegExp('id="'+id+'"'));
+  assert.match(html,/4\/4 similar-defense OVER/);
+  assert.match(html,/5\/5 recent-games OVER/);
+  assert.match(html,/data-trend="recent"/);
+  assert.match(html,/data-trend="similar"/);
+});
+
+test("pick filters apply before pagination and never trigger another scan",()=>{
+  const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
+  assert.match(app,/filterPickCards\(allPickCards,collectPickFilters\(\)\)/);
+  assert.match(app,/matched\.slice\(0,visiblePickLimit\)/);
+  assert.match(app,/visiblePickLimit\+=PAGE_SIZE/);
+  assert.doesNotMatch(app,/all\.slice\(0,100\)/);
+  assert.match(app,/scanMoreCareers/);
+});
+
+test("advanced manual research remains optional below automatic picks",()=>{
+  const html=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
+  assert.ok(html.indexOf('id="autoResults"')<html.indexOf('class="panel optional-research"'));
+  assert.match(html,/id="scan"/);
+  assert.match(html,/class="manual-research"/);
 });
