@@ -51,39 +51,16 @@ chooseSport("nfl");
 /* Automatic fixed-rule scan. Optional manual research is below the pick results. */
 const scanBtn=el("scanSelected");
 const scanProgress=el("scanProgress");
-/* All sport pages use the same controls. Changing filters never calls /api. */
-el("filterSearch").addEventListener("input",()=>{
-  visiblePickLimit=PAGE_SIZE;
-  drawFilteredPickCards();
-});
-for(const id of ["filterMarket","filterGame","filterTeam","filterPosition","filterEvidence","filterSort"]){
+/* The same three result filters work across all six sports. No API calls. */
+for(const id of ["filterMarket","filterTeam","filterPosition"]){
   el(id).addEventListener("change",()=>{
     visiblePickLimit=PAGE_SIZE;
     drawFilteredPickCards();
   });
 }
-el("pickTrendChips").addEventListener("click",event=>{
-  const button=event.target.closest("button[data-trend]");
-  if(!button)return;
-  el("pickTrendChips").querySelectorAll("button[data-trend]").forEach(b=>{
-    const active=b===button;
-    b.classList.toggle("active",active);
-    b.setAttribute("aria-pressed",String(active));
-  });
-  visiblePickLimit=PAGE_SIZE;
-  drawFilteredPickCards();
-});
-el("filterReset").addEventListener("click",()=>{
-  resetPickFilterInputs();
-  drawFilteredPickCards();
-});
 el("autoResults").addEventListener("click",event=>{
   if(event.target.closest("#loadMorePicks")){
     visiblePickLimit+=PAGE_SIZE;
-    drawFilteredPickCards();
-  }
-  if(event.target.closest("#emptyResetFilters")){
-    resetPickFilterInputs();
     drawFilteredPickCards();
   }
 });
@@ -97,29 +74,14 @@ function clearAutomaticResearch(){
 /** Reset only the browsing controls; the fixed scanner model never changes. */
 function resetPickFilterInputs(){
   visiblePickLimit=PAGE_SIZE;
-  el("filterSearch").value="";
-  for(const id of ["filterMarket","filterGame","filterTeam","filterPosition","filterEvidence"])
+  for(const id of ["filterMarket","filterTeam","filterPosition"])
     el(id).value="all";
-  el("filterSort").value=INITIAL_FILTERS.sort;
-  el("pickTrendChips").querySelectorAll("button[data-trend]").forEach(button=>{
-    const active=button.dataset.trend==="all";
-    button.classList.toggle("active",active);
-    button.setAttribute("aria-pressed",String(active));
-  });
-}
-function selectedTrend(){
-  return el("pickTrendChips").querySelector('button[aria-pressed="true"]')?.dataset.trend||"all";
 }
 function collectPickFilters(){
   return {
-    search:el("filterSearch").value,
-    game:el("filterGame").value,
-    team:el("filterTeam").value,
     market:el("filterMarket").value,
-    position:el("filterPosition").value,
-    evidence:el("filterEvidence").value,
-    sort:el("filterSort").value,
-    trend:selectedTrend()
+    team:el("filterTeam").value,
+    position:el("filterPosition").value
   };
 }
 function setPickSelectOptions(id,allLabel,entries){
@@ -133,7 +95,6 @@ function setPickSelectOptions(id,allLabel,entries){
 function refreshPickFilterChoices(picks){
   const options=getPickOptions(picks);
   setPickSelectOptions("filterMarket","All stats",options.markets);
-  setPickSelectOptions("filterGame","All games",options.games);
   setPickSelectOptions("filterTeam","All teams",options.teams);
   setPickSelectOptions("filterPosition","All positions",options.positions);
   el("pickFilters").hidden=picks.length===0;
@@ -152,7 +113,7 @@ function drawFilteredPickCards(){
         ?'<div class="load-picks-row"><button type="button" id="loadMorePicks" class="secondary">'+
           'Show '+Math.min(PAGE_SIZE,matched.length-visible.length)+' more picks'+
           ' ('+(matched.length-visible.length)+' remaining)</button></div>':"")
-    :'<div class="empty filtered-empty">No cards match these filters. Try a different stat, player, team, or trend. <button type="button" id="emptyResetFilters" class="secondary">Clear filters</button></div>';
+    :'<div class="empty filtered-empty">No picks match this combination. Choose All stats, All teams, or All positions to broaden the results.</div>';
 }
 function renderPickCard(p){
 
