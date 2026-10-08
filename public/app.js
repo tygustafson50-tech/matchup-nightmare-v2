@@ -1,4 +1,5 @@
 import {analyze,parseLogs} from "/lib/engine.js";
+import {renderGameHistory} from "/lib/game-history.js";
 const sports={
 nfl:{label:"🏈 NFL",markets:["Passing yards","Passing attempts","Completions","Rushing yards","Rushing attempts","Receptions","Receiving yards","Targets"]},
 nba:{label:"🏀 NBA",markets:["Points","Rebounds","Assists","3-pointers","PRA","Steals","Blocks"]},
@@ -33,9 +34,9 @@ el("output").innerHTML='<h2>'+safe(name)+' — OVER '+line+' '+safe(market)+'</h
 (bad.length?'<p class="error">Invalid input lines ignored: '+bad.join(", ")+'</p>':"")+
 '<div class="metrics">'+metric("Last 5",result.last5)+metric("Last 10",result.last10)+metric("All supplied",result.season)+metric("Similar scoring defense",result.similar)+'</div>'+
 '<h3>Recent games</h3><div class="chart">'+result.recent.slice().reverse().map(g=>'<div class="bar '+(g.value>line?"hit":"")+'" style="height:'+Math.max(3,100*g.value/max)+'%" title="'+safe(g.date+" "+g.opponent+" "+g.value)+'"></div>').join("")+'</div>'+
-result.recent.map(g=>'<div class="history"><span>'+safe(g.date)+'</span><span>'+safe(g.opponent)+'</span><b>'+g.value+'</b></div>').join("")+
+renderGameHistory(result.recent,line,market,{heading:"Recent game history",limit:15})+
 '<h3>Similar team scoring defenses</h3><p class="muted">Compares manually supplied opponent team scoring allowed within 20%. This is not defense-versus-position.</p>'+
-(result.similarGames.length?result.similarGames.map(g=>'<div class="history"><span>'+safe(g.date)+'</span><span>'+safe(g.opponent)+' (defense: '+g.allowed+')</span><b>'+g.value+'</b></div>').join(""):'<p class="muted">Not enough valid defensive comparison data.</p>')+
+renderGameHistory(result.similarGames,line,market,{heading:"Similar team scoring defenses",limit:8})+
 '<div class="warning">Historical hit rates do not guarantee wins. No live sportsbook lines, verified player logs, injuries, or calibrated prediction model are connected.</div>';
 }catch(e){el("output").innerHTML='<p class="error">'+safe(e.message)+'</p>';}
 });
@@ -62,16 +63,19 @@ function renderAutomaticResults(items,failures,completed){
     const photo=p.headshot
       ?'<img class="player-image" src="'+safe(p.headshot)+'" alt="" loading="lazy" onerror="this.hidden=true">'
       :'<div class="player-initial">'+safe(p.player.split(" ").map(x=>x[0]).slice(0,2).join(""))+'</div>';
-    const qualifying=(p.qualifyingGames||[]).map(g=>'<div class="history"><span>'+safe(g.date?.slice(0,10))+'</span><span>'+safe(g.opponent)+'</span><b>'+g.value+'</b></div>').join("");
-    const recent=(p.history||[]).map(g=>'<div class="history"><span>'+safe(g.date?.slice(0,10))+'</span><span>'+safe(g.opponent)+'</span><b class="'+(g.value>p.line?'gold-value':'')+'">'+g.value+'</b></div>').join("");
+    // Always display recorded performance, opponent and result on the front of each card.
+    // The same table renderer is shared by NFL, NBA, MLB, NCAAF, NCAAB and soccer.
+    const recent=renderGameHistory(p.history,p.line,p.market,{heading:"Last "+(p.history?.length||0)+" games",limit:5});
+    const qualifying=renderGameHistory(p.qualifyingGames,p.line,p.market,{heading:p.scanMode==="similar"?"Qualifying similar opponents":"Qualifying recent games",limit:8});
     const defense=Number.isFinite(p.targetDefense)?p.targetDefense.toFixed(1):"Unavailable";
     return '<article class="scan-card">'+
       '<div class="scan-top"><div class="scan-identity">'+photo+'<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+'</small><small>'+safe(p.position||"Player")+'</small></div></div><span class="trend-badge">100% '+(p.scanMode==="similar"?"SIMILAR":"RECENT")+' · '+p.matched+'/'+p.sample+'</span></div>'+
       '<div class="scan-line">RESEARCH OVER <strong>'+p.line+'</strong> '+safe(p.market)+'</div>'+
       '<div class="scan-stats"><div><strong>'+p.matched+'/'+p.sample+'</strong><small>Qualifying history</small></div><div><strong>'+recentRatio+'</strong><small>Last '+p.recentSample+' OVER</small></div><div><strong>'+defense+'</strong><small>Opponent scoring allowed</small></div></div>'+
       '<p class="muted">'+safe(p.reason)+'. Every qualifying recorded game exceeded the displayed threshold.</p>'+
+      recent+
       '<div class="research-label">CALCULATED ALT THRESHOLD • NOT A VERIFIED PRIZEPICKS / SPORTSBOOK OFFER</div>'+
-      '<details><summary>Show the actual historical games</summary><h4>100% qualifying sample</h4>'+qualifying+'<h4>Most recent player appearances</h4>'+recent+'</details></article>';
+      '<details><summary>Show qualifying '+(p.scanMode==="similar"?"similar-defense":"historical")+' matchups ('+p.matched+'/'+p.sample+')</summary>'+qualifying+'</details></article>';
   }).join("");
   const message=all.length>100?'<p class="muted">Showing the first 100 of '+all.length+' results.</p>':"";
   el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' historical 100% research thresholds. These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
