@@ -152,7 +152,7 @@ export function buildMatchupCards(records,team,game,defenseProfiles,{
           opponent:String(record.opponent||"Opponent"),opponentId:String(record.opponentId||""),
           playedTeamId:String(record.playedTeamId||team.id),
           playedTeamName:record.playedTeamName||team.name,
-          positionAtGame:athlete.position||"",league:record.league||league||null,
+          positionAtGame:athlete.position||"",league:record.league||null,
           value
         });
         grouped.set(key,entry);
@@ -221,18 +221,25 @@ export function buildMatchupCards(records,team,game,defenseProfiles,{
           "No verified historical defenses met the exact position/stat comparison and context rules.")
         :"Player position unavailable or unsuitable for this stat; defensive similarity not verified.");
     const isFull=similarSample===4;
-    const sampleWarning=similarSample<4
-      ?("Only "+similarSample+" of four possible comparable games verified; other historical games were not substituted.")
-      :similar.some(g=>g.confidence==="small-sample")
-        ?"One or more defenses are based on fewer than five pregame observations."
-        :null;
+    const caution=[];
+    if(similarSample<4)caution.push("Only "+similarSample+
+      " of four possible comparable games verified; unrelated games were not substituted.");
+    if(similar.some(g=>g.confidence==="small-sample"))
+      caution.push("One or more defenses use fewer than five pregame records.");
+    if(recentSample<3)
+      caution.push("Current-season form has fewer than three recorded games; this is a small sample.");
+    if(game.sport==="soccer"&&chronological.some(g=>!g.league))
+      caution.push("Some soccer game histories lack verified league/tactical context; cross-league comparability is not established.");
+    if(game.sport==="mlb"&&role?.role==="BATTERS"&&!similarSample)
+      caution.push("Verified starting-pitcher handedness is required for hitter matching; pitching-staff totals alone are insufficient.");
+    const sampleWarning=caution.join(" ")||null;
     const output={
       playerId:entry.playerId,player:entry.player,headshot:entry.headshot,
       position:activePosition,teamId:team.id,teamName:team.name,
       opponentId:team.targetOpponentId,market:entry.market,stat:entry.stat,
       line,marketSource:threshold.marketSource,
       lineType:threshold.kind,lineVerified:threshold.verified,
-      lineQuotedAt:threshold.quoteTime,sourceMarketLine:false,
+      lineQuotedAt:threshold.quoteTime,sourceMarketLine:threshold.verified,
       recentSeason:season,history:recent,recentHits,recentSample,recentPct,
       similarGames:similar,similarHits,similarSample,similarPct,similarTarget:4,
       matched:similarHits,sample:similarSample,
