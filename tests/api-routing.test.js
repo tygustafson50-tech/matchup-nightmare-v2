@@ -84,10 +84,12 @@ test("Pages Functions routing manifest explicitly includes all /api paths",()=>{
   assert.deepEqual(config,{version:1,include:["/api/*"],exclude:[]});
 });
 
-test("website scan uses home and away focused backend calls",()=>{
+test("website scan uses CPU-light ESPN document streams rather than heavy per-team functions",()=>{
   const js=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
-  assert.match(js,/focusTeam:side/);
-  assert.match(js,/part\("home"\),part\("away"\)/);
-  assert.match(js,/parseApiResponse\(r,"\/api\/scan/);
+  assert.match(js,/createEspnSourceClient/);
+  assert.match(js,/loadSeasonFromEspn/);
+  assert.match(js,/loadCareerFromEspn/);
+  assert.doesNotMatch(js,/fetch\("\/api\/scan/);
+  assert.doesNotMatch(js,/fetch\("\/api\/career/);
   assert.match(js,/Scan unavailable — no picks were calculated/);
 });
