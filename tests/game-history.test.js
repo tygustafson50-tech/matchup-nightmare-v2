@@ -46,3 +46,39 @@ test("calendar dates are stable across time zones",()=>{
 test("no supplied games shows an honest availability warning",()=>{
   assert.match(renderGameHistory([],4,"Rebounds"),/No verified recorded games available/);
 });
+
+
+test("same last-four component labels opponent and actual stat without padding",()=>{
+  const rows=[
+    {date:"2026-09-22T01:00:00Z",opponent:"Falcons",value:8},
+    {date:"2026-09-14T01:00:00Z",opponent:"Saints",value:4},
+    {date:"2026-09-07T01:00:00Z",opponent:"Panthers",value:6}
+  ];
+  const html=renderGameHistory(rows,5,"Receptions",{
+    heading:"Last 4 matchups vs similar defenses",
+    limit:4,
+    countLabel:"3 of 4 available"
+  });
+  assert.match(html,/Last 4 matchups vs similar defenses/);
+  assert.match(html,/3 of 4 available/);
+  assert.match(html,/Falcons/);
+  assert.match(html,/Saints/);
+  assert.match(html,/Panthers/);
+  assert.match(html,/>8<\/strong>/);
+  assert.match(html,/>4<\/strong>/);
+  assert.match(html,/game-log-status below/);
+  assert.match(html,/game-log-status over/);
+  assert.ok(!html.includes("undefined"));
+});
+
+test("missing similar-defense history shows a titled honest no-data state",()=>{
+  const html=renderGameHistory([],8,"Points",{
+    heading:"Last 4 matchups vs similar defenses",
+    countLabel:"0 of 4 available",
+    emptyMessage:"No comparable opponents found in available data."
+  });
+  assert.match(html,/Last 4 matchups vs similar defenses/);
+  assert.match(html,/0 of 4 available/);
+  assert.match(html,/No comparable opponents/);
+  assert.ok(!html.includes(">0</strong>"));
+});
