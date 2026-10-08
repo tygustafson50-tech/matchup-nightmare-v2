@@ -1,154 +1,172 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  CONFIG,extractBoxscore,priorGames,defensiveAverage,scanTrends
+  CONFIG,extractBoxscore,priorGames,matchupRole,positionAllowedByGame,
+  buildPositionProfile,scanTrends
 } from "../lib/auto-scan.js";
 import {onRequestGet} from "../functions/api/scan.js";
 
-function nflBox(teamId,dateValue){
-  return {boxscore:{players:[{team:{id:String(teamId)},statistics:[
-    {name:"passing",labels:["C/ATT","YDS"],athletes:[
-      {athlete:{id:"p1",displayName:"Example QB"},stats:["22/35",String(dateValue)]}
-    ]},
-    {name:"rushing",labels:["CAR","YDS"],athletes:[
-      {athlete:{id:"p1",displayName:"Example QB"},stats:["4","17"]}
-    ]}
-  ]}]}};
+function teamBox(teamA,teamB,statsA,statsB,group="receiving",labels=["REC","YDS"]){
+  const rows=(athletes)=>athletes.map(([id,pos,...values])=>({
+    athlete:{id,displayName:"Athlete "+id,position:pos?{abbreviation:pos}:undefined},
+    stats:values.map(String)
+  }));
+  return {boxscore:{players:[
+    {team:{id:String(teamA)},statistics:[{name:group,labels,athletes:rows(statsA)}]},
+    {team:{id:String(teamB)},statistics:[{name:group,labels,athletes:rows(statsB)}]}
+  ]}};
 }
-function finished(id,date,teamId,oppId,allowed){
-  return {id,date,status:{type:{completed:true}},
-    competitions:[{competitors:[
-      {team:{id:String(teamId),displayName:"Offense"},score:String(20)},
-      {team:{id:String(oppId),displayName:"Opponent"},score:String(allowed)}
-    ]}]};
+function rate(average,games=2,metricLabel="Position stat allowed/game"){
+  return {average,games,metricLabel,positionLabel:"Position"};
 }
-test("all six leagues have markets",()=>{
-  assert.deepEqual(Object.keys(CONFIG).sort(),["mlb","nba","ncaab","ncaaf","nfl","soccer"].sort());
+function ended(id,date,a,b){
+  return {id:String(id),date,status:{type:{completed:true}},competitions:[{competitors:[
+    {team:{id:String(a),displayName:"A"},score:"20"},
+    {team:{id:String(b),displayName:"B"},score:"21"}
+  ]}]};
+}
+
+test("all six sports are configured",()=>{
+  assert.deepEqual(Object.keys(CONFIG).sort(),["nfl","nba","mlb","ncaaf","ncaab","soccer"].sort());
 });
-test("NFL passing stats and rushing totals are correctly distinguished",()=>{
-  const p=extractBoxscore(nflBox("1",206),"nfl","1");
-  assert.equal(p.length,1);
-  assert.equal(p[0].stats.passingYards,206);
-  assert.equal(p[0].stats.passCompletions,22);
-  assert.equal(p[0].stats.passAttempts,35);
-  assert.equal(p[0].stats.rushingYards,17);
+
+test("NFL receiving allowed isolates receivers from tight ends and running backs",()=>{
+  const box=teamBox(1,2,[["a","WR",4,60],["b","WR",3,40],["c","TE",2,25],["d","RB",1,10]],[["e","WR",2,20]]);
+  const values=positionAllowedByGame(box,"nfl",2);
+  assert.equal(values["receivingYards|WR"].value,100);
+  assert.equal(values["receivingYards|TE"].value,25);
+  assert.equal(values["receptions|WR"].value,7);
+  assert.equal(values["receivingYards|RB"].value,10);
 });
-test("does not accidentally include another team's player",()=>{
-  assert.deepEqual(extractBoxscore(nflBox("1",200),"nfl","2"),[]);
+
+test("NBA guard points conceded are distinct from centers",()=>{
+  const box=teamBox(1,2,[["a","PG",21,4,5],["b","SG",15,2,3],["c","C",12,11,2]],[["z","PG",16,4,5]],
+    "starters",["PTS","REB","AST"]);
+  const values=positionAllowedByGame(box,"nba",2);
+  assert.equal(values["points|G"].value,36);
+  assert.equal(values["points|C"].value,12);
+  assert.equal(values["rebounds|C"].value,11);
 });
-test("NBA PRA and three pointers parsed from actual label",()=>{
-  const box={boxscore:{players:[{team:{id:"3"},statistics:[{name:"starters",
-    labels:["PTS","REB","AST","3PT"],athletes:[
-      {athlete:{id:"p9",displayName:"Test G"},stats:["25","6","7","3-8"]}
-    ]}]}]}};
-  const p=extractBoxscore(box,"nba","3")[0];
-  assert.equal(p.stats.pra,38);
-  assert.equal(p.stats.threes,3);
+
+test("soccer forwards and midfielders use separate shots allowed",()=>{
+  const box=teamBox(1,2,[["a","FW",3,2],["b","MF",2,1]],[["c","FW",2,1]],
+    "players",["SH","SOT"]);
+  const values=positionAllowedByGame(box,"soccer",2);
+  assert.equal(values["shots|F"].value,3);
+  assert.equal(values["shotsOnTarget|M"].value,1);
 });
-test("MLB missing power-hitting component never invents total bases",()=>{
-  const b={boxscore:{players:[{team:{id:"3"},statistics:[{name:"batting",
-    labels:["H","R","RBI"],athletes:[{athlete:{id:"b1",displayName:"Batter"},stats:["2","1","1"]}]
-  }]}]}};
-  assert.equal(extractBoxscore(b,"mlb","3")[0].stats.totalBases,undefined);
+
+test("baseball batter props use pitching-staff matchup instead of invented defensive positions",()=>{
+  const box=teamBox(1,2,[["a","1B",2,1,1,0],["b","CF",1,0,0,2]],[["c","SS",0,0,0,3]],
+    "batting",["H","R","RBI","SO"]);
+  const allowed=positionAllowedByGame(box,"mlb",2);
+  assert.equal(allowed["hits|BATTERS"].value,3);
+  assert.equal(allowed["pitcherKs|LINEUP"].value,3);
+  assert.match(matchupRole("mlb","P","pitcherKs").metricLabel,/lineup/i);
 });
-test("only games finished BEFORE selected date qualify",()=>{
+
+test("unknown positive-stat position invalidates inaccurate aggregates",()=>{
+  const box=teamBox(1,2,[["a","WR",4,60],["b","",3,40]],[["c","WR",1,20]]);
+  assert.equal(positionAllowedByGame(box,"nfl",2)["receivingYards|WR"],undefined);
+});
+
+test("unavailable data never turns into an artificial defensive zero",()=>{
+  assert.deepEqual(positionAllowedByGame({},"nfl",2),{});
+  assert.deepEqual(buildPositionProfile([],"nba",2),{});
+  assert.deepEqual(positionAllowedByGame(teamBox(1,2,[["a","",2,20]],[["z","WR",1,4]]),"nfl",2),{});
+});
+
+test("defensive profile requires two distinct completed game boxscores",()=>{
+  const b1=teamBox(1,2,[["a","WR",4,70]],[["z","WR",2,10]]);
+  const b2=teamBox(1,2,[["a","WR",3,90]],[["z","WR",2,20]]);
+  assert.deepEqual(buildPositionProfile([{id:"a",summary:b1}],"nfl",2),{});
+  const profile=buildPositionProfile([{id:"a",summary:b1},{id:"a",summary:b1},{id:"b",summary:b2}],"nfl",2);
+  assert.equal(profile["receivingYards|WR"].average,80);
+  assert.equal(profile["receivingYards|WR"].games,2);
+});
+
+test("pregame eligibility excludes future and incomplete games",()=>{
   const schedule={events:[
-    finished("100","2026-09-01T18:00:00Z","1","2",14),
-    finished("101","2026-09-08T18:00:00Z","1","3",19),
-    {...finished("102","2026-09-15T18:00:00Z","1","4",21),status:{type:{completed:false}}}
+    ended(1,"2026-09-01T19:00:00Z",1,2),
+    ended(2,"2026-09-08T19:00:00Z",1,3),
+    {...ended(3,"2026-09-15T19:00:00Z",1,4),status:{type:{completed:false}}},
+    ended(4,"2026-10-30T19:00:00Z",1,5)
   ]};
-  assert.equal(priorGames(schedule,"1","2026-09-10T18:00:00Z").length,2);
-});
-test("defensive average only uses games before kickoff",()=>{
- const schedule={events:[
-    finished("100","2026-09-01T18:00:00Z","2","3",14),
-    finished("101","2026-09-08T18:00:00Z","2","3",20),
-    finished("102","2026-09-15T18:00:00Z","2","3",23),
-    finished("103","2026-09-30T18:00:00Z","2","3",45)
- ]};
- assert.equal(defensiveAverage(schedule,"2","2026-09-20T18:00:00Z"),19);
-});
-test("3/3 same-defense thresholds return 100% historical, not probability",()=>{
-  const records=[
-    {id:"a",date:"2026-09-01T10:00:00Z",opponent:"One",opponentId:"5",players:extractBoxscore(nflBox("1",175),"nfl","1")},
-    {id:"b",date:"2026-09-08T10:00:00Z",opponent:"Two",opponentId:"6",players:extractBoxscore(nflBox("1",150),"nfl","1")},
-    {id:"c",date:"2026-09-15T10:00:00Z",opponent:"Three",opponentId:"7",players:extractBoxscore(nflBox("1",185),"nfl","1")},
-    {id:"d",date:"2026-09-22T10:00:00Z",opponent:"Four",opponentId:"8",players:extractBoxscore(nflBox("1",205),"nfl","1")}
-  ];
-  const profiles={
-    "2":{target:20},"5":{a:18},"6":{b:22},"7":{c:21},"8":{d:28}
-  };
-  const p=scanTrends(records,{id:"1",name:"Team A",targetOpponentId:"2"},{id:"up",date:"2026-10-01T10:00:00Z",sport:"nfl"},profiles,"similar",3).find(p=>p.stat==="passingYards");
-  assert.equal(p.line,149.5);
-  assert.equal(p.matched,3);
-  assert.equal(p.sample,3);
-  assert.equal(p.recentSample,4);
-  assert.match(p.marketSource,/NOT a PrizePicks/);
-});
-test("no data produces no picks",()=>{
-  const picks=scanTrends([],{id:"1",name:"Team A",targetOpponentId:"2"},{id:"up",date:"2026-10-01T10:00:00Z",sport:"nfl"},{},"similar",3);
-  assert.equal(picks.length,0);
-});
-test("scanner rejects invalid game ID without upstream calls",async()=>{
-  const response=await onRequestGet({request:new Request("https://site.example/api/scan?sport=nfl&date=2026-10-08&gameId=broken")});
-  assert.equal(response.status,400);
-});
-test("scanner rejects fabricated/unlisted games",async()=>{
-  const old=globalThis.fetch;
-  globalThis.fetch=async()=>new Response(JSON.stringify({events:[]}),{headers:{"Content-Type":"application/json"}});
-  try{
-    const response=await onRequestGet({request:new Request("https://site.example/api/scan?sport=nfl&date=2026-10-08&gameId=123456789")});
-    assert.equal(response.status,404);
-  }finally{globalThis.fetch=old;}
+  assert.deepEqual(priorGames(schedule,1,"2026-10-08T19:00:00Z").map(g=>g.id),["2","1"]);
 });
 
-
-test("similar-defense sample uses latest four matches even when some are older than last five",()=>{
-  const team={id:"1",name:"Team A",targetOpponentId:"2"};
-  const game={id:"up",date:"2026-10-08T18:00:00Z",sport:"nfl"};
-  const profiles={"2":{target:20}};
-  const comparableIndices=new Set([0,3,6,8,9]);
+test("four latest matches use same stat AND same position, not team scoring",()=>{
+  const t={id:"1",name:"Team One",targetOpponentId:"2"};
+  const upcoming={sport:"nfl",id:"future",date:"2026-10-08T18:00:00Z"};
+  const key="receivingYards|WR";
+  const profiles={"2":{target:{[key]:rate(100,3,"WR receiving yards allowed/game")}}};
+  const similarIndices=new Set([0,3,6,8,9]);
   const records=Array.from({length:10},(_,i)=>{
-    const id="game"+i,opponentId=String(100+i);
-    const date="2026-09-"+String(i+1).padStart(2,"0")+"T12:00:00Z";
-    profiles[opponentId]={[id]:comparableIndices.has(i)?21:35};
-    return {id,date,opponent:"Opponent "+i,opponentId,players:[{
-      id:"player1",name:"Example Player",position:"QB",stats:{passingYards:175+i*4}
-    }]};
+    const id="game"+i,opponentId=String(11+i);
+    profiles[opponentId]={[id]:{[key]:rate(similarIndices.has(i)?105:160)}};
+    return {id,date:"2026-09-"+String(i+1).padStart(2,"0")+"T19:00:00Z",
+      opponent:"Opponent "+i,opponentId,
+      players:[{id:"wr1",name:"Receiver",position:"WR",stats:{receivingYards:70+i*3}}]};
   });
-  const result=scanTrends(records,team,game,profiles,"similar",3)
-    .find(p=>p.stat==="passingYards");
-  assert.ok(result);
-  assert.deepEqual(result.similarGames.map(g=>g.opponent),[
+  const pick=scanTrends(records,t,upcoming,profiles,"similar",3)
+    .find(x=>x.stat==="receivingYards");
+  assert.ok(pick);
+  assert.deepEqual(pick.similarGames.map(x=>x.opponent),[
     "Opponent 9","Opponent 8","Opponent 6","Opponent 3"
   ]);
-  assert.equal(result.matched,4);
-  assert.equal(result.sample,4);
-  assert.equal(result.similarHits,4);
-  assert.equal(result.similarSample,4);
-  assert.equal(result.history.length,5);
-  assert.equal(result.qualifyingGames.length,4);
-  assert.equal(result.similarTarget,4);
+  assert.equal(pick.sample,4);
+  assert.equal(pick.matched,4);
+  assert.equal(pick.matchupPosition,"WR");
+  assert.equal(pick.targetDefense,100);
+  assert.equal(pick.similarGames[0].opponentAllowed,105);
+  assert.equal(pick.targetDefenseGames,3);
 });
 
-test("recent-only cards also report the actual available similar opponents without inventing four",()=>{
+test("recent-only trend remains available without inventing comparable defense",()=>{
   for(const sport of Object.keys(CONFIG)){
-    const [stat,,minValue]=CONFIG[sport].markets[0];
-    const records=Array.from({length:6},(_,i)=>({
-      id:"match"+i,date:"2026-09-"+String(i+1).padStart(2,"0")+"T12:00:00Z",
-      opponent:"Opponent "+i,opponentId:String(i+10),
-      players:[{id:"athlete",name:"Example",stats:{[stat]:minValue+2+i}}]
+    const [stat,,min]=CONFIG[sport].markets[0];
+    const position={nfl:"QB",nba:"PG",mlb:"DH",ncaaf:"QB",ncaab:"PG",soccer:"FW"}[sport];
+    const records=Array.from({length:5},(_,i)=>({
+      id:"e"+i,date:"2026-09-0"+(i+1)+"T20:00:00Z",
+      opponentId:String(i+10),opponent:"Test Opponent",players:[{
+        id:"p",name:"Test Player",position,stats:{[stat]:min+i+10}
+      }]
     }));
-    const profiles={"2":{target:20},"10":{"match0":22},"11":{"match1":21}};
     const team={id:"1",name:"Team",targetOpponentId:"2"};
-    const game={sport,id:"upcoming",date:"2026-10-08T18:00:00Z"};
-    const recent=scanTrends(records,team,game,profiles,"recent",3)[0];
-    assert.ok(recent, sport+" should return a recent-only research result");
-    assert.equal(recent.similarGames.length,2);
-    assert.equal(recent.similarSample,2);
-    assert.equal(recent.similarTarget,4);
-    assert.equal(recent.similarGames[0].opponent,"Opponent 1");
-    assert.equal(recent.similarGames[1].opponent,"Opponent 0");
-    assert.equal(scanTrends(records,team,game,profiles,"similar",3).length,0);
+    const game={id:"future",date:"2026-10-08T20:00:00Z",sport};
+    const recent=scanTrends(records,team,game,{},"recent",3)[0];
+    assert.ok(recent,sport);
+    assert.equal(recent.scanMode,"recent");
+    assert.equal(recent.similarGames.length,0);
+    assert.equal(recent.targetDefense,null);
+    assert.equal(scanTrends(records,team,game,{},"similar",3).length,0);
   }
+});
+
+test("scalar total team scoring is never accepted as a positional profile",()=>{
+  const records=Array.from({length:5},(_,i)=>({
+    id:"g"+i,date:"2026-09-0"+(i+1)+"T18:00:00Z",
+    opponentId:String(i+10),opponent:"Team",players:[{
+      id:"p",name:"WR",position:"WR",stats:{receivingYards:80+i}
+    }]
+  }));
+  const profiles={"2":{target:20},"10":{"g0":20},"11":{"g1":21}};
+  assert.deepEqual(scanTrends(records,{id:"1",name:"Home",targetOpponentId:"2"},
+    {id:"future",date:"2026-10-08T20:00:00Z",sport:"nfl"},profiles,"similar",3),[]);
+});
+
+test("API rejects invalid game without requesting external data",async()=>{
+  const r=await onRequestGet({request:new Request("https://example.pages.dev/api/scan?sport=nfl&date=2026-10-08&gameId=bad")});
+  assert.equal(r.status,400);
+});
+
+test("API rejects a game missing from the requested official schedule",async()=>{
+  const previous=globalThis.fetch;
+  globalThis.fetch=async()=>new Response(JSON.stringify({events:[]}),{
+    headers:{"content-type":"application/json"}
+  });
+  try{
+    const r=await onRequestGet({request:new Request("https://example.pages.dev/api/scan?sport=nfl&date=2026-10-08&gameId=123456789")});
+    assert.equal(r.status,404);
+  }finally{globalThis.fetch=previous;}
 });
