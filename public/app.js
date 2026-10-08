@@ -54,16 +54,8 @@ const scanProgress=el("scanProgress");
 function clearAutomaticResearch(){
   el("scanOutput").innerHTML='<div class="empty">Select your games and click Scan Selected Games.</div>';
 }
-function renderAutomaticResults(items,failures,completed){
-  if(!items.length){
-    el("scanOutput").innerHTML=
-      '<div class="empty">No verified 100% historical OVER research thresholds returned.<p class="muted">The historical source may lack the player’s position, comparable defenses, or enough completed boxscores. Try Recent Games or a one-season scan. A blank result does not mean a failed bet or a guaranteed outcome.</p></div>'+
-      failures.map(e=>'<p class="error">'+safe(e)+'</p>').join("");
-    return;
-  }
-  const all=items.flatMap(x=>x.results.map(p=>({...p,sourceGame:x.game,provider:x.provider})))
-    .sort((a,b)=>(a.scanMode==="similar"?0:1)-(b.scanMode==="similar"?0:1)||b.sample-a.sample || b.recentHits-a.recentHits || b.line-a.line);
-  const cards=all.slice(0,100).map(p=>{
+function renderPickCard(p){
+
     const recentRatio=p.recentSample?p.recentHits+'/'+p.recentSample:'—';
     const photo=p.headshot
       ?'<img class="player-image" src="'+safe(p.headshot)+'" alt="" loading="lazy" onerror="this.hidden=true">'
@@ -119,7 +111,18 @@ function renderAutomaticResults(items,failures,completed){
         '<p class="muted">'+safe(p.reason)+'. The '+(p.scanMode==="similar"?"similar-defense":"recent-game")+
         ' percentage is based on '+p.matched+' OVER results in '+p.sample+' qualifying recorded games. Other rows may be BELOW. This is not a prediction of future performance.</p>'+
       '</details></article>';
-  }).join("");
+
+}
+function renderAutomaticResults(items,failures,completed){
+  if(!items.length){
+    el("scanOutput").innerHTML=
+      '<div class="empty">No verified 100% historical OVER research thresholds returned.<p class="muted">The historical source may lack the player’s position, comparable defenses, or enough completed boxscores. Try Recent Games or a one-season scan. A blank result does not mean a failed bet or a guaranteed outcome.</p></div>'+
+      failures.map(e=>'<p class="error">'+safe(e)+'</p>').join("");
+    return;
+  }
+  const all=items.flatMap(x=>x.results.map(p=>({...p,sourceGame:x.game,provider:x.provider})))
+    .sort((a,b)=>(a.scanMode==="similar"?0:1)-(b.scanMode==="similar"?0:1)||b.sample-a.sample || b.recentHits-a.recentHits || b.line-a.line);
+
   const message=all.length>100?'<p class="muted">Showing the first 100 of '+all.length+' results.</p>':"";
   const pendingCareerCount=items.reduce((n,x)=>n+(x.careerPlayersRemaining||0),0);
   const coverage=items.map(x=>{
