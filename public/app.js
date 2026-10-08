@@ -56,7 +56,7 @@ function renderAutomaticResults(items,failures,completed){
     return;
   }
   const all=items.flatMap(x=>x.results.map(p=>({...p,sourceGame:x.game,provider:x.provider})))
-    .sort((a,b)=>b.sample-a.sample || b.recentHits-a.recentHits || b.line-a.line);
+    .sort((a,b)=>(a.scanMode==="similar"?0:1)-(b.scanMode==="similar"?0:1)||b.sample-a.sample || b.recentHits-a.recentHits || b.line-a.line);
   const cards=all.slice(0,100).map(p=>{
     const recentRatio=p.recentSample?p.recentHits+'/'+p.recentSample:'—';
     const photo=p.headshot
@@ -66,7 +66,7 @@ function renderAutomaticResults(items,failures,completed){
     const recent=(p.history||[]).map(g=>'<div class="history"><span>'+safe(g.date?.slice(0,10))+'</span><span>'+safe(g.opponent)+'</span><b class="'+(g.value>p.line?'gold-value':'')+'">'+g.value+'</b></div>').join("");
     const defense=Number.isFinite(p.targetDefense)?p.targetDefense.toFixed(1):"Unavailable";
     return '<article class="scan-card">'+
-      '<div class="scan-top"><div class="scan-identity">'+photo+'<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+'</small><small>'+safe(p.position||"Player")+'</small></div></div><span class="trend-badge">100% HISTORICAL · '+p.matched+'/'+p.sample+'</span></div>'+
+      '<div class="scan-top"><div class="scan-identity">'+photo+'<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+'</small><small>'+safe(p.position||"Player")+'</small></div></div><span class="trend-badge">100% '+(p.scanMode==="similar"?"SIMILAR":"RECENT")+' · '+p.matched+'/'+p.sample+'</span></div>'+
       '<div class="scan-line">RESEARCH OVER <strong>'+p.line+'</strong> '+safe(p.market)+'</div>'+
       '<div class="scan-stats"><div><strong>'+p.matched+'/'+p.sample+'</strong><small>Qualifying history</small></div><div><strong>'+recentRatio+'</strong><small>Last '+p.recentSample+' OVER</small></div><div><strong>'+defense+'</strong><small>Opponent scoring allowed</small></div></div>'+
       '<p class="muted">'+safe(p.reason)+'. Every qualifying recorded game exceeded the displayed threshold.</p>'+
