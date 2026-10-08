@@ -35,8 +35,8 @@ el("output").innerHTML='<h2>'+safe(name)+' — OVER '+line+' '+safe(market)+'</h
 '<div class="metrics">'+metric("Last 5",result.last5)+metric("Last 10",result.last10)+metric("All supplied",result.season)+metric("Similar scoring defense",result.similar)+'</div>'+
 '<h3>Recent games</h3><div class="chart">'+result.recent.slice().reverse().map(g=>'<div class="bar '+(g.value>line?"hit":"")+'" style="height:'+Math.max(3,100*g.value/max)+'%" title="'+safe(g.date+" "+g.opponent+" "+g.value)+'"></div>').join("")+'</div>'+
 renderGameHistory(result.recent,line,market,{heading:"Recent game history",limit:15})+
-'<h3>Similar team scoring defenses</h3><p class="muted">Compares manually supplied opponent team scoring allowed within 20%. This is not defense-versus-position.</p>'+
-renderGameHistory(result.similarGames,line,market,{heading:"Similar team scoring defenses",limit:8})+
+'<h3>Similar positional defenses</h3><p class="muted">Compares manually entered allowed values for the SAME market and player position, within 20%. Data is unverified.</p>'+
+renderGameHistory(result.similarGames,line,market,{heading:"Similar positional defenses (manual)",limit:8})+
 '<div class="warning">Historical hit rates do not guarantee wins. No live sportsbook lines, verified player logs, injuries, or calibrated prediction model are connected.</div>';
 }catch(e){el("output").innerHTML='<p class="error">'+safe(e.message)+'</p>';}
 });
@@ -68,20 +68,23 @@ function renderAutomaticResults(items,failures,completed){
     const recent=renderGameHistory(p.history,p.line,p.market,{heading:"Last "+(p.history?.length||0)+" games",limit:5});
     const compared=(p.similarGames||[]).filter(g=>Number.isFinite(g.value)).slice(0,4);
     const lastFourSimilar=renderGameHistory(compared,p.line,p.market,{
-      heading:"Last 4 matchups vs similar defenses",
+      heading:"Last 4 matchups vs similar positional defenses",
       limit:4,
       countLabel:compared.length+" of 4 available",
-      emptyMessage:"No comparable opponents found in the available pregame defensive records."
+      emptyMessage:"Position- and stat-specific defensive comparisons unavailable or insufficient."
     });
-    const defense=Number.isFinite(p.targetDefense)?p.targetDefense.toFixed(1):"Unavailable";
+    const defense=Number.isFinite(p.targetDefense)?p.targetDefense.toFixed(1):"N/A";
+    const defenseMarket=p.matchupMetric||"Position-specific matchup data unavailable";
+    const defenseSample=Number.isInteger(p.targetDefenseGames)&&p.targetDefenseGames>0?" · "+p.targetDefenseGames+" games":"";
+    const defenseRole=p.matchupPosition||"Unknown position";
     return '<article class="scan-card">'+
       '<div class="scan-top"><div class="scan-identity">'+photo+'<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+'</small><small>'+safe(p.position||"Player")+'</small></div></div><span class="trend-badge">100% '+(p.scanMode==="similar"?"SIMILAR":"RECENT")+' · '+p.matched+'/'+p.sample+'</span></div>'+
       '<div class="scan-line">RESEARCH OVER <strong>'+p.line+'</strong> '+safe(p.market)+'</div>'+
-      '<div class="scan-stats"><div><strong>'+p.matched+'/'+p.sample+'</strong><small>Qualifying history</small></div><div><strong>'+recentRatio+'</strong><small>Last '+p.recentSample+' OVER</small></div><div><strong>'+defense+'</strong><small>Opponent scoring allowed</small></div></div>'+
+      '<div class="scan-stats"><div><strong>'+p.matched+'/'+p.sample+'</strong><small>Qualifying history</small></div><div><strong>'+recentRatio+'</strong><small>Last '+p.recentSample+' OVER</small></div><div><strong>'+defense+'</strong><small>'+safe(defenseMarket)+safe(defenseSample)+'</small></div></div>'+
       '<p class="muted">'+safe(p.reason)+'. Every qualifying recorded game exceeded the displayed threshold.</p>'+
       recent+
       '<div class="similar-history">'+lastFourSimilar+
-        '<p class="game-log-method">Comparable = opposing team pregame scoring allowed within 30% of the upcoming opponent. This is not defense-vs-position.</p>'+
+        '<p class="game-log-method">Comparable = '+safe(defenseMarket)+' against '+safe(defenseRole)+' within 25% of the upcoming opponent, using pregame stats. At least 2 completed games per defensive profile. No whole-team points-allowed fallback.</p>'+
       '</div>'+
       '<div class="research-label">CALCULATED ALT THRESHOLD • NOT A VERIFIED PRIZEPICKS / SPORTSBOOK OFFER</div>'+
       '<details><summary>How was this 100% historical trend calculated?</summary>'+
