@@ -31,6 +31,16 @@ function historicGames(schedule,teamId,before,season,sport,limit){
   return priorGames(schedule,teamId,before,180)
     .filter(g=>inSportSeason(g,season,sport)).slice(0,limit);
 }
+function fallbackSeasonYear(sport,gameDate){
+  const year=Number(String(gameDate).slice(0,4));
+  const month=Number(String(gameDate).slice(5,7));
+  if(!Number.isInteger(year)||!Number.isInteger(month))return null;
+  // Jan/Feb NFL and college-football games belong to the previous fall;
+  // European soccer crosses July. Basketball's ESPN season commonly uses
+  // the ending calendar year; prefer explicit event.season.year regardless.
+  if((sport==="nfl"||sport==="ncaaf"||sport==="soccer")&&month<7) return year-1;
+  return year;
+}
 
 const respond=(data,status=200)=>new Response(JSON.stringify(data),{
   status,headers:{
@@ -106,8 +116,9 @@ export async function onRequestGet({request}){
     if(teams.some(t=>!/^\d+$/.test(t.id)))return respond({error:"Missing stable team IDs."},422);
     const selectedDate=event.date;
     if(!Number.isFinite(Date.parse(selectedDate)))return respond({error:"Game kickoff date unavailable."},422);
-    const season=String(event.season?.year||date.slice(0,4));
-    const firstYear=Number(season);
+    const firstYear=Number(event.season?.year??fallbackSeasonYear(sport,selectedDate));
+    if(!Number.isInteger(firstYear)||firstYear<1900||firstYear>2100)
+      return respond({error:"Couldn't determine the selected game's sports season."},422);
     // "current" resolves the league's actual selected season (important
     // for Jan/Feb football and spring soccer/basketball cross-year games).
     const requestedSeason=query.get("historySeason");
