@@ -16,6 +16,7 @@ const SOCCER=new Set([
   "eng.1","esp.1","ger.1","ita.1","fra.1","usa.1","uefa.champions"
 ]);
 const BASE="https://site.api.espn.com/apis/site/v2/sports/";
+const ATHLETES="https://site.web.api.espn.com/apis/common/v3/sports/";
 function json(data,status=502){
   return new Response(JSON.stringify(data),{
     status,headers:{
@@ -56,7 +57,7 @@ export async function onRequestGet({request}){
   }else{
     return json({error:"Unsupported ESPN resource type."},400);
   }
-  const source=BASE+group+route;
+  const source=(kind==="gamelog"?ATHLETES:BASE)+group+route;
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),9000);
   try{
