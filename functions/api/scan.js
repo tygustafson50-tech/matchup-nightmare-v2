@@ -16,6 +16,22 @@ const TARGET_PROFILE_GAMES=3;
 const CONCURRENCY=5;
 // CF Free Worker external subrequests limit is 50; reserve headroom for redirects.
 const MAX_UPSTREAM_REQUESTS=46;
+function inSportSeason(game,season,sport){
+  const explicit=game?.season;
+  if(explicit!==null&&explicit!==undefined&&Number.isInteger(Number(explicit)))
+    return Number(explicit)===Number(season);
+  const date=String(game?.date||"");
+  const year=Number(date.slice(0,4)),month=Number(date.slice(5,7));
+  if(!Number.isInteger(year)||!Number.isInteger(month)||month<1||month>12)return false;
+  // NFL/college-football, basketball and soccer seasons can cross calendar years.
+  const startsInSummer=sport!=="mlb";
+  return (startsInSummer && month<7 ? year-1 : year)===Number(season);
+}
+function historicGames(schedule,teamId,before,season,sport,limit){
+  return priorGames(schedule,teamId,before,180)
+    .filter(g=>inSportSeason(g,season,sport)).slice(0,limit);
+}
+
 const respond=(data,status=200)=>new Response(JSON.stringify(data),{
   status,headers:{
     "content-type":"application/json; charset=utf-8",
@@ -91,8 +107,17 @@ export async function onRequestGet({request}){
     const selectedDate=event.date;
     if(!Number.isFinite(Date.parse(selectedDate)))return respond({error:"Game kickoff date unavailable."},422);
     const season=String(event.season?.year||date.slice(0,4));
+    const firstYear=Number(season);
+    const requestedSeason=query.get("historySeason");
+    const historySeason=requestedSeason===null?firstYear:Number(requestedSeason);
+    if(!Number.isInteger(historySeason)||historySeason<firstYear-2||
+       historySeason>firstYear||!/^\\d{4}$/.test(String(historySeason))){
+      return respond({error:"Historical season must be the selected season or one of the two seasons before it."},400);
+    }
+    const seasonYear=String(historySeason);
+    const isCurrentSeason=historySeason===firstYear;
     const byTeamSchedule=new Map();
-    const scheduleResults=await pool(teams,t=>getJSON(base+"/teams/"+t.id+"/schedule?season="+season+"&limit=100"));
+    const scheduleResults=await pool(teams,t=>getJSON(base+"/teams/"+t.id+"/schedule?season="+seasonYear+"&limit=100"));
     for(let i=0;i<teams.length;i++){
       if(scheduleResults[i].ok){byTeamSchedule.set(teams[i].id,scheduleResults[i].value);diagnostics.offenseSchedules++;}
       else notes.push("Historical schedule unavailable: "+teams[i].name);
@@ -103,7 +128,7 @@ export async function onRequestGet({request}){
     for(const t of teams){
       t.targetOpponentId=teams.find(x=>x.id!==t.id).id;
       histories.set(t.id,byTeamSchedule.has(t.id)
-        ?priorGames(byTeamSchedule.get(t.id),t.id,selectedDate,MAX_PRIOR_GAMES):[]);
+        ?historicGames(byTeamSchedule.get(t.id),t.id,selectedDate,historySeason,sport,MAX_PRIOR_GAMES):[]);
     }
     const offenseGames=[...new Map([...histories.values()].flat().map(g=>[g.id,g])).values()];
     const offenseResponses=await pool(offenseGames,g=>getJSON(base+"/summary?event="+g.id));
@@ -124,7 +149,7 @@ export async function onRequestGet({request}){
       }
     }
     const needed=[...candidateOpponents];
-    const opponentSchedules=await pool(needed,id=>getJSON(base+"/teams/"+id+"/schedule?season="+season+"&limit=100"));
+    const opponentSchedules=await pool(needed,id=>getJSON(base+"/teams/"+id+"/schedule?season="+seasonYear+"&limit=100"));
     for(let i=0;i<needed.length;i++){
       if(opponentSchedules[i].ok){
         byTeamSchedule.set(needed[i],opponentSchedules[i].value);
@@ -136,10 +161,10 @@ export async function onRequestGet({request}){
     for(const t of teams){
       const upcomingDefense=t.targetOpponentId;
       const schedule=byTeamSchedule.get(upcomingDefense);
-      if(schedule){
+      if(schedule&&isCurrentSeason){
         demands.push({
           defenseId:upcomingDefense,kind:"target",eventId:null,
-          games:priorGames(schedule,upcomingDefense,selectedDate,TARGET_PROFILE_GAMES)
+          games:historicGames(schedule,upcomingDefense,selectedDate,historySeason,sport,TARGET_PROFILE_GAMES)
         });
       }
       for(const past of (histories.get(t.id)||[]).slice(0,COMPARABLE_CANDIDATES)){
@@ -147,7 +172,7 @@ export async function onRequestGet({request}){
         if(pastSchedule){
           demands.push({
             defenseId:past.opponentId,kind:"historical",eventId:past.id,
-            games:priorGames(pastSchedule,past.opponentId,past.date,POSITION_PROFILE_GAMES)
+            games:historicGames(pastSchedule,past.opponentId,past.date,historySeason,sport,POSITION_PROFILE_GAMES)
           });
         }
       }
@@ -176,9 +201,16 @@ export async function onRequestGet({request}){
     }
 
     const trends=[];
+    const normalizedRecords={};
     for(const t of teams){
       const records=(histories.get(t.id)||[]).filter(g=>summaryById.has(g.id))
-        .map(g=>({...g,players:extractBoxscore(summaryById.get(g.id),sport,t.id)}));
+        .map(g=>({...g,season:historySeason,
+          players:extractBoxscore(summaryById.get(g.id),sport,t.id)}));
+      normalizedRecords[t.id]=records.map(({id,date,season,opponent,opponentId,players})=>
+        ({id,date,season,opponent,opponentId,players}));
+      // A historical-season response is one batch of a three-season scan;
+      // it cannot legitimately calculate a full multi-season trend alone.
+      if(!isCurrentSeason)continue;
       const nextGame={id:gameId,date:selectedDate,sport};
       if(mode==="both"){
         trends.push(...scanTrends(records,t,nextGame,profiles,"similar",3));
@@ -186,7 +218,8 @@ export async function onRequestGet({request}){
       }else trends.push(...scanTrends(records,t,nextGame,profiles,mode,3));
     }
 
-    if(!trends.length)notes.push("No qualifying 100% historical OVER thresholds with sufficient completed, usable games.");
+    if(!trends.length&&isCurrentSeason&&requestedSeason===null)
+      notes.push("No qualifying 100% historical OVER thresholds with sufficient completed, usable games.");
     if(diagnostics.missingOffenseBoxscores||diagnostics.missingDefenseBoxscores)
       notes.push("Some boxscores were unavailable. Missing data were not replaced with zeros.");
     if(diagnostics.upstreamRequests>=MAX_UPSTREAM_REQUESTS)
@@ -202,6 +235,13 @@ export async function onRequestGet({request}){
       game:{id:gameId,date:selectedDate,home:teams.find(t=>t.homeAway==="home"),
         away:teams.find(t=>t.homeAway==="away")},
       sport,league,mode,count:trends.length,results:trends.slice(0,70),
+      season:historySeason,selectedSeason:firstYear,isCurrentSeason,
+      // Raw provenance-backed records let the browser recompute ONE trend
+      // across the complete three-season window, rather than combining
+      // separately manufactured per-season "100%" picks.
+      ...(requestedSeason!==null?{seasonBatch:{
+        season:historySeason,teams,records:normalizedRecords,defenseProfiles:profiles
+      }}:{}),
       notes,diagnostics,
       provider:"ESPN public game summaries (unofficial, incomplete for some leagues)",
       refreshedAt:new Date().toISOString(),
