@@ -65,7 +65,7 @@ test("recompute one historical threshold across three years instead of combining
   assert.equal(pick.line,41.5); // 3 recent 2025 defenses plus 2024 low of 42
   assert.deepEqual(pick.matchedSeasons,[2025,2024]);
   assert.deepEqual(pick.similarGames.map(g=>g.season),[2025,2025,2025,2024]);
-  assert.deepEqual(pick.history.map(g=>g.season),[2026,2026,2026,2025,2025]);
+  assert.deepEqual(pick.history.map(g=>g.season),[2026,2026,2026]);
   assert.deepEqual(pick.seasonsRequested,[2026,2025,2024]);
 });
 
@@ -136,7 +136,7 @@ test("single-season mode does not import older history",()=>{
   assert.deepEqual(result.yearsLoaded,[2026]);
   assert.deepEqual(result.yearsMissing,[]);
   assert.equal(result.results.some(p=>p.matchedSeasons.includes(2025)),false);
-  assert.equal(result.count,0); // only 3 per player; minimum four appearances
+  assert.ok(result.count>0); // three recorded games exist in selected season\n  assert.ok(result.results.every(p=>p.history.every(g=>g.season===2026)));
 });
 
 test("keeps recent-form trends separate from multi-year similar-defense trends",()=>{
@@ -197,4 +197,92 @@ test("three-season position-specific comparison works for all six sports",()=>{
     assert.deepEqual(pick.matchedSeasons,[2025,2024],sport);
     assert.equal(pick.matchupPosition,role.label,sport);
   }
+});
+
+
+test("Last 5 is current season even if previous seasons have many games",()=>{
+  const result=combineSeasonBatches([batch(2026),batch(2025),batch(2024)],
+    {sport:"nfl",mode:"both",window:3});
+  for(const pick of result.results){
+    assert.equal(pick.recentSeason,2026);
+    assert.equal(pick.recentSample,3);
+    assert.deepEqual(pick.history.map(g=>g.season),[2026,2026,2026]);
+  }
+  const similar=result.results.find(p=>p.scanMode==="similar");
+  assert.ok(similar);
+  assert.deepEqual(similar.similarGames.map(g=>g.season),[2025,2025,2025,2024]);
+});
+
+test("traded player contributes verified former-team game to comparable sample, not recent",()=>{
+  const selected=batch(2026),older=batch(2025);
+  const profiles=older.seasonBatch.defenseProfiles;
+  const gameId="9000001",opponentId="777";
+  const oldPlayer={id:"athlete1",name:"WR Team 1",position:"WR",
+    stats:{receivingYards:125}};
+  const career={
+    forTeamId:"1",sport:"nfl",gameId:game.id,playerId:"athlete1",
+    careerBatch:{
+      season:2025,playerId:"athlete1",sourceStatus:"partial",
+      records:[{
+        id:gameId,date:"2025-09-27T19:00:00Z",season:2025,
+        playedTeamId:"88",playedTeamName:"Former Franchise",
+        opponentId,opponent:"Previous Opponent",players:[oldPlayer]
+      }],
+      defenseProfiles:{[opponentId]:{
+        [gameId]:{"receivingYards|WR":{
+          average:100,games:2,metricLabel:"WR receiving yards allowed/game"
+        }}
+      }}
+    },
+    warnings:["Historical provider is partial."]
+  };
+  const result=combineSeasonBatches([selected,older,batch(2024)],
+    {sport:"nfl",mode:"similar",window:3,
+      careerBatches:[career],careerEligibleCount:1});
+  const p=result.results.find(p=>p.teamId==="1");
+  assert.ok(p);
+  assert.ok(p.careerTeamsIncluded.includes("88"));
+  assert.ok(p.similarGames.some(g=>g.playedTeamId==="88"));
+  assert.equal(p.history.some(g=>g.season!==2026),false);
+  assert.ok(p.careerSeasonsVerified.includes(2025));
+});
+
+test("career records for another athlete or out-of-window season are rejected",()=>{
+  const invalid={
+    forTeamId:"1",sport:"nfl",gameId:game.id,playerId:"intruder",
+    careerBatch:{season:2025,playerId:"intruder",records:[{
+      id:"fake",date:"2025-09-10T19:00:00Z",season:2025,
+      playedTeamId:"44",opponentId:"6",players:[{
+        id:"intruder",name:"Intruder",position:"WR",stats:{receivingYards:999}
+      }]
+    }],defenseProfiles:{}}
+  };
+  const res=combineSeasonBatches([batch(2026),batch(2025),batch(2024)],
+    {sport:"nfl",mode:"similar",window:3,careerBatches:[invalid]});
+  assert.equal(res.results.some(p=>p.playerId==="intruder"),false);
+  assert.equal(res.results.some(p=>p.similarGames.some(g=>g.gameId==="fake")),false);
+});
+
+test("same event on former teams is kept distinct for two currently eligible athletes",()=>{
+  const selected=batch(2026);
+  const [playerA,playerB]=["athlete1","athlete2"];
+  const makeCareer=(forTeamId,playerId,playedTeamId,opponentId)=>({
+    forTeamId,sport:"nfl",gameId:game.id,playerId,
+    careerBatch:{
+      season:2025,playerId,sourceStatus:"partial",
+      records:[{
+        id:"sameHistoricMatch",date:"2025-09-27T19:00:00Z",season:2025,
+        playedTeamId,opponentId,opponent:"Old Rival",
+        players:[{id:playerId,name:playerId,position:"WR",
+          stats:{receivingYards:70}}]
+      }],
+      defenseProfiles:{}
+    }
+  });
+  const a=makeCareer("1",playerA,"81","82");
+  const b=makeCareer("2",playerB,"82","81");
+  const res=combineSeasonBatches([selected,batch(2025),batch(2024)],{
+    sport:"nfl",mode:"recent",window:3,careerBatches:[a,b]
+  });
+  assert.ok(res.results.every(p=>p.history.every(g=>g.season===2026)));
 });
