@@ -27,18 +27,30 @@ We have replaced the old whole-team points-allowed proxy in automatic scans with
 
 The backend looks at each defense's completed **pregame** opponent box scores and sums the selected market stat by role; it averages over **at least two** usable games. Comparable defenses must have the **same role and stat**, with an allowance within **25%** of the upcoming opponent's average. The most recent **up to four** qualifying historical opponent matchups are displayed; with fewer qualifying records, the actual count is shown instead of inventing games.
 
-For budget control, each selected team's latest six completed games are gathered, and position profiles are attempted for its five most recent historical opposing defenses. Thus the comparison is a **limited historical search**, not a complete career-wide survey. If the provider lacks player position, a relevant stat, or enough pregame games, comparable position matchups are unavailable and **never silently replaced with whole-team scoring averages**.
+For budget control, each selected team's latest five completed games are sampled per season, and position profiles are attempted for a bounded subset of recent opposing defenses. Thus the comparison is a **limited historical search**, not a complete career-wide survey. If the provider lacks player position, a relevant stat, or enough pregame games, comparable position matchups are unavailable and **never silently replaced with whole-team scoring averages**.
 
 Each similarity row also shows the **historical opponent's stat allowed to that position per game** and its sample size. These are group averages, not predictions or proof of direct one-on-one assignments.
 
-## 100% historical thresholds — important
+## Verified matchup trend system (V3)
 
-The scanner calculates candidate half-step OVER research thresholds using the minimum historical stat in the qualifying sample. This naturally can produce 100% **historical** rates by construction. It does **not** mean an 100% predicted probability, an advantage at bookmaker prices, or a wager guaranteed to win.
+**The line is now independent of the historical matchup results.** The old algorithm deliberately took the minimum matching historical player result and selected a half-step below it, mechanically producing a 100% past hit rate. That method is no longer used on automatic pick cards.
 
-- **100% SIMILAR** = over threshold cleared in every qualifying comparable positional-defense game, with a minimum of 3 games.
-- **100% RECENT** = over threshold cleared in every qualifying recent game, independently of defense. Recent-only cards still show positional-defense comparisons when available.
+Until an authorized line feed is connected, the automatic scan uses a clearly labeled **research-only OVER threshold derived from the current-season recent-game median**. It then tests that **same, independently selected line** against both game samples. It does not claim that the threshold can actually be selected on PrizePicks or a sportsbook. Only a verified source and quote timestamp may identify a future real market line.
 
-**No licensed live PrizePicks lines, other sportsbook lines, or alt-line markets are connected.** All calculated thresholds are labeled **research only**, not actual offered lines. They may not be purchasable at any sportsbook.
+Each athlete/stat combination generates **one two-part card**, not duplicate 100%-only recent and similar cards:
+
+- **Last 5 Recent Games:** only the selected season; date, opponent, actual stat, line, OVER/BELOW/PUSH result, and real hit fraction/percentage.
+- **Last 4 Similar-Defense Matchups:** take the four most recent truly comparable career matchups over the selected season and two previous seasons, including verified former-team games. Each row shows date, opponent, actual stat, line result, measured pregame concession average to the player's actual position, the defensive sample size, and the percentage difference explaining why the defense qualifies.
+- **No forced four results:** if only one, two, or three authentic comparable opponents are verified, show that exact count and a sample warning. Missing defensive averages, changing playing positions, missing historical boxscores, and incompatible verified context cause a matchup to be excluded, never replaced with a loosely related game.
+- **Not guaranteed:** 4/4 is a recorded 100% historical hit rate, not a forecast probability. A 2/4 is 50%; both should be shown honestly.
+
+The primary verified comparison is **the same stat allowed to the same player position per completed defensive game**, using pregame samples of at least two actual games and a 25% similarity tolerance. When authoritative pace, defensive efficiency, or lineup/pitcher metrics become available they can further restrict comparison; absent context is explicitly unavailable, never synthesized. Defensive rankings only appear if provided by a verified feed.
+
+**Baseball exception:** pitcher strikeout research compares verified opposing lineup strikeout tendency. Hitter vs starter matchups require actual opposing starter handedness; pitching-staff totals alone must **not** masquerade as a comparable starting-pitcher profile. Current ESPN data do not reliably provide pitch mix, starter handedness, lineup position, or projected workload. MLB hitter similar-pitcher history may therefore be unavailable even if the hitter's recent games exist. Pitching-outs recent stats can be parsed from verified innings pitched; pitcher-workload similarity is not fabricated from opponent pitchers' outs.
+
+**Soccer:** shots, shots on target, goals, assists, tackles, fouls and goalkeeper saves are supported when reported in boxscores. Verified differing leagues disqualify false same-context comparisons; absent tactical/league-strength context is disclosed.
+
+**Health and availability:** injuries, starters, projected minutes/playing time, lineups, trades, and game-day role changes are not independently verified by this free ESPN-only integration. A current team appearance is evidence of recent participation, not a guarantee the athlete is active tonight.
 
 ## Provider and hosting limitations
 
@@ -115,7 +127,7 @@ The scanner settings panel has been removed. For every supported sport, scanning
 - OVER-only historical research thresholds (not real sportsbook quotes)
 - Last five recorded games **in the selected/current season only**
 - Last four comparable positional-defense matchups searched from the player's **current plus two previous seasons**, including verified former-team games where available
-- Both **RECENT** and **SIMILAR DEFENSE** research cards returned together
+- A single OVER research card per player/stat, showing both **RECENT** and **SIMILAR DEFENSE** hit rates together
 
 The six sports share **exactly three dropdown filters** above the pick cards: **Stats**, **Team**, and **Position**. These filter only the cards already returned by the automatic scan; no extra ESPN API calls or new scans are needed. Choices are based on actual returned results for that sport. Search, game, trend, evidence, and custom sorting controls have been removed; the app keeps its normal ordering of similar-defense trends before recent-game trends.
 
