@@ -74,7 +74,7 @@ test("a missing season is reported instead of filled with fictional games",()=>{
     {sport:"nfl",mode:"similar",window:3});
   assert.deepEqual(combined.yearsLoaded,[2026,2025]);
   assert.deepEqual(combined.yearsMissing,[2024]);
-  assert.match(combined.notes.join(" "),/not loaded/i);
+  assert.match(combined.notes.join(" "),/without usable player records/i);
   assert.equal(combined.results.every(p=>p.coveragePartial),true);
 });
 
