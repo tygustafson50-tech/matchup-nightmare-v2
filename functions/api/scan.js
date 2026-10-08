@@ -1,189 +1,217 @@
 /**
- * GET /api/scan?sport=nfl&date=YYYY-MM-DD&gameId=...&mode=similar|recent
- *
- * Scan only an actual selected scoreboard matchup, then look at previous
- * COMPLETED games for both participating teams. ESPN endpoints are unofficial.
- * No PrizePicks, sportsbook, or automatically verified alt line feed is present.
+ * GET /api/scan?sport=nfl&date=YYYY-MM-DD&gameId=...&mode=both|similar|recent
+ * Historical positional / matchup-unit rates are computed from completed
+ * player boxscores, never inferred from whole-team scoring totals.
+ * ESPN data is provisional and has no coverage guarantee.
  */
 import {
-  CONFIG,SOCCER_LEAGUES,priorGames,extractBoxscore,defensiveAverage,scanTrends
+  CONFIG,SOCCER_LEAGUES,priorGames,extractBoxscore,buildPositionProfile,scanTrends
 } from "../../lib/auto-scan.js";
 
 const ESPN="https://site.api.espn.com/apis/site/v2/sports/";
-// Look beyond the last five to locate up to four genuinely comparable opponents.
-const MAX_PRIOR_GAMES=10;
+const MAX_PRIOR_GAMES=6;
+const COMPARABLE_CANDIDATES=4;
+const POSITION_PROFILE_GAMES=2;
+const TARGET_PROFILE_GAMES=3;
 const CONCURRENCY=5;
-
+// CF Free Worker external subrequests limit is 50; reserve headroom for redirects.
+const MAX_UPSTREAM_REQUESTS=46;
 const respond=(data,status=200)=>new Response(JSON.stringify(data),{
-  status,
-  headers:{
+  status,headers:{
     "content-type":"application/json; charset=utf-8",
     "cache-control":status===200?"public, max-age=120":"no-store",
     "x-content-type-options":"nosniff"
   }
 });
-
 function validDate(date){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return false;
   const d=new Date(date+"T00:00:00Z");
   return !Number.isNaN(d.getTime())&&d.toISOString().slice(0,10)===date;
 }
-async function jsonFrom(url){
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),9000);
-  try{
-    const response=await fetch(url,{signal:controller.signal,headers:{Accept:"application/json"}});
-    if(!response.ok)throw Error("HTTP "+response.status);
-    return await response.json();
-  }finally{clearTimeout(timer);}
+function createFetcher(diagnostics){
+  const memo=new Map();
+  const request=async(url)=>{
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),9000);
+    try{
+      const response=await fetch(url,{signal:controller.signal,headers:{Accept:"application/json"}});
+      if(!response.ok)throw Error("HTTP "+response.status);
+      return await response.json();
+    }finally{clearTimeout(timer);}
+  };
+  return (url)=>{
+    if(memo.has(url))return memo.get(url);
+    if(diagnostics.upstreamRequests>=MAX_UPSTREAM_REQUESTS)
+      return Promise.reject(Error("Free-plan request budget reached; this profile is unavailable"));
+    diagnostics.upstreamRequests++;
+    const promise=request(url);
+    memo.set(url,promise);
+    return promise;
+  };
 }
 async function pool(items,fn){
   const out=new Array(items.length);
-  let pos=0;
+  let next=0;
   await Promise.all(Array.from({length:Math.min(CONCURRENCY,items.length)},async()=>{
-    while(pos<items.length){
-      const index=pos++;
-      try{out[index]={ok:true,value:await fn(items[index])};}
-      catch(e){out[index]={ok:false,error:String(e.message).slice(0,100)};}
+    while(next<items.length){
+      const i=next++;
+      try{out[i]={ok:true,value:await fn(items[i])};}
+      catch(err){out[i]={ok:false,error:String(err.message).slice(0,130)};}
     }
   }));
   return out;
 }
 export async function onRequestGet({request}){
-  const params=new URL(request.url).searchParams;
-  const sport=params.get("sport")||"nfl";
-  const date=params.get("date");
-  const gameId=params.get("gameId")||"";
-  const requestedMode=params.get("mode");
+  const query=new URL(request.url).searchParams;
+  const sport=query.get("sport")||"nfl",date=query.get("date")||"";
+  const gameId=query.get("gameId")||"",requestedMode=query.get("mode");
   const mode=requestedMode==="recent"?"recent":requestedMode==="similar"?"similar":"both";
-  const league=sport==="soccer"?(params.get("league")||"eng.1"):CONFIG[sport]?.path?.split("/")[1];
-
-  if(!Object.hasOwn(CONFIG,sport)||!validDate(date||"")||!/^\d{5,15}$/.test(gameId)){
-    return respond({error:"Select a valid sport, date, and game from the schedule."},400);
-  }
+  if(!Object.hasOwn(CONFIG,sport)||!validDate(date)||!/^\d{5,15}$/.test(gameId))
+    return respond({error:"Select a valid sport, date and scheduled game."},400);
+  const league=sport==="soccer"?(query.get("league")||"eng.1"):CONFIG[sport].path.split("/")[1];
   if(sport==="soccer"&&!SOCCER_LEAGUES.has(league))return respond({error:"Unsupported soccer league"},400);
   const path=sport==="soccer"?"soccer/"+league:CONFIG[sport].path;
   const base=ESPN+path;
-  const notes=[];
-  const diagnostics={schedules:0,boxscores:0,boxscoreFailures:0,defenseSchedules:0,defenseFailures:0,teams:0};
-
+  const notes=[],diagnostics={
+    upstreamRequests:0,offenseSchedules:0,offenseBoxscores:0,
+    missingOffenseBoxscores:0,defenseSchedules:0,defenseBoxscores:0,
+    missingDefenseBoxscores:0,defenseProfiles:0
+  };
+  const getJSON=createFetcher(diagnostics);
   try{
-    // Validate the game against that date's real scoreboard; never accept arbitrary IDs.
-    const board=await jsonFrom(base+"/scoreboard?dates="+date.replaceAll("-","")+"&limit=100");
-    const event=(board.events||[]).find(x=>String(x.id)===gameId);
-    if(!event)return respond({error:"Selected game was not found on the verified date/league schedule."},404);
-    const comp=event.competitions?.[0];
-    const entries=comp?.competitors||[];
-    if(entries.length!==2)return respond({error:"Team mapping unavailable for selected game."},422);
-    const teams=entries.map(t=>({
-      id:String(t.team?.id||""),
-      name:t.team?.displayName||t.team?.name||"Unknown",
-      logo:t.team?.logo||"",
-      homeAway:t.homeAway
+    const board=await getJSON(base+"/scoreboard?dates="+date.replaceAll("-","")+"&limit=100");
+    const event=(board.events||[]).find(e=>String(e.id)===gameId);
+    if(!event)return respond({error:"Selected game was not found on the schedule for this date."},404);
+    const competitors=event.competitions?.[0]?.competitors||[];
+    if(competitors.length!==2)return respond({error:"Couldn't validate team identifiers for this game."},422);
+    const teams=competitors.map(c=>({
+      id:String(c.team?.id||""),name:c.team?.displayName||c.team?.name||"Team",
+      logo:c.team?.logo||"",homeAway:c.homeAway
     }));
-    if(teams.some(t=>!t.id||!/^\d+$/.test(t.id)))return respond({error:"Provider did not return stable team IDs."},422);
-    diagnostics.teams=2;
+    if(teams.some(t=>!/^\d+$/.test(t.id)))return respond({error:"Missing stable team IDs."},422);
     const selectedDate=event.date;
+    if(!Number.isFinite(Date.parse(selectedDate)))return respond({error:"Game kickoff date unavailable."},422);
     const season=String(event.season?.year||date.slice(0,4));
-    const scheduleByTeam={};
-    const schedResults=await pool(teams,team=>jsonFrom(base+"/teams/"+team.id+"/schedule?season="+season+"&limit=100"));
+    const byTeamSchedule=new Map();
+    const scheduleResults=await pool(teams,t=>getJSON(base+"/teams/"+t.id+"/schedule?season="+season+"&limit=100"));
     for(let i=0;i<teams.length;i++){
-      if(schedResults[i].ok){
-        scheduleByTeam[teams[i].id]=schedResults[i].value;
-        diagnostics.schedules++;
-      }else{
-        notes.push(teams[i].name+": historic schedule unavailable");
+      if(scheduleResults[i].ok){byTeamSchedule.set(teams[i].id,scheduleResults[i].value);diagnostics.offenseSchedules++;}
+      else notes.push("Historical schedule unavailable: "+teams[i].name);
+    }
+    if(!byTeamSchedule.size)return respond({error:"No accessible completed schedules for this game.",notes,diagnostics},503);
+
+    const histories=new Map();
+    for(const t of teams){
+      t.targetOpponentId=teams.find(x=>x.id!==t.id).id;
+      histories.set(t.id,byTeamSchedule.has(t.id)
+        ?priorGames(byTeamSchedule.get(t.id),t.id,selectedDate,MAX_PRIOR_GAMES):[]);
+    }
+    const offenseGames=[...new Map([...histories.values()].flat().map(g=>[g.id,g])).values()];
+    const offenseResponses=await pool(offenseGames,g=>getJSON(base+"/summary?event="+g.id));
+    const summaryById=new Map();
+    for(let i=0;i<offenseGames.length;i++){
+      if(offenseResponses[i].ok){
+        summaryById.set(offenseGames[i].id,offenseResponses[i].value);
+        diagnostics.offenseBoxscores++;
+      }else diagnostics.missingOffenseBoxscores++;
+    }
+
+    // Four recent historical opponent defenses per selected team. These
+    // profiles are computed as-of the game being compared, not after it.
+    const candidateOpponents=new Set();
+    for(const t of teams){
+      for(const g of (histories.get(t.id)||[]).slice(0,COMPARABLE_CANDIDATES)){
+        if(!byTeamSchedule.has(g.opponentId))candidateOpponents.add(g.opponentId);
       }
     }
-    if(diagnostics.schedules===0){
-      return respond({error:"Historical schedules unavailable. Can't produce a reliable scan.",notes,diagnostics},503);
-    }
-    const teamGames={};
-    const history=[];
-    for(const team of teams){
-      team.targetOpponentId=teams.find(x=>x.id!==team.id).id;
-      teamGames[team.id]=scheduleByTeam[team.id]
-        ?priorGames(scheduleByTeam[team.id],team.id,selectedDate,MAX_PRIOR_GAMES):[];
-      for(const h of teamGames[team.id])history.push(h);
+    const needed=[...candidateOpponents];
+    const opponentSchedules=await pool(needed,id=>getJSON(base+"/teams/"+id+"/schedule?season="+season+"&limit=100"));
+    for(let i=0;i<needed.length;i++){
+      if(opponentSchedules[i].ok){
+        byTeamSchedule.set(needed[i],opponentSchedules[i].value);
+        diagnostics.defenseSchedules++;
+      }else notes.push("Opponent historical position data unavailable for team "+needed[i]);
     }
 
-    const uniqueHistory=[...new Map(history.map(h=>[h.id,h])).values()];
-    const boxes=await pool(uniqueHistory,game=>jsonFrom(base+"/summary?event="+game.id));
-    const byGame={};
-    for(let i=0;i<uniqueHistory.length;i++){
-      if(boxes[i].ok){
-        byGame[uniqueHistory[i].id]=boxes[i].value;
-        diagnostics.boxscores++;
-      }else diagnostics.boxscoreFailures++;
-    }
-
-    // All scan cards display the last four comparable defenses, even when
-    // the ranking filter is set to RECENT rather than SIMILAR.
-    {
-      const opponents=new Set([...teams.map(t=>t.id),...history.map(h=>h.opponentId)]);
-      const missing=[...opponents].filter(id=>!scheduleByTeam[id]);
-      const profiles=await pool(missing,id=>jsonFrom(base+"/teams/"+id+"/schedule?season="+season+"&limit=100"));
-      for(let i=0;i<missing.length;i++){
-        if(profiles[i].ok){
-          scheduleByTeam[missing[i]]=profiles[i].value;
-          diagnostics.defenseSchedules++;
-        }else diagnostics.defenseFailures++;
+    const demands=[];
+    for(const t of teams){
+      const upcomingDefense=t.targetOpponentId;
+      const schedule=byTeamSchedule.get(upcomingDefense);
+      if(schedule){
+        demands.push({
+          defenseId:upcomingDefense,kind:"target",eventId:null,
+          games:priorGames(schedule,upcomingDefense,selectedDate,TARGET_PROFILE_GAMES)
+        });
       }
-    }
-
-    const allProfiles={};
-    {
-      for(const team of teams){
-        const opponent=team.targetOpponentId;
-        allProfiles[opponent]??={};
-        allProfiles[opponent].target=scheduleByTeam[opponent]
-          ?defensiveAverage(scheduleByTeam[opponent],opponent,selectedDate):null;
-        for(const record of teamGames[team.id]){
-          allProfiles[record.opponentId]??={};
-          allProfiles[record.opponentId][record.id]=scheduleByTeam[record.opponentId]
-            ?defensiveAverage(scheduleByTeam[record.opponentId],record.opponentId,record.date):null;
+      for(const past of (histories.get(t.id)||[]).slice(0,COMPARABLE_CANDIDATES)){
+        const pastSchedule=byTeamSchedule.get(past.opponentId);
+        if(pastSchedule){
+          demands.push({
+            defenseId:past.opponentId,kind:"historical",eventId:past.id,
+            games:priorGames(pastSchedule,past.opponentId,past.date,POSITION_PROFILE_GAMES)
+          });
         }
       }
     }
+    // All prior boxscore requests are deduplicated across offense histories
+    // and defensive profiles, keeping free-plan limits predictable.
+    const defensiveGameIds=[...new Set(demands.flatMap(d=>d.games.map(g=>g.id)))]
+      .filter(id=>!summaryById.has(id));
+    const defenseResponses=await pool(defensiveGameIds,id=>getJSON(base+"/summary?event="+id));
+    for(let i=0;i<defensiveGameIds.length;i++){
+      if(defenseResponses[i].ok){
+        summaryById.set(defensiveGameIds[i],defenseResponses[i].value);
+        diagnostics.defenseBoxscores++;
+      }else diagnostics.missingDefenseBoxscores++;
+    }
+
+    const profiles={};
+    for(const demand of demands){
+      const complete=demand.games.filter(g=>summaryById.has(g.id))
+        .map(g=>({id:g.id,summary:summaryById.get(g.id)}));
+      const profile=buildPositionProfile(complete,sport,demand.defenseId,2);
+      profiles[demand.defenseId]??={};
+      if(demand.kind==="target")profiles[demand.defenseId].target=profile;
+      else profiles[demand.defenseId][demand.eventId]=profile;
+      if(Object.keys(profile).length)diagnostics.defenseProfiles++;
+    }
 
     const trends=[];
-    for(const team of teams){
-      if(!scheduleByTeam[team.id])continue;
-      const records=teamGames[team.id].filter(g=>byGame[g.id]).map(g=>({
-        ...g,players:extractBoxscore(byGame[g.id],sport,team.id)
-      }));
-      const inputs={id:gameId,date:selectedDate,sport};
+    for(const t of teams){
+      const records=(histories.get(t.id)||[]).filter(g=>summaryById.has(g.id))
+        .map(g=>({...g,players:extractBoxscore(summaryById.get(g.id),sport,t.id)}));
+      const nextGame={id:gameId,date:selectedDate,sport};
       if(mode==="both"){
-        trends.push(...scanTrends(records,team,inputs,allProfiles,"similar",3));
-        trends.push(...scanTrends(records,team,inputs,allProfiles,"recent",3));
-      }else{
-        trends.push(...scanTrends(records,team,inputs,allProfiles,mode,3));
-      }
+        trends.push(...scanTrends(records,t,nextGame,profiles,"similar",3));
+        trends.push(...scanTrends(records,t,nextGame,profiles,"recent",3));
+      }else trends.push(...scanTrends(records,t,nextGame,profiles,mode,3));
     }
-    if(!trends.length){
-      notes.push("No 100% qualifying OVER thresholds found with at least 3 historical games and adequate source data.");
-    }
-    if(diagnostics.boxscoreFailures)notes.push("Some completed-game boxscores were unavailable; results are incomplete.");
-    if(sport==="soccer")notes.push("Soccer player-level boxscores are often unavailable in this provisional source.");
-    notes.push(mode==="recent"
-      ?"Recent-game scan is not filtered for similar defenses."
-      :"Comparable-defensive trends use historical TEAM scoring allowed (not defense against position). Recent-only results are labeled separately.");
-    notes.push("Calculated thresholds are RESEARCH-ONLY. They are not verified PrizePicks or sportsbook offers.");
-    notes.push("Historical 100% hit rates are not future winning probabilities.");
+
+    if(!trends.length)notes.push("No qualifying 100% historical OVER thresholds with sufficient completed, usable games.");
+    if(diagnostics.missingOffenseBoxscores||diagnostics.missingDefenseBoxscores)
+      notes.push("Some boxscores were unavailable. Missing data were not replaced with zeros.");
+    if(diagnostics.upstreamRequests>=MAX_UPSTREAM_REQUESTS)
+      notes.push("Free Cloudflare request budget reached; positional comparisons may be incomplete.");
+    if(sport==="mlb")
+      notes.push("Baseball uses pitching-staff concessions and opposing-lineup strikeout tendencies, not a position-guarding model.");
+    else
+      notes.push("Defense comparisons are based on the relevant player position group and prop statistic, NOT total team scoring allowed.");
+    notes.push("Positional defensive samples use at least 2 prior completed games and a 25% similarity tolerance.");
+    notes.push("All thresholds are computed for research; no actual PrizePicks lines, odds, or guaranteed probabilities are connected.");
 
     return respond({
       game:{id:gameId,date:selectedDate,home:teams.find(t=>t.homeAway==="home"),
         away:teams.find(t=>t.homeAway==="away")},
-      sport,league,mode,count:trends.length,
-      results:trends.slice(0,70),notes,diagnostics,
-      provider:"ESPN public scoreboard and boxscore (unofficial; no data availability guarantee)",
+      sport,league,mode,count:trends.length,results:trends.slice(0,70),
+      notes,diagnostics,
+      provider:"ESPN public game summaries (unofficial, incomplete for some leagues)",
       refreshedAt:new Date().toISOString(),
-      prizesPicksConnected:false,realOddsConnected:false
+      prizesPicksConnected:false,realOddsConnected:false,
+      defensiveModel:"position-and-stat-specific opponent boxscore concessions"
     });
   }catch(error){
     return respond({
-      error:"Couldn't scan this game with the available historical provider.",
-      details:String(error.message).slice(0,120),notes,diagnostics
+      error:"Could not scan this game with available historical data.",
+      details:String(error.message).slice(0,130),notes,diagnostics
     },502);
   }
 }
