@@ -5,6 +5,7 @@ import {eligibleCareerPlayers} from "/lib/career-candidates.js";
 import {FIXED_SCAN,INITIAL_FILTERS,getPickOptions,filterPickCards} from "/lib/pick-filters.js";
 import {parseApiResponse} from "/lib/api-client.js";
 import {createEspnSourceClient,loadSeasonFromEspn} from "/lib/season-source.js";
+import {loadCareerFromEspn} from "/lib/career-source.js";
 const sports={
 nfl:{label:"🏈 NFL",markets:["Passing yards","Passing attempts","Completions","Rushing yards","Rushing attempts","Receptions","Receiving yards","Targets"]},
 nba:{label:"🏀 NBA",markets:["Points","Rebounds","Assists","3-pointers","PRA","Steals","Blocks"]},
@@ -279,25 +280,23 @@ scanBtn.addEventListener("click",async()=>{
   }
   async function requestCareer(state,player,season){
     const game=state.game;
-    const q=new URLSearchParams({sport,date,gameId:game.id,
-      playerId:player.playerId,season:String(season)});
-    // ESPN game logs may include a former franchise. Avoid re-fetching
-    // appearances already verified from this player's current-team boxscores.
-    const teamBatch=state.responses.find(x=>Number(x.season)===Number(season));
-    const sourced=(teamBatch?.seasonBatch?.records?.[player.teamId]||[])
-      .filter(g=>(g.players||[]).some(p=>String(p.id)===String(player.playerId)))
-      .map(g=>String(g.id)).filter(id=>/^\d{5,15}$/.test(id)).slice(0,30);
-    if(sourced.length)q.set("skip",sourced.join(","));
-    if(sport==="soccer")q.set("league",league);
+    const knownIds=state.responses
+      .filter(x=>Number(x.season)===Number(season))
+      .flatMap(x=>(x.seasonBatch?.records?.[player.teamId]||[])
+        .filter(g=>(g.players||[]).some(p=>String(p.id)===String(player.playerId)))
+        .map(g=>String(g.id))).filter(id=>/^\d{5,15}$/.test(id)).slice(0,30);
     try{
-      const r=await fetch("/api/career?"+q,{headers:{Accept:"application/json"}});
-      const data=await parseApiResponse(r,"/api/career ("+player.name+", "+season+")");
-      if(!data.careerBatch)throw Error("Missing verified athlete career data.");
+      const data=await loadCareerFromEspn({
+        client:sourceClient,sport,league,game,player,season,knownIds
+      });
+      if(!data.careerBatch)
+        throw Error("No verified historical athlete source batch.");
       return {...data,forTeamId:player.teamId};
     }finally{
       careerBatchesDone++;
-      scanProgress.textContent="Cross-team career lookups completed: "+careerBatchesDone+
-        " · Team-season batches: "+seasonBatchesDone+" · Games: "+completed+"/"+chosen.length;
+      scanProgress.textContent="Career lookups attempted: "+careerBatchesDone+
+        " · Source documents: "+sourceClient.stats().completed+
+        " · Games: "+completed+"/"+chosen.length;
     }
   }
   async function careerPool(state,players,seasons){
