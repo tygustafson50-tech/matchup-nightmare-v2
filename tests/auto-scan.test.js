@@ -231,10 +231,12 @@ test("full selected-game scan builds role-specific historical comparisons within
     assert.ok(match);
     assert.equal(match.matchupPosition,"WR");
     assert.match(match.matchupMetric,/WR receiving yards/);
-    assert.equal(match.similarGames.length,4);
+    // The free-tier request budget samples up to three opponent defenses
+    // per season; a fourth comparable may come from an earlier season.
+    assert.equal(match.similarGames.length,3);
     assert.equal(match.similarGames[0].opponentDefenseGames,2);
     assert.equal(match.similarGames[0].opponentAllowed,89);
-    assert.equal(match.matched,4);
+    assert.equal(match.matched,3);
     assert.ok(d.results.some(p=>p.scanMode==="recent"));
     assert.equal(d.realOddsConnected,false);
   }finally{globalThis.fetch=before;}
