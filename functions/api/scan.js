@@ -305,9 +305,10 @@ export async function onRequestGet({request}){
       }
       normalizedRecords[t.id]=records.map(({id,date,season,opponent,opponentId,players})=>
         ({id,date,season,opponent,opponentId,players}));
-      // A historical-season response is one batch of a three-season scan;
-      // it cannot legitimately calculate a full multi-season trend alone.
-      if(!isCurrentSeason)continue;
+      // Browser V3 recomputes one unbiased matchup trend over the combined
+      // three-season game history. Per-season preview thresholds are NOT
+      // generated for those requests (which saves Cloudflare CPU too).
+      if(!isCurrentSeason||requestedSeason!==null)continue;
       const nextGame={id:gameId,date:selectedDate,sport};
       if(mode==="both"){
         trends.push(...scanTrends(records,t,nextGame,profiles,"similar",3));
