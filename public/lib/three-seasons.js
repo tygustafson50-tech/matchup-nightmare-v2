@@ -196,8 +196,8 @@ export function combineSeasonBatches(responses,{
       pick.careerTeamsIncluded=info?[...info.teams]:[];
       pick.careerSeasonsVerified=info?[...info.loaded].sort((a,b)=>b-a):[];
       pick.careerEnrichmentAttempted=!!info;
-      pick.careerCoveragePartial=!info || info.errors.length>0 ||
-        info.loaded.length<expected.length-1;
+      pick.careerCoveragePartial=window===3 && (!info || info.errors.length>0 ||
+        info.loaded.length<expected.length-1);
     }
     results.push(...teamResults);
   }
