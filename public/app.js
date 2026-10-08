@@ -71,6 +71,7 @@ function renderAutomaticResults(items,failures,completed){
       heading:"Last 4 matchups vs similar positional defenses",
       limit:4,
       countLabel:compared.length+" of 4 available",
+      showOpponentDefense:true,
       emptyMessage:"Position- and stat-specific defensive comparisons unavailable or insufficient."
     });
     const defense=Number.isFinite(p.targetDefense)?p.targetDefense.toFixed(1):"N/A";
@@ -84,7 +85,7 @@ function renderAutomaticResults(items,failures,completed){
       '<p class="muted">'+safe(p.reason)+'. Every qualifying recorded game exceeded the displayed threshold.</p>'+
       recent+
       '<div class="similar-history">'+lastFourSimilar+
-        '<p class="game-log-method">Comparable = '+safe(defenseMarket)+' against '+safe(defenseRole)+' within 25% of the upcoming opponent, using pregame stats. At least 2 completed games per defensive profile. No whole-team points-allowed fallback.</p>'+
+        '<p class="game-log-method">Comparable = '+safe(defenseMarket)+' for '+safe(defenseRole)+' within 25% of the upcoming opponent, using pregame box scores (minimum 2 defensive games). Baseball uses pitching-staff or lineup tendencies. No total-points fallback.</p>'+
       '</div>'+
       '<div class="research-label">CALCULATED ALT THRESHOLD • NOT A VERIFIED PRIZEPICKS / SPORTSBOOK OFFER</div>'+
       '<details><summary>How was this 100% historical trend calculated?</summary>'+
