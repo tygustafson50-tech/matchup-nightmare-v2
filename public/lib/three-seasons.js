@@ -44,8 +44,14 @@ export function combineSeasonBatches(responses,{
   }
   if(!bySeason.has(selectedSeason))throw Error("Selected-season history could not be loaded.");
 
-  const loaded=expected.filter(y=>bySeason.has(y));
-  const missing=expected.filter(y=>!bySeason.has(y));
+  // An API response without usable player statistics is not evidence that
+  // its historical season was actually scanned successfully.
+  const hasUsableGames=entry=>Object.values(entry?.seasonBatch?.records||{})
+    .some(rows=>Array.isArray(rows)&&rows.some(row=>
+      Array.isArray(row.players)&&row.players.some(p=>
+        Object.values(p.stats||{}).some(Number.isFinite))));
+  const loaded=expected.filter(y=>bySeason.has(y)&&hasUsableGames(bySeason.get(y)));
+  const missing=expected.filter(y=>!loaded.includes(y));
   const profiles={};
   const collected={};
   const teams=current.seasonBatch.teams||[];
@@ -86,7 +92,7 @@ export function combineSeasonBatches(responses,{
     if(d.upstreamRequests>=46)
       warnings.push(year+": source request cap reached; historical coverage is partial.");
   }
-  if(missing.length)warnings.push("Historical seasons not loaded: "+missing.join(", ")+".");
+  if(missing.length)warnings.push("Historical seasons without usable player records: "+missing.join(", ")+".");
   if(missingBoxscores)warnings.push("Missing source boxscores were excluded, never changed to zero.");
 
   const results=[];
@@ -124,6 +130,8 @@ export function combineSeasonBatches(responses,{
   }
 
   const uniqueNotes=unique(warnings);
+  uniqueNotes.push("Limited lookback: up to six completed team games per season, not every game played over the past three years.");
+  uniqueNotes.push("Same-team history only: earlier appearances with a different franchise may be missing.");
   uniqueNotes.push("Only players seen in recent current-season team games are included; this does not verify future rosters or injury availability.");
   uniqueNotes.push("Historical defense schemes, coaching, roles and opponent quality may change between seasons.");
   uniqueNotes.push("Calculated thresholds are RESEARCH ONLY, not verified PrizePicks lines or probabilities.");
