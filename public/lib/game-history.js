@@ -35,12 +35,15 @@ export function renderGameHistory(games, line, market, options={}) {
       ?'<small class="game-log-opponent-defense">Allowed '+escapeHistoryHtml(game.opponentAllowed.toFixed(1))+
         '/game · '+escapeHistoryHtml(game.opponentDefenseGames)+' defensive games</small>'
       :"";
+    const careerTeam=options.showCareerTeam&&game.playedTeamName
+      ?'<small class="game-log-career-team">Player team: '+escapeHistoryHtml(game.playedTeamName)+'</small>'
+      :"";
     const rawDate=String(game.date??"");
     const date=escapeHistoryHtml(readableGameDate(rawDate,options.showYear===true));
     const stat=escapeHistoryHtml(game.value);
     return '<div class="game-log-row" role="row">'+
       '<span class="game-log-date" role="cell">'+date+'</span>'+
-      '<strong class="game-log-opponent" role="cell" title="'+opponent+'">'+opponent+comparableMetric+'</strong>'+
+      '<strong class="game-log-opponent" role="cell" title="'+opponent+'">'+opponent+careerTeam+comparableMetric+'</strong>'+
       '<strong class="game-log-stat" role="cell" aria-label="'+stat+' '+name+'">'+stat+'</strong>'+
       '<span class="game-log-status '+resultClass+'" role="cell">'+result+'</span>'+
       '</div>';
