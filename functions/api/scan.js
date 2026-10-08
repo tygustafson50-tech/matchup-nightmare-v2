@@ -5,14 +5,15 @@
  * ESPN data is provisional and has no coverage guarantee.
  */
 import {
-  CONFIG,SOCCER_LEAGUES,priorGames,extractBoxscore,buildPositionProfile,scanTrends
+  CONFIG,SOCCER_LEAGUES,priorGames,extractBoxscore,buildPositionProfile,
+  rosterPositionIndex,attachRosterPositions,matchupRole,scanTrends
 } from "../../lib/auto-scan.js";
 
 const ESPN="https://site.api.espn.com/apis/site/v2/sports/";
-const MAX_PRIOR_GAMES=6;
-const COMPARABLE_CANDIDATES=5;
+const MAX_PRIOR_GAMES=5;
+const COMPARABLE_CANDIDATES=3;
 const POSITION_PROFILE_GAMES=2;
-const TARGET_PROFILE_GAMES=3;
+const TARGET_PROFILE_GAMES=2;
 const CONCURRENCY=5;
 // CF Free Worker external subrequests limit is 50; reserve headroom for redirects.
 const MAX_UPSTREAM_REQUESTS=46;
@@ -105,7 +106,9 @@ export async function onRequestGet({request}){
   const notes=[],diagnostics={
     upstreamRequests:0,offenseSchedules:0,offenseBoxscores:0,
     missingOffenseBoxscores:0,defenseSchedules:0,defenseBoxscores:0,
-    missingDefenseBoxscores:0,defenseProfiles:0
+    missingDefenseBoxscores:0,defenseProfiles:0,
+    rosterLookups:0,rosterLookupsSucceeded:0,rosterLookupsFailed:0,
+    positionRowsResolved:0,positionRowsMissing:0,defenseProfileStatTypes:0
   };
   const getJSON=createFetcher(diagnostics);
   try{
@@ -208,6 +211,63 @@ export async function onRequestGet({request}){
       }else diagnostics.missingDefenseBoxscores++;
     }
 
+    // ESPN often omits athlete.position from the game stat rows. Verify it
+    // using that season's team rosters, prioritizing CURRENT selected players
+    // and the upcoming defense's actual historical opponents.
+    // Preserve request budget for these position checks rather than spending
+    // it entirely on less useful distant historical boxscores.
+    const rosterIndex={};
+    const rosterWanted=new Map();
+    function needRoster(summary,teamId){
+      if(sport==="mlb")return false;
+      const players=extractBoxscore(summary,sport,teamId);
+      return players.some(p=>(CONFIG[sport]?.markets||[]).some(([stat])=>
+        Number.isFinite(p.stats?.[stat])&&!matchupRole(sport,p.position,stat)));
+    }
+    function addRoster(teamId,priority){
+      const id=String(teamId||"");
+      if(!/^\d+$/.test(id))return;
+      const prior=rosterWanted.get(id);
+      if(prior===undefined||priority<prior)rosterWanted.set(id,priority);
+    }
+    for(const t of teams){
+      if((histories.get(t.id)||[]).some(g=>summaryById.has(g.id)&&
+          needRoster(summaryById.get(g.id),t.id)))addRoster(t.id,0);
+    }
+    for(const demand of demands){
+      for(const g of demand.games){
+        const summary=summaryById.get(g.id);
+        if(!summary)continue;
+        for(const team of summary.boxscore?.players||[]){
+          const offenseId=String(team.team?.id||"");
+          if(offenseId===String(demand.defenseId))continue;
+          if(needRoster(summary,offenseId))addRoster(offenseId,demand.kind==="target"?1:2);
+        }
+      }
+    }
+    const rosterIds=[...rosterWanted.entries()]
+      .sort((a,b)=>a[1]-b[1]).map(([id])=>id);
+    // Keep two spare external requests for provider redirects.
+    const capacity=Math.max(0,Math.min(14,MAX_UPSTREAM_REQUESTS-diagnostics.upstreamRequests-2));
+    const rosterResults=await pool(rosterIds.slice(0,capacity),id=>
+      getJSON(base+"/teams/"+id+"/roster?season="+seasonYear));
+    diagnostics.rosterLookups=rosterResults.length;
+    for(let i=0;i<rosterResults.length;i++){
+      if(rosterResults[i].ok){
+        const id=rosterIds[i];
+        const teamRoles=rosterPositionIndex(rosterResults[i].value,id);
+        if(Object.keys(teamRoles[id]||{}).length){
+          rosterIndex[id]=teamRoles[id];
+          diagnostics.rosterLookupsSucceeded++;
+        }else diagnostics.rosterLookupsFailed++;
+      }else diagnostics.rosterLookupsFailed++;
+    }
+    // Attach verified position hints to every completed game summary,
+    // without changing any player statistics.
+    for(const [id,summary] of summaryById){
+      summaryById.set(id,attachRosterPositions(summary,rosterIndex));
+    }
+
     const profiles={};
     for(const demand of demands){
       const complete=demand.games.filter(g=>summaryById.has(g.id))
@@ -216,7 +276,10 @@ export async function onRequestGet({request}){
       profiles[demand.defenseId]??={};
       if(demand.kind==="target")profiles[demand.defenseId].target=profile;
       else profiles[demand.defenseId][demand.eventId]=profile;
-      if(Object.keys(profile).length)diagnostics.defenseProfiles++;
+      if(Object.keys(profile).length){
+        diagnostics.defenseProfiles++;
+        diagnostics.defenseProfileStatTypes+=Object.keys(profile).length;
+      }
     }
 
     const trends=[];
@@ -225,6 +288,12 @@ export async function onRequestGet({request}){
       const records=(histories.get(t.id)||[]).filter(g=>summaryById.has(g.id))
         .map(g=>({...g,season:historySeason,
           players:extractBoxscore(summaryById.get(g.id),sport,t.id)}));
+      for(const record of records){
+        for(const player of record.players){
+          if(player.position)diagnostics.positionRowsResolved++;
+          else diagnostics.positionRowsMissing++;
+        }
+      }
       normalizedRecords[t.id]=records.map(({id,date,season,opponent,opponentId,players})=>
         ({id,date,season,opponent,opponentId,players}));
       // A historical-season response is one batch of a three-season scan;
@@ -241,6 +310,12 @@ export async function onRequestGet({request}){
       notes.push("No qualifying 100% historical OVER thresholds with sufficient completed, usable games.");
     if(diagnostics.missingOffenseBoxscores||diagnostics.missingDefenseBoxscores)
       notes.push("Some boxscores were unavailable. Missing data were not replaced with zeros.");
+    if(diagnostics.positionRowsMissing)
+      notes.push(diagnostics.positionRowsMissing+" sampled player appearances lack verified position metadata. They are not used for similar-defense matching.");
+    if(rosterWanted.size>diagnostics.rosterLookups)
+      notes.push("Some historical roster positions could not be checked within the free hosting request allowance.");
+    if(!diagnostics.defenseProfiles && sport!=="mlb")
+      notes.push("No verified position-specific defensive profiles were available from the requested history.");
     if(diagnostics.upstreamRequests>=MAX_UPSTREAM_REQUESTS)
       notes.push("Free Cloudflare request budget reached; positional comparisons may be incomplete.");
     if(sport==="mlb")
