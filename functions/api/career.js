@@ -76,8 +76,8 @@ export async function onRequestGet({request}){
       fixture.season?.year??seasonFromDate(sport,kickoff)
     );
     if(!kickoff||!Number.isFinite(Date.parse(kickoff))||
-      !Number.isInteger(selectedYear)||year>=selectedYear||year<selectedYear-2)
-      return send({error:"Career lookback supports only the two seasons preceding the selected event."},400);
+      !Number.isInteger(selectedYear)||year>selectedYear||year<selectedYear-2)
+      return send({error:"Career game logs support the selected season and the two preceding seasons."},400);
     const gamelogUrl=athleteBase+"/athletes/"+playerId+"/gamelog?season="+year;
     let gameLog;
     try{gameLog=await get(gamelogUrl);}
