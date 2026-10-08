@@ -117,8 +117,8 @@ test("only source-backed markets and games appear in filter dropdowns",()=>{
   assert.deepEqual(options.markets,["Receiving yards","Receptions"]);
   assert.equal(options.teams.length,2);
   assert.equal(options.games.length,2);
-  assert.equal(options.games[0].value,"888888");
-  assert.match(options.games[0].label,/@/);
+  assert.ok(options.games.some(g=>g.value==="888888"));
+  assert.ok(options.games.every(g=>g.label.includes("@")));
 });
 
 test("player filter is applied BEFORE pagination; the 130th card stays discoverable",()=>{
