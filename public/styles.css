@@ -113,3 +113,36 @@
  .game-log-stat{font-size:14px}
  .game-log-status{font-size:9px}
 }
+
+
+/* Clearly separate the last-four comparable defenses from recent form. */
+.similar-history {
+  margin: 15px 0 18px;
+  padding: 2px 10px 10px;
+  border: 1px solid #635331;
+  border-radius: 12px;
+  background: linear-gradient(150deg, #252116, #141516);
+}
+.similar-history .game-log-section {
+  border-color: #5d4b29;
+  background: #131311;
+  margin: 12px 0 7px;
+}
+.similar-history .game-log-title strong {
+  color: #edd08a;
+}
+.similar-history .game-log-title span {
+  color: #d3bf8e;
+}
+.similar-history .game-log-stat {
+  color: #f5d888;
+}
+.game-log-method {
+  margin: 10px 4px 2px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #bdb4a3;
+}
+@media (max-width: 540px) {
+  .similar-history { padding: 2px 7px 9px; }
+}
