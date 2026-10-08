@@ -1,92 +1,71 @@
 # Matchup Nightmare V2
 
-A six-sport, OVER-only sports research web app: NFL, NBA, MLB, NCAA men's football, NCAA men's basketball, and men's soccer.
+A **six-sport, OVER-only matchup research website** built in a private GitHub repository and automatically deployed to Cloudflare Pages.
 
-## Publish this as a free website (Cloudflare Pages)
+Sports: NFL, NBA, MLB, men's college football, men's college basketball, and men's soccer (EPL, La Liga, Bundesliga, Serie A, Ligue 1, MLS, Champions League).
 
-Your repository **can stay private**. Cloudflare Pages can deploy it automatically when code is updated on GitHub.
+Website: https://matchup-nightmare-v2.pages.dev
 
-1. Visit https://dash.cloudflare.com/ and create/sign in to a **Free** account.
-2. Navigate to **Workers & Pages** → **Create** → **Pages** → **Connect to Git** (labels may vary).
-3. Authorize access to GitHub and select `tygustafson50-tech/matchup-nightmare-v2`.
-4. Choose **Framework preset: None**.
-5. Leave the **Build command empty** (no build is required).
-6. Set **Build output directory: public**.
-7. Set **Production branch: main**, then deploy.
-8. Cloudflare will give you a `*.pages.dev` website address. Open that URL in your browser.
+## Live workflow
 
-The `functions/api/games.js` file provides the schedule API on Cloudflare. `public/lib/engine.js` provides the browser research calculations. **No Node installation or Replit credits are required to visit the website.**
+1. Select a sport, date, and up to 16 games.
+2. Click **Scan Selected Games**.
+3. The backend retrieves completed game history and player box scores from provisional ESPN public endpoints where available.
+4. View historical OVER research thresholds. **Similar-defense** and **recent-form** samples are distinct.
+5. On each player card see the **Last 5 Games** and **Last 4 Matchups vs Similar Positional Defenses** with date, opponent, exact recorded stat, and OVER/BELOW/PUSH result.
 
-The site's URL can be public even when the GitHub source code is private. This is not a password-protected service.
+All reported game statistics must come from actual parsed data. A missing stat is **not** zero.
 
-## What is currently implemented
+## Position-specific defensive matching
 
-- A unified black-and-gold interface with six sports (soccer has multiple leagues).
-- Public ESPN scoreboard schedules when available (unofficial API).
-- Up to 16 game selections and Central Time display.
-- Clearly labeled **manual** game log entry for player research.
-- OVER line calculation and last-5 / last-10 / all-entered-game trends.
-- A preliminary comparable-opponent check using **broad team scoring allowed**, not true defense-vs-position.
-- Historical 100% filtering requiring three comparable recorded games.
+We have replaced the old whole-team points-allowed proxy in automatic scans with an actual **stat- and position-group-specific defensive profile**.
 
-## Important current limitations
+- **NFL / College Football:** passing yards to QBs, receiving yards and receptions allowed to WRs/TEs/RBs separately, rushing stats allowed to RBs vs QBs.
+- **NBA / College Basketball:** points/rebounds/assists/etc. conceded to **guards**, **forwards**, and **centers** (position groups, not individual defensive assignments).
+- **Men's Soccer:** shots/shots on target/goals/etc. conceded to forwards, midfielders, defenders, or goalkeepers, only if positional statistics are available.
+- **MLB:** an actual pitching-staff performance against batters or opposing batting-lineup strikeout tendency; baseball does not have a literal defender guarding a batter by position. Do not label it as such.
 
-This is a **research starter**, not a finished automated scanner. It does **not** have verified automatic player game logs, true similar-defense-versus-position modeling, sportsbook props or alternative odds lines, injuries, calibrated projections, or automatically generated betting picks. It must not fill data gaps with invented statistics.
+The backend looks at each defense's completed **pregame** opponent box scores and sums the selected market stat by role; it averages over **at least two** usable games. Comparable defenses must have the **same role and stat**, with an allowance within **25%** of the upcoming opponent's average. The most recent **up to four** qualifying historical opponent matchups are displayed; with fewer qualifying records, the actual count is shown instead of inventing games.
 
-ESPN public scoreboard data is unofficial, may have missing games, and may be blocked or changed without notice. Treat it as a provisional schedule source.
+For budget control, each selected team's latest six completed games are gathered, and position profiles are attempted for its five most recent historical opposing defenses. Thus the comparison is a **limited historical search**, not a complete career-wide survey. If the provider lacks player position, a relevant stat, or enough pregame games, comparable position matchups are unavailable and **never silently replaced with whole-team scoring averages**.
 
-## Optional: Run the local server
+Each similarity row also shows the **historical opponent's stat allowed to that position per game** and its sample size. These are group averages, not predictions or proof of direct one-on-one assignments.
 
-Install Node.js 20+, run `npm start` in the project folder, and visit http://localhost:3000. For the live Cloudflare website, Node installation on your PC is unnecessary.
+## 100% historical thresholds — important
 
-To test the research calculations locally: `npm test`.
+The scanner calculates candidate half-step OVER research thresholds using the minimum historical stat in the qualifying sample. This naturally can produce 100% **historical** rates by construction. It does **not** mean an 100% predicted probability, an advantage at bookmaker prices, or a wager guaranteed to win.
 
-## Next development milestones
+- **100% SIMILAR** = over threshold cleared in every qualifying comparable positional-defense game, with a minimum of 3 games.
+- **100% RECENT** = over threshold cleared in every qualifying recent game, independently of defense. Recent-only cards still show positional-defense comparisons when available.
 
-1. Verify and integrate affordable, authorized historical player-game data for all six sports.
-2. Implement sport-specific defensive similarity algorithms using pregame data and minimum samples.
-3. Connect licensed player-prop and alternative-line feeds.
-4. Add reproducible date-scoped backtests, uncertainty, and data integrity checks.
+**No licensed live PrizePicks lines, other sportsbook lines, or alt-line markets are connected.** All calculated thresholds are labeled **research only**, not actual offered lines. They may not be purchasable at any sportsbook.
 
-Historical 100% hit rates do not mean guaranteed betting outcomes.
+## Provider and hosting limitations
 
-## Automatic selected-game OVER scanning (V2.1)
+- Current ESPN API endpoints are public, unofficial, undocumented, and sometimes lack game logs, roster positions, or college/soccer player-level data. A failed or empty scan means insufficient data, **not** that no bets can win.
+- Cloudflare Workers Free currently limits external subrequests per invocation. The scanning endpoint caps itself at 46 and can return incomplete positional comparisons if that budget is reached. No paid subscription is needed for the current starter.
+- Injury context, coverage schemes, direct defender assignments, league-strength adjustments, pregame lineup forecasts, sportsbook data, full backtesting and calibrated probabilities are **not yet implemented**.
+- Current source code is private on GitHub, but the Cloudflare website is publicly reachable unless you separately configure access controls.
 
-**No player stats need to be typed for automatic scans.**
+## Hosting from GitHub
 
-1. Open the deployed Cloudflare Pages website.
-2. Select one of six sports, date, and up to 16 games.
-3. Under **Scan settings**, leave **Both: similar defenses + recent games** selected. You may narrow it to either mode.
-4. Click **Scan Selected Games**.
-5. The site attempts to pull real completed-team game schedules and game-by-game player boxscores for the selected teams. It constructs possible OVER research thresholds and shows qualifying sample sizes and actual historical game statistics.
+Connect the private repository to **Cloudflare Pages**, preset **None**, production branch **main**, build command **exit 0**, output directory **public**. Cloudflare Pages deploys commits automatically. No Node installation is required just to use the hosted website.
 
-The scanner displays two **separately labeled** types of historical 100% research:
-- **100% SIMILAR:** over threshold exceeded in *every qualifying comparable previous matchup*, with a minimum of three games. Similarity is currently based on opponents' pregame TEAM points/goals allowed per game, within a ±30% range of the upcoming opponent, not defense versus position.
-- **100% RECENT:** over threshold exceeded in every available recent player appearance used (at least three appearances, four needed before candidate generation). This is **not opponent-similarity filtering**.
+For local testing with Node.js 20+, run:
 
-The scanner derives the highest basic half-step threshold below the historical sample minimum; this deliberately finds thresholds that clear the observed sample and does **not** mean there is an edge at real sportsbook odds. Trivial/unsupported markets are filtered, and missing values are not changed to 0. This is not a projected probability.
+```sh
+npm test
+npm start
+```
 
-**No PrizePicks API or sportsbook odds feed is connected yet.** Every displayed threshold is explicitly **RESEARCH-ONLY**, **not** a currently offered PrizePicks or alternate betting line. It would be dishonest to claim live PrizePicks odds from an unrelated boxscore source. An authorized real market feed is required to compare against actual offered lines.
+The website is served on http://localhost:3000 locally.
 
-### Data gaps and reliability
+## Key files
 
-The scan uses public, undocumented ESPN team schedules and game summaries, which can be unavailable or change without notice. Cloudflare might be rate-limited on repeated scans, especially 16-game batches. A failed or empty scan does not imply there are no profitable props. College and soccer player boxscore coverage may be incomplete. Team-score similarity is a preliminary baseline: richer defensive-against-position, role, usage, injury, and odds data is still required for a strong betting model.
+- `functions/api/games.js` — upcoming schedules.
+- `functions/api/scan.js` — selects completed histories; computes position-specific defense profiles under free-tier limits.
+- `lib/auto-scan.js` — player stats, position mapping, defensive group aggregation, comparable-opponent filtering.
+- `public/app.js` and `public/lib/game-history.js` — sport navigation, scan flow and visible history tables.
+- `tests/auto-scan.test.js`, `tests/game-history.test.js` — calculations and UI regression checks.
 
-Code:
-- \`functions/api/scan.js\` — selected-game schedule and boxscore data ingestion.
-- \`lib/auto-scan.js\` — strict per-sport player-stat parsing and 100% historical threshold calculation.
-- \`public/app.js\` — Scan Selected Games button, progress updates, results and drill-down history.
-- \`tests/auto-scan.test.js\` — parsing and safety regression tests.
-
-Cloudflare will redeploy changes pushed to \`main\` automatically. If you see an old layout, wait for deployment to finish, then use Ctrl+Shift+R to hard refresh.
-
-## Player-card update: Last 4 vs similar defenses
-
-The six-sport scan cards now show **two fully visible game-by-game tables**:
-
-- **Last 5 games:** Date, opponent, actual recorded stat for the selected market, and OVER/BELOW/PUSH status.
-- **Last 4 matchups vs similar defenses:** The four **most recent historical opponents whose pregame team scoring allowed was within 30% of the upcoming opponent's baseline**, showing the same date, opponent, actual stat and OVER/BELOW/PUSH status. A separate count (e.g. 3 of 4 available) accurately reports incomplete comparison history. No missing game is fabricated.
-
-The backend searches as many as ten previous completed team games, since qualifying similar opponents can be older than the player's last five. A 100% **similar** trend uses the displayed comparable sample of 3–4 games; a 100% **recent** trend uses its own last-five sample, and its similar-defense comparison may include misses. The two are never conflated. The comparison is currently broad **team defensive scoring allowed**, not defense versus the player's position, coverage, or role.
-
-Cloudflare automatically redeploys the site after commits to main. Hard-refresh once the deployment finishes.
+Data coverage remains provisional until verified in production for each sport. Accuracy takes priority over showing a pick on every page.
