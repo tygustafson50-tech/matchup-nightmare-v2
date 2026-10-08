@@ -75,8 +75,8 @@ export function filterPickCards(picks,filters={}){
     if(criteria.position!=="all"&&p.position!==criteria.position)return false;
     if(criteria.trend!=="all"&&p.scanMode!==criteria.trend)return false;
     if(criteria.evidence==="similar-any"&&similarityCount(p)<1)return false;
-    if(criteria.evidence==="similar-four"&&similarityCount(p)!==4)return false;
-    if(criteria.evidence==="recent-five"&&validNum(p.recentSample)<5)return false;
+    if(criteria.evidence==="similar-perfect"&&!(similarityCount(p)===4&&validNum(p.similarHits)===4))return false;
+    if(criteria.evidence==="recent-five-perfect"&&!(validNum(p.recentSample)===5&&validNum(p.recentHits)===5))return false;
     if(terms.length){
       const game=p.sourceGame;
       const haystack=norm([
