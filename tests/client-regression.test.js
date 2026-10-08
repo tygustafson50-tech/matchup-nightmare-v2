@@ -29,20 +29,21 @@ test("client scanner has one fixed OVER-only 3-season history configuration",()=
   assert.match(html,/not live PrizePicks lines/i);
 });
 
-test("all six sports share a searchable and sortable pick-filter toolbar",()=>{
+test("all six sports display exactly stat, team and position filters",()=>{
   const html=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
-  for(const id of [
-    "pickFilters","filterSearch","filterMarket","filterGame","filterTeam",
-    "filterPosition","filterEvidence","filterSort","filterReset",
-    "pickTrendChips","pickResultCount"
-  ])assert.match(html,new RegExp('id="'+id+'"'));
-  assert.match(html,/4\/4 similar-defense OVER/);
-  assert.match(html,/5\/5 recent-games OVER/);
-  assert.match(html,/data-trend="recent"/);
-  assert.match(html,/data-trend="similar"/);
+  const present=["filterMarket","filterTeam","filterPosition"];
+  for(const id of present)assert.match(html,new RegExp('id="'+id+'"'));
+  const allIds=[...html.matchAll(/id="(filter[A-Za-z]+)"/g)].map(x=>x[1]);
+  assert.deepEqual(allIds.sort(),present.sort());
+  for(const removed of ["filterSearch","filterGame","filterEvidence","filterSort",
+    "filterReset","pickTrendChips"])
+    assert.doesNotMatch(html,new RegExp('id="'+removed+'"'));
+  assert.match(html,/>Stats\s*</);
+  assert.match(html,/>Team\s*</);
+  assert.match(html,/>Position\s*</);
 });
 
-test("pick filters apply before pagination and never trigger another scan",()=>{
+test("the three filters apply before pagination without rescanning",()=>{
   const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
   assert.match(app,/filterPickCards\(allPickCards,collectPickFilters\(\)\)/);
   assert.match(app,/matched\.slice\(0,visiblePickLimit\)/);
