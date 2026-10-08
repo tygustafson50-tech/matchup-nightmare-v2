@@ -96,7 +96,10 @@ export async function onRequestGet({request}){
   const query=new URL(request.url).searchParams;
   const sport=query.get("sport")||"nfl",date=query.get("date")||"";
   const gameId=query.get("gameId")||"",requestedMode=query.get("mode");
+  const focusTeam=query.get("focusTeam");
   const mode=requestedMode==="recent"?"recent":requestedMode==="similar"?"similar":"both";
+  if(focusTeam!==null&&focusTeam!=="home"&&focusTeam!=="away")
+    return respond({error:"focusTeam must be home or away."},400);
   if(!Object.hasOwn(CONFIG,sport)||!validDate(date)||!/^\d{5,15}$/.test(gameId))
     return respond({error:"Select a valid sport, date and scheduled game."},400);
   const league=sport==="soccer"?(query.get("league")||"eng.1"):CONFIG[sport].path.split("/")[1];
@@ -108,7 +111,8 @@ export async function onRequestGet({request}){
     missingOffenseBoxscores:0,defenseSchedules:0,defenseBoxscores:0,
     missingDefenseBoxscores:0,defenseProfiles:0,
     rosterLookups:0,rosterLookupsSucceeded:0,rosterLookupsFailed:0,
-    positionRowsResolved:0,positionRowsMissing:0,defenseProfileStatTypes:0
+    positionRowsResolved:0,positionRowsMissing:0,defenseProfileStatTypes:0,
+    scanFocus:focusTeam||"both",selectedTeams:focusTeam?1:2
   };
   const getJSON=createFetcher(diagnostics);
   try{
@@ -122,6 +126,10 @@ export async function onRequestGet({request}){
       logo:c.team?.logo||"",homeAway:c.homeAway
     }));
     if(teams.some(t=>!/^\d+$/.test(t.id)))return respond({error:"Missing stable team IDs."},422);
+    // One team per request keeps historical ESPN boxscore scanning small.
+    const activeTeams=focusTeam?teams.filter(t=>t.homeAway===focusTeam):teams;
+    if(!activeTeams.length)return respond({error:"Selected team side was not found."},422);
+    const comparableCount=focusTeam?2:COMPARABLE_CANDIDATES;
     const selectedDate=event.date;
     if(!Number.isFinite(Date.parse(selectedDate)))return respond({error:"Game kickoff date unavailable."},422);
     const firstYear=Number(event.season?.year??fallbackSeasonYear(sport,selectedDate));
@@ -147,8 +155,8 @@ export async function onRequestGet({request}){
     if(!byTeamSchedule.size)return respond({error:"No accessible completed schedules for this game.",notes,diagnostics},503);
 
     const histories=new Map();
-    for(const t of teams){
-      t.targetOpponentId=teams.find(x=>x.id!==t.id).id;
+    for(const t of teams)t.targetOpponentId=teams.find(x=>x.id!==t.id).id;
+    for(const t of activeTeams){
       histories.set(t.id,byTeamSchedule.has(t.id)
         ?historicGames(byTeamSchedule.get(t.id),t.id,selectedDate,historySeason,sport,MAX_PRIOR_GAMES):[]);
     }
@@ -165,8 +173,8 @@ export async function onRequestGet({request}){
     // Five recent historical opponent defenses per selected team. These
     // profiles are computed as-of the game being compared, not after it.
     const candidateOpponents=new Set();
-    for(const t of teams){
-      for(const g of (histories.get(t.id)||[]).slice(0,COMPARABLE_CANDIDATES)){
+    for(const t of activeTeams){
+      for(const g of (histories.get(t.id)||[]).slice(0,comparableCount)){
         if(!byTeamSchedule.has(g.opponentId))candidateOpponents.add(g.opponentId);
       }
     }
@@ -180,7 +188,7 @@ export async function onRequestGet({request}){
     }
 
     const demands=[];
-    for(const t of teams){
+    for(const t of activeTeams){
       const upcomingDefense=t.targetOpponentId;
       const schedule=byTeamSchedule.get(upcomingDefense);
       if(schedule&&isCurrentSeason){
@@ -189,7 +197,7 @@ export async function onRequestGet({request}){
           games:historicGames(schedule,upcomingDefense,selectedDate,historySeason,sport,TARGET_PROFILE_GAMES)
         });
       }
-      for(const past of (histories.get(t.id)||[]).slice(0,COMPARABLE_CANDIDATES)){
+      for(const past of (histories.get(t.id)||[]).slice(0,comparableCount)){
         const pastSchedule=byTeamSchedule.get(past.opponentId);
         if(pastSchedule){
           demands.push({
@@ -230,7 +238,7 @@ export async function onRequestGet({request}){
       const prior=rosterWanted.get(id);
       if(prior===undefined||priority<prior)rosterWanted.set(id,priority);
     }
-    for(const t of teams){
+    for(const t of activeTeams){
       if((histories.get(t.id)||[]).some(g=>summaryById.has(g.id)&&
           needRoster(summaryById.get(g.id),t.id)))addRoster(t.id,0);
     }
@@ -248,7 +256,8 @@ export async function onRequestGet({request}){
     const rosterIds=[...rosterWanted.entries()]
       .sort((a,b)=>a[1]-b[1]).map(([id])=>id);
     // Keep two spare external requests for provider redirects.
-    const capacity=Math.max(0,Math.min(14,MAX_UPSTREAM_REQUESTS-diagnostics.upstreamRequests-2));
+    const capacity=Math.max(0,Math.min(focusTeam?5:14,
+      MAX_UPSTREAM_REQUESTS-diagnostics.upstreamRequests-2));
     const rosterResults=await pool(rosterIds.slice(0,capacity),id=>
       getJSON(base+"/teams/"+id+"/roster?season="+seasonYear));
     diagnostics.rosterLookups=rosterResults.length;
@@ -284,7 +293,7 @@ export async function onRequestGet({request}){
 
     const trends=[];
     const normalizedRecords={};
-    for(const t of teams){
+    for(const t of activeTeams){
       const records=(histories.get(t.id)||[]).filter(g=>summaryById.has(g.id))
         .map(g=>({...g,season:historySeason,
           players:extractBoxscore(summaryById.get(g.id),sport,t.id)}));
@@ -328,7 +337,8 @@ export async function onRequestGet({request}){
     return respond({
       game:{id:gameId,date:selectedDate,home:teams.find(t=>t.homeAway==="home"),
         away:teams.find(t=>t.homeAway==="away")},
-      sport,league,mode,count:trends.length,results:trends.slice(0,70),
+      sport,league,mode,focusTeam:focusTeam||"both",
+      count:trends.length,results:trends.slice(0,70),
       season:historySeason,selectedSeason:firstYear,isCurrentSeason,
       // Raw provenance-backed records let the browser recompute ONE trend
       // across the complete three-season window, rather than combining
