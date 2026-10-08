@@ -239,3 +239,29 @@ test("full selected-game scan builds role-specific historical comparisons within
     assert.equal(d.realOddsConnected,false);
   }finally{globalThis.fetch=before;}
 });
+
+
+test("players who changed from WR to TE are not counted in current WR matchups",()=>{
+  const team={id:"1",name:"Team",targetOpponentId:"2"};
+  const target={"receivingYards|WR":{average:100,games:3,metricLabel:"WR receiving yards allowed/game"}};
+  const profiles={"2":{target}};
+  const records=Array.from({length:7},(_,i)=>{
+    const role=i<3?"TE":"WR";
+    const id="change"+i,opponentId="opp"+i;
+    profiles[opponentId]={[id]:{"receivingYards|WR":{
+      average:100,games:2,metricLabel:"WR receiving yards allowed/game"
+    }}};
+    return {id,date:(i<3?"2025-09-":"2026-09-")+String(3+i).padStart(2,"0")+"T18:00:00Z",
+      opponent:"Team "+i,opponentId,
+      players:[{id:"wr1",name:"Former TE, current WR",position:role,
+        stats:{receivingYards:70+i}}]};
+  });
+  const result=scanTrends(records,team,{sport:"nfl",id:"up",
+    date:"2026-10-08T18:00:00Z"},profiles,"similar",3);
+  const p=result.find(r=>r.stat==="receivingYards");
+  assert.ok(p);
+  assert.equal(p.matchupPosition,"WR");
+  assert.equal(p.similarGames.length,4);
+  assert.ok(p.similarGames.every(g=>g.positionAtGame==="WR"));
+  assert.ok(p.similarGames.every(g=>g.season===null));
+});
