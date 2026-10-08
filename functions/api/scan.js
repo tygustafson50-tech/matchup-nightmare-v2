@@ -10,7 +10,7 @@ import {
 
 const ESPN="https://site.api.espn.com/apis/site/v2/sports/";
 const MAX_PRIOR_GAMES=6;
-const COMPARABLE_CANDIDATES=4;
+const COMPARABLE_CANDIDATES=5;
 const POSITION_PROFILE_GAMES=2;
 const TARGET_PROFILE_GAMES=3;
 const CONCURRENCY=5;
@@ -115,7 +115,7 @@ export async function onRequestGet({request}){
       }else diagnostics.missingOffenseBoxscores++;
     }
 
-    // Four recent historical opponent defenses per selected team. These
+    // Five recent historical opponent defenses per selected team. These
     // profiles are computed as-of the game being compared, not after it.
     const candidateOpponents=new Set();
     for(const t of teams){
