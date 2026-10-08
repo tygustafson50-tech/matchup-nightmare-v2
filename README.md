@@ -21,7 +21,7 @@ All reported game statistics must come from actual parsed data. A missing stat i
 We have replaced the old whole-team points-allowed proxy in automatic scans with an actual **stat- and position-group-specific defensive profile**.
 
 - **NFL / College Football:** passing yards to QBs, receiving yards and receptions allowed to WRs/TEs/RBs separately, rushing stats allowed to RBs vs QBs.
-- **NBA / College Basketball:** points/rebounds/assists/etc. conceded to **guards**, **forwards**, and **centers** (position groups, not individual defensive assignments).
+- **NBA / College Basketball:** points/rebounds/assists/etc. conceded to **PG, SG, SF, PF or C separately** when those exact positions are supplied; generic G/F positions remain honestly labeled generic. These are group allowances, not a specific one-on-one defender.
 - **Men's Soccer:** shots/shots on target/goals/etc. conceded to forwards, midfielders, defenders, or goalkeepers, only if positional statistics are available.
 - **MLB:** an actual pitching-staff performance against batters or opposing batting-lineup strikeout tendency; baseball does not have a literal defender guarding a batter by position. Do not label it as such.
 
