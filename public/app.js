@@ -54,7 +54,7 @@ function clearAutomaticResearch(){
 function renderAutomaticResults(items,failures,completed){
   if(!items.length){
     el("scanOutput").innerHTML=
-      '<div class="empty">No 100% qualifying OVER thresholds returned from the available completed-game history.<p class="muted">This could mean no qualified matches, fewer than 3 comparable opponents, missing source boxscores, or unavailable scoring-defense data. Try Recent games only or a one-season scan if source coverage is insufficient. Nothing is guaranteed.</p></div>'+
+      '<div class="empty">No verified 100% historical OVER research thresholds returned.<p class="muted">The historical source may lack the player's position, comparable defenses, or enough completed boxscores. Try Recent Games or a one-season scan. A blank result does not mean a failed bet or a guaranteed outcome.</p></div>'+
       failures.map(e=>'<p class="error">'+safe(e)+'</p>').join("");
     return;
   }
@@ -69,19 +69,27 @@ function renderAutomaticResults(items,failures,completed){
     // The same table renderer is shared by NFL, NBA, MLB, NCAAF, NCAAB and soccer.
     const recent=renderGameHistory(p.history,p.line,p.market,{heading:"Current-season games · Last "+(p.history?.length||0)+" recorded",limit:5});
     const compared=(p.similarGames||[]).filter(g=>Number.isFinite(g.value)).slice(0,4);
-    const lastFourSimilar=renderGameHistory(compared,p.line,p.market,{
-      heading:"Last 4 similar-defense matchups · 3-season career",
-      limit:4,
-      countLabel:compared.length+" of 4 available",
-      showOpponentDefense:true,
-      showYear:true,
-      showCareerTeam:true,
-      emptyMessage:"Position- and stat-specific defensive comparisons unavailable or insufficient."
-    });
-    const defense=Number.isFinite(p.targetDefense)?p.targetDefense.toFixed(1):"N/A";
-    const defenseMarket=p.matchupMetric||"Position-specific matchup data unavailable";
+    const hasPosition=!!p.matchupPosition;
+    const hasDefensiveBaseline=Number.isFinite(p.targetDefense)&&p.targetDefense>0;
+    const gapReason=!hasPosition
+      ?"ESPN did not supply a verified player position in the available game or roster data. The scanner will not guess from the player's stat."
+      :!hasDefensiveBaseline
+        ?"The upcoming opponent does not have at least two usable position-specific defensive game records yet."
+        :"No historical opponent with a comparable "+(p.matchupMetric||"positional defensive rate")+
+        " was verified within the three-season source sample.";
+    const lastFourSimilar=compared.length
+      ?renderGameHistory(compared,p.line,p.market,{
+        heading:"Last 4 similar-defense matchups · 3-season career",
+        limit:4,
+        countLabel:compared.length+" of 4 verified",
+        showOpponentDefense:true,showYear:true,showCareerTeam:true
+      })
+      :'<div class="similar-empty"><strong>Similar-defense history not verified</strong>'+
+       '<span>0 of 4 matching career games available</span><p>'+safe(gapReason)+'</p></div>';
+    const defense=hasDefensiveBaseline?p.targetDefense.toFixed(1):"N/A";
+    const defenseMarket=p.matchupMetric||"Position-based defensive rate unavailable";
     const defenseSample=Number.isInteger(p.targetDefenseGames)&&p.targetDefenseGames>0?" · "+p.targetDefenseGames+" games":"";
-    const defenseRole=p.matchupPosition||"Unknown position";
+    const defenseRole=p.matchupPosition||"Unverified player position";
     const trendYears=(p.matchedSeasons||[]).join(", ")||"Not established";
     const careerYears=[...new Set((p.similarGames||[])
       .map(g=>g.season).filter(v=>v!==null&&v!==undefined))].sort((a,b)=>b-a).join(", ")||"None";
@@ -100,8 +108,8 @@ function renderAutomaticResults(items,failures,completed){
         ' · Historical athlete logs verified: '+safe(careerLoaded)+
         ' · '+safe(careerTeams)+'</p>'+
       recent+
-      '<div class="similar-history">'+lastFourSimilar+
-        '<p class="game-log-method">Comparable = '+safe(defenseMarket)+' for '+safe(defenseRole)+' within 25% of the upcoming opponent, using pregame box scores (minimum 2 defensive games). Baseball uses pitching-staff or lineup tendencies. No total-points fallback.</p>'+
+      '<div class="similar-history'+(!compared.length?' similar-history-missing':'')+'">'+lastFourSimilar+
+        (compared.length?'<p class="game-log-method">Compared '+safe(defenseMarket)+' for '+safe(defenseRole)+' within 25% of the upcoming opponent, using verified pregame records (minimum 2 defensive games).</p>':'')+
       '</div>'+
       '<div class="research-label">CALCULATED ALT THRESHOLD • NOT A VERIFIED PRIZEPICKS / SPORTSBOOK OFFER</div>'+
       '<details><summary>How was this 100% historical trend calculated?</summary>'+
