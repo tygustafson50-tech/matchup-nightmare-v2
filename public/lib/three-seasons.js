@@ -6,7 +6,7 @@
  * and traceable snapshot of source data, NOT a separate 100%-hit-rate pick.
  * We calculate hit rates only AFTER combining all available seasons.
  */
-import { scanTrends } from "./auto-scan.js";
+import { buildMatchupCards } from "./matchup-trends.js";
 
 export function seasonsFor(selectedSeason,window=3){
   const season=Number(selectedSeason);
@@ -198,10 +198,12 @@ export function combineSeasonBatches(responses,{
     // Selected league season is explicitly applied by scanTrends when
     // computing Last 5; old seasons are eligible ONLY for similar defenses.
     const sourceEvent={id:game.id,date:game.date,sport,season:selectedSeason};
-    const teamResults=mode==="both"
-      ?[...scanTrends(records,team,sourceEvent,profiles,"similar",3),
-        ...scanTrends(records,team,sourceEvent,profiles,"recent",3)]
-      :scanTrends(records,team,sourceEvent,profiles,mode,3);
+    // A single unified card per athlete/market: the two histograms use the
+    // SAME independently derived current-season research threshold.
+    // Never calculate the line from the lowest comparable opponent result.
+    const teamResults=buildMatchupCards(records,team,sourceEvent,profiles,{
+      window,league:current.league||null
+    });
     for(const pick of teamResults){
       const info=careerByPlayer.get(team.id+":"+pick.playerId);
       pick.careerTeamsIncluded=info?[...info.teams]:[];
@@ -227,7 +229,8 @@ export function combineSeasonBatches(responses,{
       " eligible players. Players not enriched may have missing old-team matchups.");
   uniqueNotes.push("Only players seen in recent current-season team games are included; this does not verify future rosters or injury availability.");
   uniqueNotes.push("Historical defense schemes, coaching, roles and opponent quality may change between seasons.");
-  uniqueNotes.push("Calculated thresholds are RESEARCH ONLY, not verified PrizePicks lines or probabilities.");
+  uniqueNotes.push("OVER research lines are chosen independently from current-season form, never from comparable historical game results. No verified live PrizePicks/sportsbook feed is connected.");
+  uniqueNotes.push("Injuries, current lineup roles, projected playing time and cross-league tactical adjustments are not independently verified by the present free data source.");
   for(const pick of results){
     pick.seasonsRequested=expected;
     pick.seasonsLoaded=scannedSeasons;
@@ -241,7 +244,8 @@ export function combineSeasonBatches(responses,{
     careerPlayersEnriched:careerByPlayer.size,careerEligibleCount,
     rosterEvidencePlayers:currentRosterEvidenceCount,
     positionCoverage,notes:uniqueNotes,
-    provider:"ESPN provisional historical player and position-concession boxscores",
+    provider:"ESPN provisional game logs with independently calculated position/stat defensive comparisons",
+    matchupModel:"position-stat-three-season-v3",
     prizesPicksConnected:false,realOddsConnected:false
   };
 }
