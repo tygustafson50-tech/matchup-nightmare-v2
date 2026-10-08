@@ -21,7 +21,7 @@ const validDate = value => {
 const unique = array => [...new Set(array)];
 
 export function combineSeasonBatches(responses,{
-  sport,mode="both",window=3
+  sport,mode="both",window=3,careerBatches=[],careerEligibleCount=0
 }={}){
   if(!Array.isArray(responses)||!responses.length)throw Error("No historical seasons returned.");
   const current=responses.find(r=>r?.isCurrentSeason===true&&r?.seasonBatch);
@@ -92,8 +92,63 @@ export function combineSeasonBatches(responses,{
     if(d.upstreamRequests>=46)
       warnings.push(year+": source request cap reached; historical coverage is partial.");
   }
-  if(missing.length)warnings.push("Historical seasons without usable player records: "+missing.join(", ")+".");
+  if(missing.length)warnings.push("Historical seasons without usable current-team player records: "+missing.join(", ")+".");
   if(missingBoxscores)warnings.push("Missing source boxscores were excluded, never changed to zero.");
+
+  // Career log supplements are attached to the athlete's CURRENT team for
+  // output, even if that player represented a completely different franchise
+  // in the old game. Opponent/team IDs come from verified old box scores.
+  const careerByPlayer=new Map(),loadedCareerYears=new Set();
+  const eligiblePlayers=new Map();
+  for(const team of teams){
+    const recent=(current.seasonBatch.records?.[team.id]||[])
+      .filter(r=>validDate(r.date)&&Date.parse(r.date)<Date.parse(game.date))
+      .sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,3);
+    eligiblePlayers.set(team.id,new Set(recent.flatMap(r=>(r.players||[])
+      .map(p=>String(p.id||"")).filter(Boolean))));
+  }
+  for(const item of Array.isArray(careerBatches)?careerBatches:[]){
+    const old=item?.careerBatch;
+    const teamId=String(item?.forTeamId||""),athleteId=String(old?.playerId||"");
+    const season=Number(old?.season);
+    if(!teams.some(t=>t.id===teamId) ||
+      !eligiblePlayers.get(teamId)?.has(athleteId) ||
+      !expected.includes(season)||season===selectedSeason||
+      item.sport!==sport||String(item.gameId)!==String(game.id) ||
+      String(item.playerId)!==athleteId)continue;
+    const key=teamId+":"+athleteId;
+    const info=careerByPlayer.get(key)||{requested:[],loaded:[],teams:new Set(),errors:[]};
+    if(!info.requested.includes(season))info.requested.push(season);
+    let usable=0;
+    for(const row of old.records||[]){
+      if(!row||!row.id||!validDate(row.date)||
+        Date.parse(row.date)>=Date.parse(game.date)||Number(row.season)!==season||
+        !Array.isArray(row.players)||!row.players.some(p=>String(p.id)===athleteId))continue;
+      const only=row.players.filter(p=>String(p.id)===athleteId);
+      collected[teamId].push({...row,players:only,careerSource:"athlete-gamelog"});
+      if(row.playedTeamId && String(row.playedTeamId)!==teamId)info.teams.add(String(row.playedTeamId));
+      usable++;
+    }
+    if(usable){
+      loadedCareerYears.add(season);
+      if(!info.loaded.includes(season))info.loaded.push(season);
+    }
+    if(old.sourceStatus!=="complete" || (item.warnings||[]).length){
+      info.errors.push("Player-level historical source coverage is incomplete");
+    }
+    // Do not replace the current selected opponent's target profile with
+    // historical year data. Histories are indexed by actual OLD game ID.
+    for(const [defenseId,values] of Object.entries(old.defenseProfiles||{})){
+      profiles[defenseId]??={};
+      for(const [eventId,metric] of Object.entries(values||{})){
+        if(eventId==="target")continue;
+        profiles[defenseId][eventId]=metric;
+      }
+    }
+    careerByPlayer.set(key,info);
+  }
+  const scannedSeasons=expected.filter(y=>loaded.includes(y)||loadedCareerYears.has(y));
+  const missingSeasons=expected.filter(y=>!scannedSeasons.includes(y));
 
   const results=[];
   let currentRosterEvidenceCount=0;
@@ -111,39 +166,62 @@ export function combineSeasonBatches(responses,{
       warnings.push(team.name+": no recent team appearances available to establish player eligibility.");
       continue;
     }
-    const seen=new Set();
-    const records=perTeam.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date))
-      .filter(r=>{
-        const k=String(r.id);
-        if(seen.has(k))return false;
-        seen.add(k);
-        return true;
-      }).map(r=>({...r,players:r.players.filter(p=>eligibleIds.has(String(p.id)))}))
-      .filter(r=>r.players.length>0);
-    const sourceEvent={id:game.id,date:game.date,sport};
-    if(mode==="both"){
-      results.push(...scanTrends(records,team,sourceEvent,profiles,"similar",3));
-      results.push(...scanTrends(records,team,sourceEvent,profiles,"recent",3));
-    }else{
-      results.push(...scanTrends(records,team,sourceEvent,profiles,mode,3));
+    const byEvent=new Map();
+    for(const row of perTeam.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date))){
+      const players=(row.players||[]).filter(p=>eligibleIds.has(String(p.id)));
+      if(!players.length)continue;
+      // Two current teammates could have been on OPPOSING teams earlier,
+      // and cannot be conflated into one game/opponent record.
+      const key=String(row.id)+":"+String(row.playedTeamId||team.id);
+      const old=byEvent.get(key);
+      if(!old){
+        byEvent.set(key,{...row,players:[...players]});
+      }else{
+        for(const athlete of players){
+          if(!old.players.some(p=>String(p.id)===String(athlete.id)))
+            old.players.push(athlete);
+        }
+      }
     }
+    const records=[...byEvent.values()].sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
+    // Selected league season is explicitly applied by scanTrends when
+    // computing Last 5; old seasons are eligible ONLY for similar defenses.
+    const sourceEvent={id:game.id,date:game.date,sport,season:selectedSeason};
+    const teamResults=mode==="both"
+      ?[...scanTrends(records,team,sourceEvent,profiles,"similar",3),
+        ...scanTrends(records,team,sourceEvent,profiles,"recent",3)]
+      :scanTrends(records,team,sourceEvent,profiles,mode,3);
+    for(const pick of teamResults){
+      const info=careerByPlayer.get(team.id+":"+pick.playerId);
+      pick.careerTeamsIncluded=info?[...info.teams]:[];
+      pick.careerSeasonsVerified=info?[...info.loaded].sort((a,b)=>b-a):[];
+      pick.careerEnrichmentAttempted=!!info;
+      pick.careerCoveragePartial=!info || info.errors.length>0 ||
+        info.loaded.length<expected.length-1;
+    }
+    results.push(...teamResults);
   }
 
   const uniqueNotes=unique(warnings);
-  uniqueNotes.push("Limited lookback: up to six completed team games per season, not every game played over the past three years.");
-  uniqueNotes.push("Same-team history only: earlier appearances with a different franchise may be missing.");
+  uniqueNotes.push("Recent games show only the selected season; similar-defense history may span three seasons.");
+  uniqueNotes.push("Career sources may include previous franchises, but only sampled games and verified boxscores are included.");
+  if(careerEligibleCount && careerByPlayer.size<careerEligibleCount)
+    uniqueNotes.push("Career enrichment covered "+careerByPlayer.size+" of "+careerEligibleCount+
+      " eligible players. Players not enriched may have missing old-team matchups.");
   uniqueNotes.push("Only players seen in recent current-season team games are included; this does not verify future rosters or injury availability.");
   uniqueNotes.push("Historical defense schemes, coaching, roles and opponent quality may change between seasons.");
   uniqueNotes.push("Calculated thresholds are RESEARCH ONLY, not verified PrizePicks lines or probabilities.");
   for(const pick of results){
     pick.seasonsRequested=expected;
-    pick.seasonsLoaded=loaded;
-    pick.coveragePartial=missing.length>0||missingBoxscores>0;
+    pick.seasonsLoaded=scannedSeasons;
+    pick.coveragePartial=missingSeasons.length>0||missingBoxscores>0||
+      pick.careerCoveragePartial;
   }
   return {
     game,sport,mode,
     count:results.length,results,
-    yearsRequested:expected,yearsLoaded:loaded,yearsMissing:missing,
+    yearsRequested:expected,yearsLoaded:scannedSeasons,yearsMissing:missingSeasons,
+    careerPlayersEnriched:careerByPlayer.size,careerEligibleCount,
     rosterEvidencePlayers:currentRosterEvidenceCount,
     notes:uniqueNotes,
     provider:"ESPN provisional historical player and position-concession boxscores",
