@@ -7,13 +7,13 @@ export const escapeHistoryHtml = value => String(value ?? "").replace(/[&<>"']/g
   "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
 }[char]));
 
-export function readableGameDate(value) {
+export function readableGameDate(value,showYear=false) {
   const match=String(value??"").match(/^(\d{4})-(\d{2})-(\d{2})/);
   if(!match) return "Date unavailable";
   const [,year,month,day]=match;
   const date=new Date(Date.UTC(Number(year),Number(month)-1,Number(day)));
   if(Number.isNaN(date.getTime()) || date.toISOString().slice(0,10)!==year+"-"+month+"-"+day) return "Date unavailable";
-  return date.toLocaleDateString("en-US",{timeZone:"UTC",month:"short",day:"numeric"});
+  return date.toLocaleDateString("en-US",{timeZone:"UTC",month:"short",day:"numeric",...(showYear?{year:"numeric"}:{})});
 }
 
 export function renderGameHistory(games, line, market, options={}) {
@@ -36,7 +36,7 @@ export function renderGameHistory(games, line, market, options={}) {
         '/game · '+escapeHistoryHtml(game.opponentDefenseGames)+' defensive games</small>'
       :"";
     const rawDate=String(game.date??"");
-    const date=escapeHistoryHtml(readableGameDate(rawDate));
+    const date=escapeHistoryHtml(readableGameDate(rawDate,options.showYear===true));
     const stat=escapeHistoryHtml(game.value);
     return '<div class="game-log-row" role="row">'+
       '<span class="game-log-date" role="cell">'+date+'</span>'+
