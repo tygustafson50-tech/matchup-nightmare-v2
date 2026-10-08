@@ -53,7 +53,7 @@ function clearAutomaticResearch(){
 function renderAutomaticResults(items,failures,completed){
   if(!items.length){
     el("scanOutput").innerHTML=
-      '<div class="empty">No 100% qualifying OVER thresholds returned from the available completed-game history.<p class="muted">This could mean no qualified matches, fewer than 3 comparable opponents, missing source boxscores, or unavailable scoring-defense data. Try switching to Recent completed games for a broader historical scan. Nothing is guaranteed.</p></div>'+
+      '<div class="empty">No 100% qualifying OVER thresholds returned from the available completed-game history.<p class="muted">This could mean no qualified matches, fewer than 3 comparable opponents, missing source boxscores, or unavailable scoring-defense data. Try Recent games only or a one-season scan if source coverage is insufficient. Nothing is guaranteed.</p></div>'+
       failures.map(e=>'<p class="error">'+safe(e)+'</p>').join("");
     return;
   }
@@ -102,13 +102,15 @@ function renderAutomaticResults(items,failures,completed){
   const coverage=items.map(x=>{
     const requested=(x.yearsRequested||[]).join(", ");
     const loaded=(x.yearsLoaded||[]).join(", ");
-    return '<p class="season-evidence">Historical season window: '+safe(requested)+' · Loaded: '+safe(loaded||"None")+'</p>';
+    const label=(x.game?.away?.name||"Away")+" @ "+(x.game?.home?.name||"Home");
+    return '<p class="season-evidence">'+safe(label)+' · Searched seasons: '+safe(requested)+' · Usable seasons: '+safe(loaded||"None")+'</p>';
   }).join("");
   const warnings=items.flatMap(x=>x.notes||[]).filter(n=>/unavailable|missing|partial|incomplete|not loaded|roster|scheme|source request cap|current-season/i.test(n));
   el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' historical 100% research thresholds. These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
     coverage+(warnings.length?'<div class="warning">'+[...new Set(warnings)].map(safe).join(" · ")+'</div>':"")+
     (failures.length?'<div class="warning">'+safe(failures.length)+' games or partial data sources could not be analyzed. '+failures.slice(0,5).map(safe).join(" · ")+'</div>':"")+
-    message+'<div class="scan-grid">'+cards+'</div>';
+    message+(all.length?'<div class="scan-grid">'+cards+'</div>':
+      '<div class="empty">No qualifying historical 100% OVER trends were found in the available season batches. This may reflect incomplete historical data or no comparable defenses, not a predicted result.</div>');
 }
 scanBtn.addEventListener("click",async()=>{
   const chosen=games.filter(g=>selected.has(g.id));
