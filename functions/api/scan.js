@@ -23,9 +23,13 @@ function inSportSeason(game,season,sport){
   const date=String(game?.date||"");
   const year=Number(date.slice(0,4)),month=Number(date.slice(5,7));
   if(!Number.isInteger(year)||!Number.isInteger(month)||month<1||month>12)return false;
-  // NFL/college-football, basketball and soccer seasons can cross calendar years.
-  const startsInSummer=sport!=="mlb";
-  return (startsInSummer && month<7 ? year-1 : year)===Number(season);
+  // ESPN labels football and many soccer seasons by START year, but
+  // NBA/NCAA basketball seasons by END year when explicit metadata is absent.
+  if(sport==="nba"||sport==="ncaab")
+    return (month>=7?year+1:year)===Number(season);
+  if(sport==="nfl"||sport==="ncaaf"||sport==="soccer")
+    return (month<7?year-1:year)===Number(season);
+  return year===Number(season);
 }
 function historicGames(schedule,teamId,before,season,sport,limit){
   return priorGames(schedule,teamId,before,180)
@@ -35,10 +39,11 @@ function fallbackSeasonYear(sport,gameDate){
   const year=Number(String(gameDate).slice(0,4));
   const month=Number(String(gameDate).slice(5,7));
   if(!Number.isInteger(year)||!Number.isInteger(month))return null;
-  // Jan/Feb NFL and college-football games belong to the previous fall;
-  // European soccer crosses July. Basketball's ESPN season commonly uses
-  // the ending calendar year; prefer explicit event.season.year regardless.
-  if((sport==="nfl"||sport==="ncaaf"||sport==="soccer")&&month<7) return year-1;
+  // Jan/Feb football and European soccer belong to the previous
+  // start-year season; NBA/NCAA basketball commonly use end-year labels.
+  // Always trust explicit event.season.year when present.
+  if((sport==="nfl"||sport==="ncaaf"||sport==="soccer")&&month<7)return year-1;
+  if((sport==="nba"||sport==="ncaab")&&month>=7)return year+1;
   return year;
 }
 
