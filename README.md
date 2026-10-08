@@ -49,3 +49,33 @@ To test the research calculations locally: `npm test`.
 4. Add reproducible date-scoped backtests, uncertainty, and data integrity checks.
 
 Historical 100% hit rates do not mean guaranteed betting outcomes.
+
+## Automatic selected-game OVER scanning (V2.1)
+
+**No player stats need to be typed for automatic scans.**
+
+1. Open the deployed Cloudflare Pages website.
+2. Select one of six sports, date, and up to 16 games.
+3. Under **Scan settings**, leave **Both: similar defenses + recent games** selected. You may narrow it to either mode.
+4. Click **Scan Selected Games**.
+5. The site attempts to pull real completed-team game schedules and game-by-game player boxscores for the selected teams. It constructs possible OVER research thresholds and shows qualifying sample sizes and actual historical game statistics.
+
+The scanner displays two **separately labeled** types of historical 100% research:
+- **100% SIMILAR:** over threshold exceeded in *every qualifying comparable previous matchup*, with a minimum of three games. Similarity is currently based on opponents' pregame TEAM points/goals allowed per game, within a ±30% range of the upcoming opponent, not defense versus position.
+- **100% RECENT:** over threshold exceeded in every available recent player appearance used (at least three appearances, four needed before candidate generation). This is **not opponent-similarity filtering**.
+
+The scanner derives the highest basic half-step threshold below the historical sample minimum; this deliberately finds thresholds that clear the observed sample and does **not** mean there is an edge at real sportsbook odds. Trivial/unsupported markets are filtered, and missing values are not changed to 0. This is not a projected probability.
+
+**No PrizePicks API or sportsbook odds feed is connected yet.** Every displayed threshold is explicitly **RESEARCH-ONLY**, **not** a currently offered PrizePicks or alternate betting line. It would be dishonest to claim live PrizePicks odds from an unrelated boxscore source. An authorized real market feed is required to compare against actual offered lines.
+
+### Data gaps and reliability
+
+The scan uses public, undocumented ESPN team schedules and game summaries, which can be unavailable or change without notice. Cloudflare might be rate-limited on repeated scans, especially 16-game batches. A failed or empty scan does not imply there are no profitable props. College and soccer player boxscore coverage may be incomplete. Team-score similarity is a preliminary baseline: richer defensive-against-position, role, usage, injury, and odds data is still required for a strong betting model.
+
+Code:
+- \`functions/api/scan.js\` — selected-game schedule and boxscore data ingestion.
+- \`lib/auto-scan.js\` — strict per-sport player-stat parsing and 100% historical threshold calculation.
+- \`public/app.js\` — Scan Selected Games button, progress updates, results and drill-down history.
+- \`tests/auto-scan.test.js\` — parsing and safety regression tests.
+
+Cloudflare will redeploy changes pushed to \`main\` automatically. If you see an old layout, wait for deployment to finish, then use Ctrl+Shift+R to hard refresh.
