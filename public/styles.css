@@ -32,3 +32,84 @@
 #scanProgress{min-height:24px}
 @media(max-width:900px){.scan-grid{grid-template-columns:1fr}}
 @media(max-width:540px){.scan-top{flex-direction:column}.scan-stats strong{font-size:15px}.scan-card{padding:13px}}
+
+
+/* Shared visible opponent / game-stat history table for all six sports */
+.game-log-section{
+  margin:18px 0 4px;
+  border:1px solid #373335;
+  background:#101115;
+  border-radius:11px;
+  padding:13px 12px 8px;
+  min-width:0;
+}
+.game-log-title{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin:1px 2px 12px;
+}
+.game-log-title strong{font-size:13px;color:#f1e2b7}
+.game-log-title span{font-size:10px;color:#a9a5a2;white-space:nowrap}
+.game-log-header,
+.game-log-row{
+  display:grid;
+  grid-template-columns:58px minmax(0,1fr) minmax(64px,auto) 56px;
+  gap:9px;
+  align-items:center;
+}
+.game-log-header{
+  border-bottom:1px solid #3f3934;
+  color:#b7ada0;
+  padding:8px 4px 10px;
+  font-size:10px;
+  font-weight:650;
+}
+.game-log-header span:nth-child(3),
+.game-log-header span:last-child{text-align:right}
+.game-log-row{
+  padding:12px 4px;
+  border-bottom:1px solid #27282e;
+  font-size:12px;
+}
+.game-log-row:last-child{border-bottom:0}
+.game-log-date{color:#a9a7ab;font-size:11px;white-space:nowrap}
+.game-log-opponent{
+  font-weight:650;
+  color:#eeedf0;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.game-log-stat{
+  font-size:16px;
+  color:#f2d68d;
+  font-variant-numeric:tabular-nums;
+  text-align:right;
+}
+.game-log-status{
+  text-align:right;
+  font-size:10px;
+  font-weight:800;
+  white-space:nowrap;
+}
+.game-log-status.over{color:#a7dfb2}
+.game-log-status.below{color:#e8a7ab}
+.game-log-status.push{color:#d8c6a7}
+.game-log-empty{color:#a6a4a6;font-size:12px;padding:8px 2px}
+.scan-card .game-log-section{margin-bottom:18px}
+.scan-card details .game-log-section{margin-top:15px;margin-bottom:5px}
+@media(max-width:540px){
+ .game-log-section{padding:10px 8px 6px}
+ .game-log-header,.game-log-row{
+   grid-template-columns:44px minmax(0,1fr) minmax(54px,auto) 48px;
+   gap:6px;
+ }
+ .game-log-row{font-size:11px}
+ .game-log-header{font-size:9px}
+ .game-log-date{font-size:10px}
+ .game-log-stat{font-size:14px}
+ .game-log-status{font-size:9px}
+}
