@@ -1,0 +1,20 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Matchup Nightmare V2</title><link rel="stylesheet" href="/styles.css"></head><body>
+<header><div class="brand"><span>MN</span><div>MATCHUP NIGHTMARE<small>V2 / OVER-ONLY RESEARCH</small></div></div><aside>DATA-AWARE · NO FAKE PICKS</aside></header>
+<main>
+<p class="eyebrow">SIX-SPORT MATCHUP RESEARCH</p><h1>Scan the matchup<span>.</span></h1><p class="muted">Recent game trends, real schedules when reachable, and clear comparable-opponent history.</p>
+<nav id="sports"></nav>
+<div class="layout">
+<section class="panel"><h2>01 / Game selection</h2><div class="cols"><label>Game date<input id="date" type="date"></label><label id="leagueWrap" hidden>Soccer league<select id="league"></select></label></div>
+<p class="muted" id="scheduleStatus">Loading schedules…</p><p class="muted" id="count">0 / 16 games selected</p><div id="games" class="games"></div><button id="refresh" class="secondary">Refresh schedule</button></section>
+<section class="panel"><h2>02 / Analyze OVER</h2><p class="muted">Manual research while licensed player logs and sportsbook lines are not connected. Data you enter is not independently verified.</p>
+<div class="cols"><label>Player<input id="player" placeholder="Player name"></label><label>Market<select id="market"></select></label></div>
+<div class="cols"><label>OVER line<input id="line" type="number" step=".5" min="0" placeholder="49.5"></label><label>Upcoming team points/goals allowed per game (optional)<input id="defense" type="number" min=".1" step=".1" placeholder="For basic matchup comparison"></label></div>
+<label>Historical games: date, opponent, player stat, opponent points/goals allowed before that game
+<textarea id="logs" rows="6" placeholder="YYYY-MM-DD,Opponent,Statistic,OpponentDefense"></textarea></label>
+<label class="check"><input id="perfect" type="checkbox"> 100% historical comparable trend filter (at least 3 games)</label>
+<button id="scan" class="gold">Analyze OVER →</button>
+<p class="muted">This basic comparison uses team scoring allowed, NOT true defense-versus-position. Historical percentages are not predictions.</p></section>
+</div>
+<section class="panel results"><h2>03 / Research results</h2><div id="output" class="empty">Enter a player, market, OVER line, and sourced historical games to analyze.</div></section>
+<footer>Research only. No sportsbook odds, automatic player logs, injuries or real-money wagering. Do not assume 100% historical trends are guarantees.</footer></main>
+<script type="module" src="/app.js"></script></body></html>
