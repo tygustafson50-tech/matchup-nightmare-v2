@@ -172,3 +172,70 @@ test("API rejects a game missing from the requested official schedule",async()=>
     assert.equal(r.status,404);
   }finally{globalThis.fetch=previous;}
 });
+
+
+test("full selected-game scan builds role-specific historical comparisons within free request budget",async()=>{
+  const before=globalThis.fetch;
+  const ts=d=>d+"T18:00:00Z";
+  const completed=(id,date,a,b)=>({
+    id:String(id),date:ts(date),status:{type:{completed:true}},
+    competitions:[{competitors:[
+      {team:{id:String(a),displayName:"Team "+a},score:"20"},
+      {team:{id:String(b),displayName:"Team "+b},score:"30"}
+    ]}]
+  });
+  const upcoming={id:"123456789",date:ts("2026-10-08"),season:{year:2026},
+    competitions:[{competitors:[
+      {homeAway:"home",team:{id:"1",displayName:"Home"}},
+      {homeAway:"away",team:{id:"2",displayName:"Away"}}
+    ]}]};
+  const history={};
+  for(const team of [1,2]){
+    history[team]=Array.from({length:6},(_,i)=>completed(team*100+i,
+      "2026-09-"+String(i*4+1).padStart(2,"0"),team,
+      team===1?11+i:21+i));
+  }
+  function receivingBox(a,b,ay,by){
+    const block=(id,yards)=>({
+      team:{id:String(id)},statistics:[{name:"receiving",labels:["REC","YDS"],
+        athletes:[{athlete:{id:"player"+id,displayName:"WR "+id,
+          position:{abbreviation:"WR"}},stats:["7",String(yards)]}]}]
+    });
+    return {boxscore:{players:[block(a,ay),block(b,by)]}};
+  }
+  let requests=0;
+  globalThis.fetch=async(url)=>{
+    requests++;
+    let response;
+    if(url.includes("/scoreboard?"))response={events:[upcoming]};
+    else if(url.includes("/teams/")){
+      const id=Number(url.match(/teams\/(\d+)/)[1]);
+      response={events:history[id]||[1,2,3].map(i=>completed(
+        80000+id*10+i,"2026-08-"+String(i*6+4).padStart(2,"0"),id,900))};
+    }else if(url.includes("/summary?event=")){
+      const id=Number(url.match(/event=(\d+)/)[1]);
+      if(id>=80000)response=receivingBox(Math.floor((id-80000)/10),900,20,89);
+      else if(id>=200)response=receivingBox(2,21+id-200,90+id%6,100);
+      else response=receivingBox(1,11+id-100,90+id%6,100);
+    }else throw new Error("Unexpected mocked data source "+url);
+    return new Response(JSON.stringify(response),{headers:{"content-type":"application/json"}});
+  };
+  try{
+    const r=await onRequestGet({request:new Request(
+      "https://test.example/api/scan?sport=nfl&date=2026-10-08&gameId=123456789&mode=both"
+    )});
+    assert.equal(r.status,200);
+    const d=await r.json();
+    assert.ok(requests<=46,"Cloudflare Free quota exceeded: "+requests);
+    const match=d.results.find(p=>p.stat==="receivingYards"&&p.scanMode==="similar");
+    assert.ok(match);
+    assert.equal(match.matchupPosition,"WR");
+    assert.match(match.matchupMetric,/WR receiving yards/);
+    assert.equal(match.similarGames.length,4);
+    assert.equal(match.similarGames[0].opponentDefenseGames,2);
+    assert.equal(match.similarGames[0].opponentAllowed,89);
+    assert.equal(match.matched,4);
+    assert.ok(d.results.some(p=>p.scanMode==="recent"));
+    assert.equal(d.realOddsConnected,false);
+  }finally{globalThis.fetch=before;}
+});
