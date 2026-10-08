@@ -151,3 +151,19 @@
 .game-log-opponent-defense{display:block;margin-top:4px;font-size:10px;line-height:1.4;color:#cbb88d;font-weight:400;white-space:normal;overflow-wrap:anywhere}
 .similar-history .game-log-row{min-height:55px}
 .scan-stats small{overflow-wrap:anywhere}
+
+/* Multi-season defensive-history provenance */
+.season-evidence {
+  font-size:11px;
+  line-height:1.55;
+  color:#e0c58b;
+  background:rgba(205,171,88,.09);
+  padding:10px 12px;
+  margin:12px 0;
+  border-left:3px solid #a98942;
+  border-radius:5px;
+}
+.scan-card .season-evidence {
+  font-size:10px;
+  margin:11px 0 15px;
+}
