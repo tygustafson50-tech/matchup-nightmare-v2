@@ -83,7 +83,7 @@ function renderAutomaticResults(items,failures,completed){
     const yearsUsed=(p.matchedSeasons||[]).join(", ")||"Not established";
     const yearsAvailable=(p.seasonsLoaded||[]).join(", ")||"Not established";
     return '<article class="scan-card">'+
-      '<div class="scan-top"><div class="scan-identity">'+photo+'<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+'</small><small>'+safe(p.position||"Player")+'</small></div></div><span class="trend-badge">100% '+(p.scanMode==="similar"?"SIMILAR":"RECENT")+' · '+p.matched+'/'+p.sample+'</span></div>'+
+      '<div class="scan-top"><div class="scan-identity">'+photo+'<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+'</small><small>'+safe(p.position||"Player")+'</small></div></div><span class="trend-badge">100% '+(p.scanMode==="similar"?"SIMILAR":"RECENT")+' · '+p.matched+'/'+p.sample+(p.coveragePartial?" · PARTIAL DATA":"")+'</span></div>'+
       '<div class="scan-line">RESEARCH OVER <strong>'+p.line+'</strong> '+safe(p.market)+'</div>'+
       '<div class="scan-stats"><div><strong>'+p.matched+'/'+p.sample+'</strong><small>Qualifying history</small></div><div><strong>'+recentRatio+'</strong><small>Last '+p.recentSample+' OVER</small></div><div><strong>'+defense+'</strong><small>'+safe(defenseMarket)+safe(defenseSample)+'</small></div></div>'+
       '<p class="muted">'+safe(p.reason)+'. Every qualifying recorded game exceeded the displayed threshold.</p>'+
@@ -105,7 +105,7 @@ function renderAutomaticResults(items,failures,completed){
     const label=(x.game?.away?.name||"Away")+" @ "+(x.game?.home?.name||"Home");
     return '<p class="season-evidence">'+safe(label)+' · Searched seasons: '+safe(requested)+' · Usable seasons: '+safe(loaded||"None")+'</p>';
   }).join("");
-  const warnings=items.flatMap(x=>x.notes||[]).filter(n=>/unavailable|missing|partial|incomplete|not loaded|roster|scheme|source request cap|current-season/i.test(n));
+  const warnings=items.flatMap(x=>x.notes||[]).filter(n=>/unavailable|missing|partial|incomplete|not loaded|roster|scheme|source request cap|current-season|limited lookback|same-team/i.test(n));
   el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' historical 100% research thresholds. These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
     coverage+(warnings.length?'<div class="warning">'+[...new Set(warnings)].map(safe).join(" · ")+'</div>':"")+
     (failures.length?'<div class="warning">'+safe(failures.length)+' games or partial data sources could not be analyzed. '+failures.slice(0,5).map(safe).join(" · ")+'</div>':"")+
