@@ -86,8 +86,8 @@ test("four most recent similar defenses produce actual 2/4, not forced 4/4",()=>
   assert.equal(p.similarHits,2);
   assert.equal(p.similarPct,50);
   assert.deepEqual(p.similarGames.map(g=>g.season),[2025,2025,2024,2024]);
-  assert.equal(p.similarGames[0].playedTeamId,"9");
-  assert.equal(p.similarGames[0].opponentRanking,12);
+  assert.equal(p.similarGames.find(g=>g.gameId==="old-0").playedTeamId,"9");
+  assert.equal(p.similarGames.find(g=>g.gameId==="old-0").opponentRanking,12);
   assert.match(p.similarGames[0].comparableReason,/within 25%/);
   assert.equal(p.line,67.5);
 });
