@@ -2,6 +2,7 @@ import {analyze,parseLogs} from "/lib/engine.js";
 import {renderGameHistory} from "/lib/game-history.js";
 import {combineSeasonBatches,seasonsFor} from "/lib/three-seasons.js";
 import {eligibleCareerPlayers} from "/lib/career-candidates.js";
+import {FIXED_SCAN,INITIAL_FILTERS,getPickOptions,filterPickCards} from "/lib/pick-filters.js";
 const sports={
 nfl:{label:"🏈 NFL",markets:["Passing yards","Passing attempts","Completions","Rushing yards","Rushing attempts","Receptions","Receiving yards","Targets"]},
 nba:{label:"🏀 NBA",markets:["Points","Rebounds","Assists","3-pointers","PRA","Steals","Blocks"]},
@@ -12,6 +13,8 @@ soccer:{label:"⚽ Men's Soccer",markets:["Shots","Shots on target","Goals","Ass
 const leagues={"eng.1":"Premier League","esp.1":"La Liga","ger.1":"Bundesliga","ita.1":"Serie A","fra.1":"Ligue 1","usa.1":"MLS","uefa.champions":"Champions League"};
 const el=id=>document.getElementById(id),safe=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let current="nfl",games=[],selected=new Set();
+const PAGE_SIZE=24;
+let allPickCards=[],visiblePickLimit=PAGE_SIZE;
 function central(iso){try{return new Intl.DateTimeFormat("en-US",{timeZone:"America/Chicago",month:"short",day:"numeric",hour:"numeric",minute:"2-digit",timeZoneName:"short"}).format(new Date(iso));}catch{return "Time unavailable";}}
 function chooseSport(s){current=s;selected.clear();el("sports").querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.s===s));el("market").innerHTML=sports[s].markets.map(m=>'<option>'+safe(m)+'</option>').join("");el("leagueWrap").hidden=s!=="soccer";loadGames();}
 function drawGames(){el("count").textContent=selected.size+" / 16 games selected";el("games").innerHTML=games.length?games.map(g=>'<button class="game '+(selected.has(g.id)?"active":"")+'" data-id="'+safe(g.id)+'" aria-pressed="'+selected.has(g.id)+'">'+(g.away.logo?'<img alt="" src="'+safe(g.away.logo)+'">':"")+'<div>'+safe(g.away.name)+' @ '+safe(g.home.name)+'<small>'+central(g.date)+' · '+safe(g.status)+'</small></div>'+(g.home.logo?'<img alt="" src="'+safe(g.home.logo)+'">':"")+'<b>'+(selected.has(g.id)?"✓":"+")+'</b></button>').join(""):'<div class="empty">No games returned. Try another date.</div>';
@@ -29,7 +32,7 @@ try{const name=el("player").value.trim(),market=el("market").value,raw=el("line"
 if(!name)throw Error("Enter a player.");if(raw.trim()==="")throw Error("Enter an OVER line.");
 const line=Number(raw);if(!Number.isFinite(line)||line<0)throw Error("Line must be nonnegative.");
 const {games:logs,bad}=parseLogs(el("logs").value);if(!logs.length)throw Error("Enter at least one valid historical game log.");
-const defense=el("defense").value.trim()?Number(el("defense").value):NaN;if(Number.isFinite(defense)&&defense<=0)throw Error("Team scoring allowed must be positive.");
+const defense=el("defense").value.trim()?Number(el("defense").value):NaN;if(Number.isFinite(defense)&&defense<=0)throw Error("Position-specific allowed rate must be positive.");
 const result=analyze(logs,line,defense);if(el("perfect").checked&&!result.historical100){el("output").innerHTML='<div class="empty">No 100% comparable trend with a minimum of three valid comparable games.</div>';return;}
 const max=Math.max(1,line*1.2,...result.recent.map(g=>g.value));
 el("output").innerHTML='<h2>'+safe(name)+' — OVER '+line+' '+safe(market)+'</h2><p class="muted">User-entered statistics only. Games selected: '+selected.size+'. Selecting games does not automatically populate players or verified markets.</p>'+
@@ -45,7 +48,7 @@ renderGameHistory(result.similarGames,line,market,{heading:"Similar positional d
 chooseSport("nfl");
 
 
-/* Automatic scan of selected matchups. Manual research above remains optional. */
+/* Automatic fixed-rule scan. Optional manual research is below the pick results. */
 const scanBtn=el("scanSelected");
 const scanProgress=el("scanProgress");
 function clearAutomaticResearch(){
@@ -151,11 +154,7 @@ scanBtn.addEventListener("click",async()=>{
     return;
   }
   const sport=current,date=el("date").value,league=el("league").value;
-  const mode=el("scanMode").value,window=Number(el("historyWindow").value);
-  if(window!==1&&window!==3){
-    scanProgress.textContent="Select either one or three seasons.";
-    return;
-  }
+  const mode=FIXED_SCAN.mode,window=FIXED_SCAN.window; // Always both trends, three seasons, OVER-only.
   const failures=[],states=[];
   let completed=0,cursor=0,seasonBatchesDone=0,careerBatchesDone=0;
   scanBtn.disabled=true;scanBtn.textContent="Scanning matchups…";
