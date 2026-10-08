@@ -15,7 +15,7 @@ import {
 
 const SCORE="https://site.api.espn.com/apis/site/v2/sports/";
 const ATHLETES="https://site.web.api.espn.com/apis/common/v3/sports/";
-const LIMIT=44,MAX_CAREER_GAMES=10,DEFENSE_CANDIDATES=8;
+const LIMIT=44,MAX_GAMELOG_REFS=100,MAX_CAREER_GAMES=8,DEFENSE_CANDIDATES=6;
 const send=(data,status=200)=>new Response(JSON.stringify(data),{
   status,headers:{"content-type":"application/json; charset=utf-8",
     "cache-control":status===200?"public, max-age=300":"no-store",
@@ -58,6 +58,10 @@ export async function onRequestGet({request}){
   const sport=q.get("sport")||"",date=q.get("date")||"",
     gameId=q.get("gameId")||"",playerId=q.get("playerId")||"",
     year=Number(q.get("season"));
+  const skipText=q.get("skip")||"";
+  if(skipText&&!/^\d{5,15}(,\d{5,15}){0,30}$/.test(skipText))
+    return send({error:"Invalid known-game exclusions."},400);
+  const known=new Set(skipText?skipText.split(","):[]);
   if(!Object.hasOwn(CONFIG,sport)||!matchDate(date)||!/^\d{5,15}$/.test(gameId)||
     !/^\d{2,15}$/.test(playerId)||!Number.isInteger(year)||year<1900||year>2100)
     return send({error:"Select a valid game, career player and historical season."},400);
@@ -90,9 +94,12 @@ export async function onRequestGet({request}){
         provider:"ESPN athlete gamelog (unofficial)"
       });
     }
-    const references=parseCareerEventRefs(gameLog,year,kickoff,MAX_CAREER_GAMES);
-    stats.gamelogEvents=references.length;
-    if(!references.length)warnings.push("No historical athlete game IDs exposed by the provider for this season.");
+    const discovered=parseCareerEventRefs(gameLog,year,kickoff,MAX_GAMELOG_REFS);
+    const references=discovered.filter(g=>!known.has(g.id)).slice(0,MAX_CAREER_GAMES);
+    stats.gamelogEvents=discovered.length;
+    stats.knownGamesSkipped=discovered.filter(g=>known.has(g.id)).length;
+    stats.extraGameCandidates=references.length;
+    if(!discovered.length)warnings.push("No athlete game IDs exposed by the provider for this season.");
     const completed=await fetchPool(references,g=>get(gameBase+"/summary?event="+g.id));
     const appearances=[];
     for(let i=0;i<completed.length;i++){
@@ -147,7 +154,7 @@ export async function onRequestGet({request}){
     if(stats.sourceFailures)warnings.push("Some career events or defensive boxscores were unavailable.");
     if(stats.requests>=LIMIT)warnings.push("Career scan reached the per-request free-tier budget.");
     if(sport==="soccer")warnings.push("Soccer career history is limited to the selected league; moves between leagues may be omitted.");
-    warnings.push("Career coverage is sampled to ten past appearances per season, with up to eight opponent defensive profiles.");
+    warnings.push("Career lookup checks up to eight additional verifiable appearances per season (after skipping known team games), with up to six opponent defensive profiles; it is not a complete-season archive.");
     return send({
       sport,gameId,playerId,season:year,
       careerBatch:{season:year,playerId,records:appearances,
