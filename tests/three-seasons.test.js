@@ -74,7 +74,7 @@ test("a missing season is reported instead of filled with fictional games",()=>{
     {sport:"nfl",mode:"similar",window:3});
   assert.deepEqual(combined.yearsLoaded,[2026,2025]);
   assert.deepEqual(combined.yearsMissing,[2024]);
-  assert.match(combined.notes.join(" "),/without usable current-team player records/i);
+  assert.match(combined.notes.join(" "),/without usable current-team or verified career records/i);
   assert.equal(combined.results.every(p=>p.coveragePartial),true);
 });
 
@@ -160,7 +160,7 @@ test("an empty 2024 response is not counted as a loaded historical season",()=>{
     {sport:"nfl",mode:"similar",window:3});
   assert.deepEqual(result.yearsLoaded,[2026,2025]);
   assert.deepEqual(result.yearsMissing,[2024]);
-  assert.match(result.notes.join(" "),/without usable current-team player records/);
+  assert.match(result.notes.join(" "),/without usable current-team or verified career records/);
 });
 
 
@@ -285,4 +285,32 @@ test("same event on former teams is kept distinct for two currently eligible ath
     sport:"nfl",mode:"recent",window:3,careerBatches:[a,b]
   });
   assert.ok(res.results.every(p=>p.history.every(g=>g.season===2026)));
+});
+
+
+test("current season trade history is included in Last 5; prior seasons are excluded",()=>{
+  const selected=batch(2026);
+  const career={
+    forTeamId:"1",sport:"nfl",gameId:game.id,playerId:"athlete1",
+    careerBatch:{
+      season:2026,playerId:"athlete1",sourceStatus:"partial",
+      records:[{
+        id:"trade2026",date:"2026-08-29T19:00:00Z",season:2026,
+        playedTeamId:"99",playedTeamName:"Old Club",opponentId:"888",
+        opponent:"Trade Game",players:[{
+          id:"athlete1",name:"WR Team 1",position:"WR",
+          stats:{receivingYards:105}
+        }]
+      }],defenseProfiles:{}
+    },warnings:[]
+  };
+  const result=combineSeasonBatches([selected,batch(2025),batch(2024)],
+    {sport:"nfl",mode:"both",window:3,careerBatches:[career]});
+  const p=result.results.find(p=>p.teamId==="1"&&p.scanMode==="recent");
+  assert.ok(p);
+  assert.equal(p.recentSample,4);
+  assert.ok(p.history.some(g=>g.gameId==="trade2026"));
+  assert.ok(p.history.some(g=>g.playedTeamId==="99"));
+  assert.ok(p.history.every(g=>g.season===2026));
+  assert.ok(p.history.every(g=>g.season!==2025 && g.season!==2024));
 });
