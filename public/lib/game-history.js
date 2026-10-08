@@ -31,12 +31,16 @@ export function renderGameHistory(games, line, market, options={}) {
     const result=game.value>line?"OVER":game.value===line?"PUSH":"BELOW";
     const resultClass=result.toLowerCase();
     const opponent=game.opponent?escapeHistoryHtml(game.opponent):"Opponent unavailable";
+    const comparableMetric=options.showOpponentDefense&&Number.isFinite(game.opponentAllowed)&&game.opponentDefenseGames>=2
+      ?'<small class="game-log-opponent-defense">Allowed '+escapeHistoryHtml(game.opponentAllowed.toFixed(1))+
+        '/game · '+escapeHistoryHtml(game.opponentDefenseGames)+' defensive games</small>'
+      :"";
     const rawDate=String(game.date??"");
     const date=escapeHistoryHtml(readableGameDate(rawDate));
     const stat=escapeHistoryHtml(game.value);
     return '<div class="game-log-row" role="row">'+
       '<span class="game-log-date" role="cell">'+date+'</span>'+
-      '<strong class="game-log-opponent" role="cell" title="'+opponent+'">'+opponent+'</strong>'+
+      '<strong class="game-log-opponent" role="cell" title="'+opponent+'">'+opponent+comparableMetric+'</strong>'+
       '<strong class="game-log-stat" role="cell" aria-label="'+stat+' '+name+'">'+stat+'</strong>'+
       '<span class="game-log-status '+resultClass+'" role="cell">'+result+'</span>'+
       '</div>';
