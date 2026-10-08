@@ -151,9 +151,17 @@ scanBtn.addEventListener("click",async()=>{
       return data;
     }finally{seasonBatchesDone++;}
   }
-  async function requestCareer(game,player,season){
+  async function requestCareer(state,player,season){
+    const game=state.game;
     const q=new URLSearchParams({sport,date,gameId:game.id,
       playerId:player.playerId,season:String(season)});
+    // ESPN game logs may include a former franchise. Avoid re-fetching
+    // appearances already verified from this player's current-team boxscores.
+    const teamBatch=state.responses.find(x=>Number(x.season)===Number(season));
+    const sourced=(teamBatch?.seasonBatch?.records?.[player.teamId]||[])
+      .filter(g=>(g.players||[]).some(p=>String(p.id)===String(player.playerId)))
+      .map(g=>String(g.id)).filter(id=>/^\d{5,15}$/.test(id)).slice(0,30);
+    if(sourced.length)q.set("skip",sourced.join(","));
     if(sport==="soccer")q.set("league",league);
     try{
       const r=await fetch("/api/career?"+q);
@@ -167,14 +175,14 @@ scanBtn.addEventListener("click",async()=>{
         " · Team-season batches: "+seasonBatchesDone+" · Games: "+completed+"/"+chosen.length;
     }
   }
-  async function careerPool(game,players,seasons){
+  async function careerPool(state,players,seasons){
     const tasks=players.flatMap(player=>seasons.map(year=>({player,year})));
     const output=[],errors=[];
     let next=0;
     await Promise.all(Array.from({length:Math.min(2,tasks.length)},async()=>{
       while(next<tasks.length && rightPage()){
         const job=tasks[next++];
-        try{output.push(await requestCareer(game,job.player,job.year));}
+        try{output.push(await requestCareer(state,job.player,job.year));}
         catch(error){errors.push(job.player.name+" · "+job.year+": "+String(error.message).slice(0,110));}
       }
     }));
@@ -207,7 +215,7 @@ scanBtn.addEventListener("click",async()=>{
           // Follow-up work is explicit: request up to eight further career
           // players per selected game, two seasons each.
           const next=st.pendingPlayers.splice(0,8);
-          const lookedUp=await careerPool(st.game,next,st.years);
+          const lookedUp=await careerPool(st,next,st.years);
           st.careerBatches.push(...lookedUp.output);
           st.errors.push(...lookedUp.errors);
         }
@@ -228,15 +236,17 @@ scanBtn.addEventListener("click",async()=>{
           catch(error){errors.push(year+": "+String(error.message).slice(0,100));}
         }
         // Only recent CURRENT-season players are candidates for this game.
-        // The first six per team get automatic old-team history scans.
-        const candidates=eligibleCareerPlayers(currentBatch,sport,window===3?6:0);
+        // Prioritize up to four players per team for a single game (two for
+        // multi-game scans); the user can explicitly expand coverage.
+        const candidates=eligibleCareerPlayers(currentBatch,sport,
+          window===3?(chosen.length>1?2:4):0);
         const state={game,responses,years,careerBatches:[],
           candidateCount:window===3?candidates.total:0,pendingPlayers:window===3?candidates.remaining:[],
           errors};
         states.push(state);
         if(window===3&&candidates.prioritized.length){
           scanProgress.textContent="Checking previous-team career history for "+title+"…";
-          const careers=await careerPool(game,candidates.prioritized,years);
+          const careers=await careerPool(state,candidates.prioritized,years);
           state.careerBatches.push(...careers.output);
           state.errors.push(...careers.errors);
         }
