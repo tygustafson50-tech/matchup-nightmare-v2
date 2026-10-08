@@ -79,3 +79,14 @@ Code:
 - \`tests/auto-scan.test.js\` — parsing and safety regression tests.
 
 Cloudflare will redeploy changes pushed to \`main\` automatically. If you see an old layout, wait for deployment to finish, then use Ctrl+Shift+R to hard refresh.
+
+## Player-card update: Last 4 vs similar defenses
+
+The six-sport scan cards now show **two fully visible game-by-game tables**:
+
+- **Last 5 games:** Date, opponent, actual recorded stat for the selected market, and OVER/BELOW/PUSH status.
+- **Last 4 matchups vs similar defenses:** The four **most recent historical opponents whose pregame team scoring allowed was within 30% of the upcoming opponent's baseline**, showing the same date, opponent, actual stat and OVER/BELOW/PUSH status. A separate count (e.g. 3 of 4 available) accurately reports incomplete comparison history. No missing game is fabricated.
+
+The backend searches as many as ten previous completed team games, since qualifying similar opponents can be older than the player's last five. A 100% **similar** trend uses the displayed comparable sample of 3–4 games; a 100% **recent** trend uses its own last-five sample, and its similar-defense comparison may include misses. The two are never conflated. The comparison is currently broad **team defensive scoring allowed**, not defense versus the player's position, coverage, or role.
+
+Cloudflare automatically redeploys the site after commits to main. Hard-refresh once the deployment finishes.
