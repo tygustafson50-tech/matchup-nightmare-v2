@@ -12,8 +12,8 @@ test("browser scanner script parses without broken HTML string quoting",()=>{
 
 test("automatic scan includes both history sections and transparent unavailable state",()=>{
   const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
-  assert.match(app,/Current-season games/);
-  assert.match(app,/Last 4 similar-defense matchups/);
+  assert.match(app,/Recent 5 Games — Current Season Only/);
+  assert.match(app,/Last 4 Matchups vs Similar Defenses/);
   assert.match(app,/similar-history-missing/);
   assert.match(app,/roster lookups successful/i);
   assert.match(app,/scanMoreCareers/);
