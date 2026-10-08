@@ -9,10 +9,10 @@
 <section class="panel"><h2>02 / Scan settings</h2>
 <p class="muted">Select games on the left and click <b>Scan Selected Games</b>. The app retrieves historical player box scores automatically where available.</p>
 <label>Historical 100% filter
-<select id="scanMode"><option value="similar" selected>Similar defenses (team scoring allowed)</option><option value="recent">Recent completed games</option></select>
+<select id="scanMode"><option value="both" selected>Both: similar defenses + recent games</option><option value="similar">Similar defenses only</option><option value="recent">Recent games only</option></select>
 </label>
 <div class="warning">Automatically calculated alternative thresholds are research-only, NOT actual PrizePicks lines. Connecting an authorized PrizePicks or sportsbook data provider is a separate step.</div>
-<div class="scanner-info"><b>Scan rules</b><p class="muted">OVERS ONLY · 100% historical sample · minimum 3 comparable games · last 5 player appearances · only completed games before kickoff.</p></div>
+<div class="scanner-info"><b>Scan rules</b><p class="muted">OVERS ONLY · 100% historical samples · minimum 3 qualifying games · last 5 recorded appearances · only completed games before kickoff. The app labels similar-opponent and recent-only trends separately.</p></div>
 <details class="manual-research"><summary>Optional: manual player research</summary>
 <p class="muted">You can still enter your own sourced historical game logs. This is separate from the automatic game scanner.</p>
 <div class="cols"><label>Player<input id="player" placeholder="Player name"></label><label>Market<select id="market"></select></label></div>
