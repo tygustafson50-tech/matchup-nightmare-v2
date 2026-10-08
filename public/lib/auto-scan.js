@@ -6,22 +6,30 @@
 export const CONFIG = {
   nfl: { path:"football/nfl", markets:[
     ["passingYards","Passing yards",100],["passCompletions","Completions",8],
-    ["passAttempts","Pass attempts",12],["rushingYards","Rushing yards",10],
-    ["rushAttempts","Rushing attempts",4],["receptions","Receptions",1],
-    ["receivingYards","Receiving yards",10],["targets","Targets",2]
+    ["passAttempts","Pass attempts",12],["passingTDs","Passing touchdowns",1],
+    ["rushingYards","Rushing yards",10],
+    ["rushAttempts","Rushing attempts",4],["rushingTDs","Rushing touchdowns",1],
+    ["receptions","Receptions",1],
+    ["receivingYards","Receiving yards",10],["targets","Targets",2],
+    ["receivingTDs","Receiving touchdowns",1]
   ]},
   nba: {path:"basketball/nba",markets:[
     ["points","Points",8],["rebounds","Rebounds",2],["assists","Assists",2],
     ["threes","3-pointers made",1],["pra","PRA",14],["steals","Steals",1],["blocks","Blocks",1]
   ]},
   mlb: {path:"baseball/mlb",markets:[
-    ["hits","Hits",1],["totalBases","Total bases",1],["runs","Runs",1],
-    ["rbis","RBIs",1],["pitcherKs","Pitcher strikeouts",2],["walks","Walks",1]
+    ["hits","Hits",1],["totalBases","Total bases",1],
+    ["homeRuns","Home runs",1],["runs","Runs",1],
+    ["rbis","RBIs",1],["pitcherKs","Pitcher strikeouts",2],
+    ["pitchingOuts","Pitching outs",6],["walks","Walks",1]
   ]},
   ncaaf: {path:"football/college-football", markets:[
     ["passingYards","Passing yards",100],["passCompletions","Completions",8],
-    ["rushingYards","Rushing yards",10],["receivingYards","Receiving yards",10],
-    ["receptions","Receptions",1]
+    ["passAttempts","Pass attempts",12],["passingTDs","Passing touchdowns",1],
+    ["rushingYards","Rushing yards",10],["rushAttempts","Rushing attempts",4],
+    ["rushingTDs","Rushing touchdowns",1],["receivingYards","Receiving yards",10],
+    ["receptions","Receptions",1],["targets","Targets",2],
+    ["receivingTDs","Receiving touchdowns",1]
   ]},
   ncaab: {path:"basketball/mens-college-basketball",markets:[
     ["points","Points",7],["rebounds","Rebounds",2],["assists","Assists",2],
@@ -29,7 +37,9 @@ export const CONFIG = {
   ]},
   soccer: {path:"soccer/eng.1",markets:[
     ["shots","Shots",1],["shotsOnTarget","Shots on target",1],
-    ["goals","Goals",1],["assists","Assists",1],["saves","Saves",1]
+    ["goals","Goals",1],["assists","Assists",1],
+    ["tackles","Tackles",1],["fouls","Fouls committed",1],
+    ["saves","Saves",1]
   ]}
 };
 export const SOCCER_LEAGUES = new Set(["eng.1","esp.1","ger.1","ita.1","fra.1","usa.1","uefa.champions"]);
@@ -57,6 +67,12 @@ function madeAt(map,...names){
   }
   return null;
 }
+function outsFromIP(raw){
+  if(typeof raw!=="string"&&typeof raw!=="number")return null;
+  const match=String(raw).trim().match(/^(\d+)(?:\.([012]))?$/);
+  if(!match)return null;
+  return 3*Number(match[1])+Number(match[2]||0);
+}
 function applyStat(out,key,n){if(n!==null && Number.isFinite(n) && n>=0)out[key]=n;}
 function makeMap(labels,stats){
   if(!Array.isArray(labels)||!Array.isArray(stats)||labels.length!==stats.length) return null;
@@ -67,6 +83,7 @@ function assignCategory(sport,group,map,out){
   if(sport==="nfl"||sport==="ncaaf"){
     if(cat.includes("passing")){
       applyStat(out,"passingYards",numberAt(map,"YDS"));
+      applyStat(out,"passingTDs",numberAt(map,"TD","TDS"));
       const ca=map["C/ATT"]??map["COMP/ATT"]??map["CMP/ATT"];
       if(typeof ca==="string" && /^\d+\/\d+$/.test(ca)){
         applyStat(out,"passCompletions",Number(ca.split("/")[0]));
@@ -79,11 +96,13 @@ function assignCategory(sport,group,map,out){
     if(cat.includes("rushing")){
       applyStat(out,"rushingYards",numberAt(map,"YDS"));
       applyStat(out,"rushAttempts",numberAt(map,"CAR","ATT"));
+      applyStat(out,"rushingTDs",numberAt(map,"TD","TDS"));
     }
     if(cat.includes("receiving")){
       applyStat(out,"receivingYards",numberAt(map,"YDS"));
       applyStat(out,"receptions",numberAt(map,"REC"));
       applyStat(out,"targets",numberAt(map,"TGTS","TGT","TARGETS"));
+      applyStat(out,"receivingTDs",numberAt(map,"TD","TDS"));
     }
   } else if(sport==="nba"||sport==="ncaab"){
     applyStat(out,"points",numberAt(map,"PTS"));
@@ -97,6 +116,7 @@ function assignCategory(sport,group,map,out){
       applyStat(out,"hits",numberAt(map,"H"));
       applyStat(out,"runs",numberAt(map,"R"));
       applyStat(out,"rbis",numberAt(map,"RBI"));
+      applyStat(out,"homeRuns",numberAt(map,"HR"));
       applyStat(out,"walks",numberAt(map,"BB"));
       // For pitcher-strikeout props, the opposing lineup\'s batting strikeouts
       // measure how often those hitters strike out, NOT positional defense.
@@ -109,6 +129,7 @@ function assignCategory(sport,group,map,out){
       }
     }else if(cat.includes("pitch")){
       applyStat(out,"pitcherKs",numberAt(map,"K","SO"));
+      applyStat(out,"pitchingOuts",outsFromIP(map["IP"]??map["INN"]));
     }
   } else if(sport==="soccer"){
     applyStat(out,"shots",numberAt(map,"SH","SHOTS"));
@@ -116,6 +137,8 @@ function assignCategory(sport,group,map,out){
     applyStat(out,"goals",numberAt(map,"G","GLS","GOALS"));
     applyStat(out,"assists",numberAt(map,"A","AST","ASSISTS"));
     applyStat(out,"saves",numberAt(map,"SV","SAVES"));
+    applyStat(out,"tackles",numberAt(map,"TKL","TACK","TACKLES","TCK"));
+    applyStat(out,"fouls",numberAt(map,"FC","FOULS","FOULSCOMMITTED"));
   }
 }
 /**
@@ -314,9 +337,16 @@ export function matchupRole(sport,position,stat){
       metricLabel:(role==="F"?"Forwards":role==="M"?"Midfielders":role==="D"?"Defenders":"Goalkeepers")+" "+market.toLowerCase()+" allowed/game"};
   }
   if(sport==="mlb"){
-    if(stat==="pitcherKs")return {role:"LINEUP",label:"Opposing batting lineup",
-      metricLabel:"Opposing lineup strikeouts/game"};
-    if(["hits","totalBases","runs","rbis","walks"].includes(stat))
+    const pitcher=["P","SP","RP","CP","STARTING PITCHER","RELIEF PITCHER","PITCHER"].includes(pos);
+    const hitter=["C","1B","2B","3B","SS","LF","CF","RF","OF","IF","DH",
+      "CATCHER","FIRST BASE","SECOND BASE","THIRD BASE","SHORTSTOP",
+      "OUTFIELDER","DESIGNATED HITTER"].includes(pos);
+    if(pitcher&&["pitcherKs","pitchingOuts"].includes(stat)){
+      return {role:"LINEUP",label:"Opposing batting lineup",
+        metricLabel:stat==="pitcherKs"?"Opposing lineup strikeouts/game":
+          "Opposing lineup innings-forced context (not currently verified)"};
+    }
+    if(hitter&&["hits","totalBases","homeRuns","runs","rbis","walks"].includes(stat))
       return {role:"BATTERS",label:"Opposing pitching staff",
         metricLabel:"Pitching staff "+market.toLowerCase()+" allowed/game"};
   }
