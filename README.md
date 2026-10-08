@@ -69,3 +69,20 @@ The website is served on http://localhost:3000 locally.
 - `tests/auto-scan.test.js`, `tests/game-history.test.js` — calculations and UI regression checks.
 
 Data coverage remains provisional until verified in production for each sport. Accuracy takes priority over showing a pick on every page.
+
+
+## Three-season similar-defense scan (V2.3)
+
+The automatic **Similar-defense history** setting defaults to **Last 3 seasons**, defined as the selected matchup's official league season plus the **two preceding league seasons**. For an NFL 2026 matchup, the requested seasons are **2026, 2025, and 2024**. The one-season option is faster.
+
+The browser fetches each season as a **separate bounded Cloudflare Pages Function request**. It then recomputes **one combined player/market trend** across the available games, rather than taking the intersection or union of per-season "100%" cards. The current opponent's defense-vs-position stat is evaluated with **current-season pregame data**; historical opponent profiles use records that existed **before each historical game**.
+
+The scanner continues to keep the **most recent five appearances** separate from the **latest four genuinely comparable historic opponents**. Comparable opponents can now come from the older seasons if available. The date column includes the YEAR in the multi-season comparison. Each card displays the season range requested, which seasons actually returned usable game history, and which seasons contributed to the qualifying sample.
+
+**Actual coverage constraints:** This first low-cost implementation retrieves **up to six prior completed games per selected team per season**, not full-season or career-wide datasets. It only includes player IDs seen in the team's last three current-season recorded games; players who changed franchises or whose current team has not yet played may be missing. Historical player position changes are excluded from position-match comparisons. Incomplete player/defense data and missing seasons are reported honestly; the scanner does not fill them with zeros or pretend that a "3-season search" covers every game.
+
+The backend limits requests to 46 external calls per season batch to remain below Cloudflare's free-worker external subrequest limit (subject to network redirects and platform policy). Three seasons therefore take longer than one. If a provider feed is missing or rate-limited, the app shows **partial coverage**, not a fabricated successful scan.
+
+The end of a three-season window is the SELECTED game's kickoff time, not today's date; no results of future games are allowed to influence research on earlier fixtures. Basketball and football season-year labels are handled according to league metadata when available.
+
+A 4/4 historical trend is never an 100% forecast. PrizePicks sportsbook lines and odds remain unconnected.
