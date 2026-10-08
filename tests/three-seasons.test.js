@@ -80,6 +80,7 @@ test("a missing season is reported instead of filled with fictional games",()=>{
 
 test("current-season target defense never replaced with old season target values",()=>{
   const earlier=batch(2025);
+  earlier.seasonBatch.defenseProfiles["2"]??={};
   earlier.seasonBatch.defenseProfiles["2"].target={
     "receivingYards|WR":{average:999,games:4,metricLabel:"STALE"}
   };
