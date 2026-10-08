@@ -73,7 +73,7 @@ Data coverage remains provisional until verified in production for each sport. A
 
 ## Three-season similar-defense scan (V2.3)
 
-The automatic **Similar-defense history** setting defaults to **Last 3 seasons**, defined as the selected matchup's official league season plus the **two preceding league seasons**. For an NFL 2026 matchup, the requested seasons are **2026, 2025, and 2024**. The one-season option is faster.
+The scanner **always** examines three seasons for similar-defense history: the selected matchup's official league season and the **two preceding league seasons**. For an NFL 2026 matchup, those seasons are **2026, 2025, and 2024**. There is no user-facing scan-mode or history-window setting; both recent-form and similar-defense OVER research run every time.
 
 The browser fetches each season as a **separate bounded Cloudflare Pages Function request**. It then recomputes **one combined player/market trend** across the available games, rather than taking the intersection or union of per-season "100%" cards. The current opponent's defense-vs-position stat is evaluated with **current-season pregame data**; historical opponent profiles use records that existed **before each historical game**.
 
@@ -106,3 +106,19 @@ The selected-game scan reserves some of Cloudflare's free external-request allow
 **Result cards:** a recent-games research result with no eligible similar defenses displays a compact, specific unavailable message instead of a large repeated empty table. It must not be read as a verified defensive trend. Scan summaries surface how many player positions were resolved, how many remained missing, and how many roster lookups succeeded.
 
 Source data is still an unofficial, variable-coverage ESPN integration, and these changes are **not** a guarantee that every game/sport will have four comparable position-specific matches. Real PrizePicks lines remain unconnected.
+
+
+## One-click scanner and pick-card finder
+
+The scanner settings panel has been removed. For every supported sport, scanning always runs the same research plan:
+
+- OVER-only historical research thresholds (not real sportsbook quotes)
+- Last five recorded games **in the selected/current season only**
+- Last four comparable positional-defense matchups searched from the player's **current plus two previous seasons**, including verified former-team games where available
+- Both **RECENT** and **SIMILAR DEFENSE** research cards returned together
+
+The six sports share a **Find a pick** toolbar above the scan cards. Filters work entirely on **already-returned data** (no extra ESPN API calls or new scans): player/team/stat text search, game, team, actual returned market/stat, player position, quick trend tabs (All / Similar / Recent), verified OVER evidence (4-of-4 similar or 5-of-5 recent), and sorting by trend/sample/player/stat/research line/game start. Market and team dropdown options come from cards actually returned for that sport, not unsupported listings.
+
+Filtering happens **before** paging, so a card beyond the former 100-card limit remains searchable. Show up to 24 cards per page, with **Show more picks** to display additional matching results. Filters can be cleared at any time. A new sport/date or fresh scan resets the old filters. The optional manual research form remains collapsed below the automated results, completely separate from the default scanner.
+
+These are research-navigation filters, not a ranking by expected win probability, offered sportsbook price, or guaranteed betting outcomes.
