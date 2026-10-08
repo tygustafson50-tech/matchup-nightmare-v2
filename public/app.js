@@ -66,7 +66,13 @@ function renderAutomaticResults(items,failures,completed){
     // Always display recorded performance, opponent and result on the front of each card.
     // The same table renderer is shared by NFL, NBA, MLB, NCAAF, NCAAB and soccer.
     const recent=renderGameHistory(p.history,p.line,p.market,{heading:"Last "+(p.history?.length||0)+" games",limit:5});
-    const qualifying=renderGameHistory(p.qualifyingGames,p.line,p.market,{heading:p.scanMode==="similar"?"Qualifying similar opponents":"Qualifying recent games",limit:8});
+    const compared=(p.similarGames||[]).filter(g=>Number.isFinite(g.value)).slice(0,4);
+    const lastFourSimilar=renderGameHistory(compared,p.line,p.market,{
+      heading:"Last 4 matchups vs similar defenses",
+      limit:4,
+      countLabel:compared.length+" of 4 available",
+      emptyMessage:"No comparable opponents found in the available pregame defensive records."
+    });
     const defense=Number.isFinite(p.targetDefense)?p.targetDefense.toFixed(1):"Unavailable";
     return '<article class="scan-card">'+
       '<div class="scan-top"><div class="scan-identity">'+photo+'<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+'</small><small>'+safe(p.position||"Player")+'</small></div></div><span class="trend-badge">100% '+(p.scanMode==="similar"?"SIMILAR":"RECENT")+' · '+p.matched+'/'+p.sample+'</span></div>'+
@@ -74,8 +80,14 @@ function renderAutomaticResults(items,failures,completed){
       '<div class="scan-stats"><div><strong>'+p.matched+'/'+p.sample+'</strong><small>Qualifying history</small></div><div><strong>'+recentRatio+'</strong><small>Last '+p.recentSample+' OVER</small></div><div><strong>'+defense+'</strong><small>Opponent scoring allowed</small></div></div>'+
       '<p class="muted">'+safe(p.reason)+'. Every qualifying recorded game exceeded the displayed threshold.</p>'+
       recent+
+      '<div class="similar-history">'+lastFourSimilar+
+        '<p class="game-log-method">Comparable = opposing team pregame scoring allowed within 30% of the upcoming opponent. This is not defense-vs-position.</p>'+
+      '</div>'+
       '<div class="research-label">CALCULATED ALT THRESHOLD • NOT A VERIFIED PRIZEPICKS / SPORTSBOOK OFFER</div>'+
-      '<details><summary>Show qualifying '+(p.scanMode==="similar"?"similar-defense":"historical")+' matchups ('+p.matched+'/'+p.sample+')</summary>'+qualifying+'</details></article>';
+      '<details><summary>How was this 100% historical trend calculated?</summary>'+
+        '<p class="muted">'+safe(p.reason)+'. The '+(p.scanMode==="similar"?"similar-defense":"recent-game")+
+        ' percentage is based on '+p.matched+' OVER results in '+p.sample+' qualifying recorded games. Other rows may be BELOW. This is not a prediction of future performance.</p>'+
+      '</details></article>';
   }).join("");
   const message=all.length>100?'<p class="muted">Showing the first 100 of '+all.length+' results.</p>':"";
   el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' historical 100% research thresholds. These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
