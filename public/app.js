@@ -75,6 +75,7 @@ function renderAutomaticResults(items,failures,completed){
       countLabel:compared.length+" of 4 available",
       showOpponentDefense:true,
       showYear:true,
+      showCareerTeam:true,
       emptyMessage:"Position- and stat-specific defensive comparisons unavailable or insufficient."
     });
     const defense=Number.isFinite(p.targetDefense)?p.targetDefense.toFixed(1):"N/A";
