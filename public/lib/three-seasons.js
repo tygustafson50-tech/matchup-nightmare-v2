@@ -92,7 +92,6 @@ export function combineSeasonBatches(responses,{
     if(d.upstreamRequests>=46)
       warnings.push(year+": source request cap reached; historical coverage is partial.");
   }
-  if(missing.length)warnings.push("Historical seasons without usable current-team player records: "+missing.join(", ")+".");
   if(missingBoxscores)warnings.push("Missing source boxscores were excluded, never changed to zero.");
 
   // Career log supplements are attached to the athlete's CURRENT team for
@@ -113,7 +112,7 @@ export function combineSeasonBatches(responses,{
     const season=Number(old?.season);
     if(!teams.some(t=>t.id===teamId) ||
       !eligiblePlayers.get(teamId)?.has(athleteId) ||
-      !expected.includes(season)||season===selectedSeason||
+      !expected.includes(season)||
       item.sport!==sport||String(item.gameId)!==String(game.id) ||
       String(item.playerId)!==athleteId)continue;
     const key=teamId+":"+athleteId;
@@ -149,7 +148,12 @@ export function combineSeasonBatches(responses,{
   }
   const scannedSeasons=expected.filter(y=>loaded.includes(y)||loadedCareerYears.has(y));
   const missingSeasons=expected.filter(y=>!scannedSeasons.includes(y));
-
+  if(missingSeasons.length)
+    warnings.push("Historical seasons without usable current-team or verified career records: "+
+      missingSeasons.join(", ")+".");
+  const oldTeamsOnly=scannedSeasons.filter(y=>!loaded.includes(y));
+  if(oldTeamsOnly.length)
+    warnings.push("Verified former-team records recovered for: "+oldTeamsOnly.join(", ")+".");
   const results=[];
   let currentRosterEvidenceCount=0;
   for(const team of teams){
@@ -197,7 +201,7 @@ export function combineSeasonBatches(responses,{
       pick.careerSeasonsVerified=info?[...info.loaded].sort((a,b)=>b-a):[];
       pick.careerEnrichmentAttempted=!!info;
       pick.careerCoveragePartial=window===3 && (!info || info.errors.length>0 ||
-        info.loaded.length<expected.length-1);
+        expected.slice(1).some(y=>!info.loaded.includes(y)));
     }
     results.push(...teamResults);
   }
