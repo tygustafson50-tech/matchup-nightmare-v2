@@ -82,7 +82,9 @@ function renderAutomaticResults(items,failures,completed){
     const defenseMarket=p.matchupMetric||"Position-specific matchup data unavailable";
     const defenseSample=Number.isInteger(p.targetDefenseGames)&&p.targetDefenseGames>0?" · "+p.targetDefenseGames+" games":"";
     const defenseRole=p.matchupPosition||"Unknown position";
-    const yearsUsed=(p.matchedSeasons||[]).join(", ")||"Not established";
+    const trendYears=(p.matchedSeasons||[]).join(", ")||"Not established";
+    const careerYears=[...new Set((p.similarGames||[])
+      .map(g=>g.season).filter(v=>v!==null&&v!==undefined))].sort((a,b)=>b-a).join(", ")||"None";
     const yearsAvailable=(p.seasonsLoaded||[]).join(", ")||"Not established";
     const careerTeams=p.careerTeamsIncluded?.length
       ?p.careerTeamsIncluded.length+" verified previous franchise(s)":"No previous franchise verified";
@@ -92,7 +94,11 @@ function renderAutomaticResults(items,failures,completed){
       '<div class="scan-line">RESEARCH OVER <strong>'+p.line+'</strong> '+safe(p.market)+'</div>'+
       '<div class="scan-stats"><div><strong>'+p.matched+'/'+p.sample+'</strong><small>Qualifying history</small></div><div><strong>'+recentRatio+'</strong><small>Last '+p.recentSample+' OVER</small></div><div><strong>'+defense+'</strong><small>'+safe(defenseMarket)+safe(defenseSample)+'</small></div></div>'+
       '<p class="muted">'+safe(p.reason)+'. Every qualifying recorded game exceeded the displayed threshold.</p>'+
-      '<p class="season-evidence">Similar-defense career window: '+safe(yearsAvailable)+' · Qualifying seasons: '+safe(yearsUsed)+' · Athlete-specific seasons: '+safe(careerLoaded)+' · '+safe(careerTeams)+'</p>'+
+      '<p class="season-evidence">Recent: current season '+safe(p.recentSeason??"")+
+        ' only · Similar-defense career seasons: '+safe(careerYears)+
+        ' · Research threshold qualifying seasons: '+safe(trendYears)+
+        ' · Historical athlete logs verified: '+safe(careerLoaded)+
+        ' · '+safe(careerTeams)+'</p>'+
       recent+
       '<div class="similar-history">'+lastFourSimilar+
         '<p class="game-log-method">Comparable = '+safe(defenseMarket)+' for '+safe(defenseRole)+' within 25% of the upcoming opponent, using pregame box scores (minimum 2 defensive games). Baseball uses pitching-staff or lineup tendencies. No total-points fallback.</p>'+
@@ -138,7 +144,8 @@ scanBtn.addEventListener("click",async()=>{
   scanBtn.disabled=true;scanBtn.textContent="Scanning matchups…";
   el("scanOutput").innerHTML='<div class="empty">Scanning current-season games and historical position-specific defenses. Prior-team career lookups use verified athlete game logs when available.</div>';
   scanProgress.textContent="Loading current-season stats…";
-  const rightPage=()=>sport===current&&date===el("date").value;
+  const rightPage=()=>sport===current&&date===el("date").value&&
+    (sport!=="soccer"||league===el("league").value);
 
   async function requestSeason(game,season){
     const q=new URLSearchParams({sport,date,gameId:game.id,mode,historySeason:String(season)});
