@@ -113,3 +113,41 @@ test("career endpoint loads player appearances from an earlier franchise and the
     assert.ok(data.careerBatch.defenseProfiles["22"]["401100001"]);
   }finally{globalThis.fetch=old;}
 });
+
+
+test("current-season career lookup skips known games and finds a pre-trade appearance",async()=>{
+  const prior=globalThis.fetch;
+  let skippedFetched=false;
+  const oldTeamSummary=box(401100002,2026,88,44,77777,123);
+  oldTeamSummary.header.events[0].date="2026-09-10T19:00:00Z";
+  globalThis.fetch=async url=>{
+    const u=String(url);
+    if(u.includes("/scoreboard?"))
+      return new Response(JSON.stringify({events:[{
+        id:"123456789",date:"2026-10-08T19:00:00Z",season:{year:2026}
+      }]}),{headers:{"content-type":"application/json"}});
+    if(u.includes("/athletes/77777/gamelog"))
+      return new Response(JSON.stringify({events:{
+        "401100001":{id:"401100001",date:"2026-09-20T19:00:00Z"},
+        "401100002":{id:"401100002",date:"2026-09-10T19:00:00Z"}
+      }}),{headers:{"content-type":"application/json"}});
+    if(u.includes("summary?event=401100001")){skippedFetched=true;throw Error("Should be skipped");}
+    if(u.includes("summary?event=401100002"))
+      return new Response(JSON.stringify(oldTeamSummary),{headers:{"content-type":"application/json"}});
+    if(u.includes("/teams/44/schedule"))
+      return new Response(JSON.stringify({events:[]}),{headers:{"content-type":"application/json"}});
+    throw Error("Unexpected URL "+u);
+  };
+  try{
+    const response=await onRequestGet({request:new Request(
+      "https://example.pages.dev/api/career?sport=nfl&date=2026-10-08&gameId=123456789&playerId=77777&season=2026&skip=401100001"
+    )});
+    assert.equal(response.status,200);
+    const data=await response.json();
+    assert.equal(data.diagnostics.knownGamesSkipped,1);
+    assert.equal(data.careerBatch.records.length,1);
+    assert.equal(data.careerBatch.records[0].playedTeamId,"88");
+    assert.equal(data.careerBatch.records[0].season,2026);
+    assert.equal(skippedFetched,false);
+  }finally{globalThis.fetch=prior;}
+});
