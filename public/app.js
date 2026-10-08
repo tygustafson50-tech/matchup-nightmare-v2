@@ -207,7 +207,7 @@ scanBtn.addEventListener("click",async()=>{
           // Follow-up work is explicit: request up to eight further career
           // players per selected game, two seasons each.
           const next=st.pendingPlayers.splice(0,8);
-          const lookedUp=await careerPool(st.game,next,st.years.slice(1));
+          const lookedUp=await careerPool(st.game,next,st.years);
           st.careerBatches.push(...lookedUp.output);
           st.errors.push(...lookedUp.errors);
         }
@@ -236,7 +236,7 @@ scanBtn.addEventListener("click",async()=>{
         states.push(state);
         if(window===3&&candidates.prioritized.length){
           scanProgress.textContent="Checking previous-team career history for "+title+"…";
-          const careers=await careerPool(game,candidates.prioritized,years.slice(1));
+          const careers=await careerPool(game,candidates.prioritized,years);
           state.careerBatches.push(...careers.output);
           state.errors.push(...careers.errors);
         }
