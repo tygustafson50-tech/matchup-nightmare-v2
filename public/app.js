@@ -3,6 +3,7 @@ import {renderGameHistory} from "/lib/game-history.js";
 import {combineSeasonBatches,seasonsFor} from "/lib/three-seasons.js";
 import {eligibleCareerPlayers} from "/lib/career-candidates.js";
 import {FIXED_SCAN,INITIAL_FILTERS,getPickOptions,filterPickCards} from "/lib/pick-filters.js";
+import {parseApiResponse} from "/lib/api-client.js";
 const sports={
 nfl:{label:"🏈 NFL",markets:["Passing yards","Passing attempts","Completions","Rushing yards","Rushing attempts","Receptions","Receiving yards","Targets"]},
 nba:{label:"🏀 NBA",markets:["Points","Rebounds","Assists","3-pointers","PRA","Steals","Blocks"]},
@@ -20,7 +21,7 @@ function chooseSport(s){current=s;selected.clear();el("sports").querySelectorAll
 function drawGames(){el("count").textContent=selected.size+" / 16 games selected";el("games").innerHTML=games.length?games.map(g=>'<button class="game '+(selected.has(g.id)?"active":"")+'" data-id="'+safe(g.id)+'" aria-pressed="'+selected.has(g.id)+'">'+(g.away.logo?'<img alt="" src="'+safe(g.away.logo)+'">':"")+'<div>'+safe(g.away.name)+' @ '+safe(g.home.name)+'<small>'+central(g.date)+' · '+safe(g.status)+'</small></div>'+(g.home.logo?'<img alt="" src="'+safe(g.home.logo)+'">':"")+'<b>'+(selected.has(g.id)?"✓":"+")+'</b></button>').join(""):'<div class="empty">No games returned. Try another date.</div>';
 el("games").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{if(selected.has(b.dataset.id))selected.delete(b.dataset.id);else if(selected.size<16)selected.add(b.dataset.id);else return alert("Maximum 16 games");drawGames();}));}
 async function loadGames(){clearAutomaticResearch();resetPickFilterInputs();games=[];selected.clear();el("games").innerHTML="";el("scheduleStatus").textContent="Loading real schedules…";let url="/api/games?sport="+current+"&date="+encodeURIComponent(el("date").value);if(current==="soccer")url+="&league="+encodeURIComponent(el("league").value);
-try{const r=await fetch(url),data=await r.json();if(!r.ok)throw Error(data.details||data.error);games=data.games||[];el("scheduleStatus").textContent=games.length+" scheduled games · "+data.source;drawGames();}catch(e){el("scheduleStatus").textContent="Schedule unavailable: "+e.message;drawGames();}}
+try{const r=await fetch(url,{headers:{Accept:"application/json"}}),data=await parseApiResponse(r,"/api/games");games=data.games||[];el("scheduleStatus").textContent=games.length+" scheduled games · "+data.source;drawGames();}catch(e){el("scheduleStatus").textContent="Schedule unavailable: "+e.message;drawGames();}}
 function metric(name,r){return '<div class="metric"><strong>'+(r.percentage===null?"—":r.percentage+"%")+'</strong><small>'+name+' · '+r.hits+'/'+r.total+' OVER · '+r.pushes+' pushes</small></div>';}
 el("sports").innerHTML=Object.entries(sports).map(([id,x])=>'<button data-s="'+id+'">'+x.label+'</button>').join("");
 el("sports").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>chooseSport(b.dataset.s)));
@@ -178,9 +179,11 @@ function renderAutomaticResults(items,failures,completed){
   if(!items.length){
     allPickCards=[];
     el("pickFilters").hidden=true;
-    el("scanOutput").innerHTML=
-      '<div class="empty">No verified 100% historical OVER research thresholds returned.<p class="muted">The historical source may lack the player’s position, comparable defenses, or enough completed boxscores. Try Recent Games or a one-season scan. A blank result does not mean a failed bet or a guaranteed outcome.</p></div>'+
-      failures.map(e=>'<p class="error">'+safe(e)+'</p>').join("");
+    const unavailable=failures.length>0;
+    el("scanOutput").innerHTML=unavailable
+      ?'<div class="empty"><strong>Scan unavailable — no picks were calculated.</strong><p class="muted">Cloudflare did not return the historical statistics required for this game. This is an API/deployment problem, not a zero-hit matchup.</p></div>'+
+        failures.map(e=>'<p class="error">'+safe(e)+'</p>').join("")
+      :'<div class="empty">No verified 100% historical OVER research thresholds were found in the usable data. This is not a guaranteed prediction.</div>';
     return;
   }
   const all=items.flatMap(x=>(x.results||[]).map(p=>({...p,sourceGame:x.game,provider:x.provider})));
@@ -234,15 +237,52 @@ scanBtn.addEventListener("click",async()=>{
     (sport!=="soccer"||league===el("league").value);
 
   async function requestSeason(game,season){
-    const q=new URLSearchParams({sport,date,gameId:game.id,mode,historySeason:String(season)});
-    if(sport==="soccer")q.set("league",league);
-    try{
-      const r=await fetch("/api/scan?"+q);
-      const data=await r.json();
-      if(!r.ok)throw Error(data.details||data.error||"Historical team data unavailable.");
-      if(!data.seasonBatch)throw Error("Missing historical season evidence.");
-      return data;
-    }finally{seasonBatchesDone++;}
+    // Cloudflare Free imposes a very small CPU budget per Pages Function.
+    // Each request processes one team, then the browser merges verified
+    // records and position profiles. No invented or averaged results.
+    async function part(side){
+      const q=new URLSearchParams({sport,date,gameId:game.id,mode,
+        historySeason:String(season),focusTeam:side});
+      if(sport==="soccer")q.set("league",league);
+      try{
+        const r=await fetch("/api/scan?"+q,{
+          headers:{Accept:"application/json"}
+        });
+        const payload=await parseApiResponse(r,"/api/scan ("+side+", "+season+")");
+        if(!payload.seasonBatch||payload.focusTeam!==side)
+          throw Error("The "+side+" team's scan did not return a verified season batch.");
+        return payload;
+      }finally{seasonBatchesDone++;}
+    }
+    const sides=await Promise.allSettled([part("home"),part("away")]);
+    const good=sides.filter(x=>x.status==="fulfilled").map(x=>x.value);
+    const errors=sides.map((x,i)=>x.status==="rejected"
+      ?(i===0?"Home":"Away")+" team: "+String(x.reason?.message||x.reason):null)
+      .filter(Boolean);
+    if(!good.length)throw Error(errors.join(" | ")||
+      "Both Cloudflare historical API requests failed.");
+    const first=good[0];
+    const records={},profiles={},diagnostics={},notes=[];
+    for(const piece of good){
+      Object.assign(records,piece.seasonBatch.records||{});
+      for(const [teamId,details] of Object.entries(piece.seasonBatch.defenseProfiles||{})){
+        profiles[teamId]??={};
+        Object.assign(profiles[teamId],details);
+      }
+      for(const [key,value] of Object.entries(piece.diagnostics||{})){
+        if(typeof value==="number")diagnostics[key]=(diagnostics[key]||0)+value;
+      }
+      notes.push(...(piece.notes||[]));
+    }
+    if(errors.length)notes.push("Partial historical season: "+errors.join(" | "));
+    return {
+      ...first,notes,diagnostics,
+      completeTeamSides:good.length,
+      seasonBatch:{
+        ...first.seasonBatch,teams:first.seasonBatch.teams,
+        records,defenseProfiles:profiles
+      }
+    };
   }
   async function requestCareer(state,player,season){
     const game=state.game;
@@ -257,10 +297,9 @@ scanBtn.addEventListener("click",async()=>{
     if(sourced.length)q.set("skip",sourced.join(","));
     if(sport==="soccer")q.set("league",league);
     try{
-      const r=await fetch("/api/career?"+q);
-      const data=await r.json();
-      if(!r.ok)throw Error(data.details||data.error||"Athlete career feed unavailable.");
-      if(!data.careerBatch)throw Error("Missing verified athlete source data.");
+      const r=await fetch("/api/career?"+q,{headers:{Accept:"application/json"}});
+      const data=await parseApiResponse(r,"/api/career ("+player.name+", "+season+")");
+      if(!data.careerBatch)throw Error("Missing verified athlete career data.");
       return {...data,forTeamId:player.teamId};
     }finally{
       careerBatchesDone++;
