@@ -20,7 +20,13 @@ export function renderGameHistory(games, line, market, options={}) {
   const list=Array.isArray(games)?games.filter(g=>g&&Number.isFinite(g.value)).slice(0,options.limit??5):[];
   const heading=options.heading??"Recent games";
   const name=escapeHistoryHtml(market||"Recorded stat");
-  if(!list.length) return '<p class="game-log-empty">No verified recorded games available for this market.</p>';
+  const countLabel=escapeHistoryHtml(options.countLabel??(list.length+" recorded games"));
+  const title='<div class="game-log-title"><strong>'+escapeHistoryHtml(heading)+'</strong><span>'+countLabel+'</span></div>';
+  if(!list.length) {
+    const message=escapeHistoryHtml(options.emptyMessage??"No verified recorded games available for this market.");
+    return '<section class="game-log-section" aria-label="'+escapeHistoryHtml(heading)+'">'+
+      title+'<p class="game-log-empty">'+message+'</p></section>';
+  }
   const rows=list.map(game=>{
     const result=game.value>line?"OVER":game.value===line?"PUSH":"BELOW";
     const resultClass=result.toLowerCase();
@@ -36,7 +42,7 @@ export function renderGameHistory(games, line, market, options={}) {
       '</div>';
   }).join("");
   return '<section class="game-log-section" aria-label="'+escapeHistoryHtml(heading)+'">'+
-    '<div class="game-log-title"><strong>'+escapeHistoryHtml(heading)+'</strong><span>'+list.length+' recorded games</span></div>'+
+    title+
     '<div class="game-log-table" role="table" aria-label="'+escapeHistoryHtml(heading)+' for '+name+'">'+
     '<div class="game-log-header" role="row"><span role="columnheader">Date</span><span role="columnheader">Opponent</span><span role="columnheader">'+name+'</span><span role="columnheader">Result</span></div>'+
     rows+'</div></section>';
