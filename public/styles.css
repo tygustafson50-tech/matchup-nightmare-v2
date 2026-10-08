@@ -1,2 +1,34 @@
 [hidden]{display:none!important}
 :root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#090a0d;color:#f7f4ee}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% 0%,#272218 0%,#090a0d 35%)}header{padding:22px 4%;border-bottom:1px solid #36302a;display:flex;align-items:center;justify-content:space-between}header aside{color:#b19d76;font-size:12px;letter-spacing:1px}.brand{display:flex;align-items:center;gap:15px;font-weight:800;letter-spacing:1.5px}.brand span{display:grid;place-items:center;width:44px;height:44px;border:2px solid #d2b159;color:#f2ce79}.brand small{display:block;font-size:10px;color:#d8b65f;margin-top:4px}main{max-width:1430px;margin:auto;padding:32px 4%}.eyebrow{font-size:11px;letter-spacing:3px;color:#dcbb5d;font-weight:800}h1{font-size:clamp(34px,5vw,56px);letter-spacing:-2px;margin:8px 0}h1 span{color:#d0ab52}.muted,footer{font-size:13px;color:#a6a5a8;line-height:1.6}nav{display:flex;gap:9px;overflow:auto;padding:22px 0}button{font:inherit;cursor:pointer;border-radius:8px}nav button,.secondary{background:#191a1f;color:#ddd5c6;border:1px solid #454044;padding:12px 16px;white-space:nowrap}nav button.active,nav button:hover{background:#362c1b;border-color:#caa94e;color:#f7d77a}.layout{display:grid;grid-template-columns:1fr 1fr;gap:18px}.panel{background:linear-gradient(125deg,#1a1b21,#111115);border:1px solid #353338;border-radius:14px;padding:24px;min-width:0}.panel h2{font-size:18px;margin:0 0 20px}.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}label{display:block;color:#d2be95;font-size:12px;margin:10px 0}input:not([type=checkbox]),select,textarea{display:block;width:100%;background:#0c0d11;color:#fff;border:1px solid #49444a;border-radius:7px;padding:12px;margin:8px 0;outline:none;min-width:0}textarea{resize:vertical;font-family:ui-monospace,monospace}.check{display:flex;align-items:center;gap:8px;margin:14px 0}.gold{background:#d2af5d;border:0;color:#17120a;font-weight:800;padding:14px 20px}.games{max-height:330px;overflow:auto;display:grid;gap:8px}.game{color:#eee;text-align:left;border:1px solid #39383a;background:#0e0f12;padding:13px;display:flex;gap:12px;align-items:center;width:100%}.game.active{background:#2e281c;border-color:#d2b159}.game div{flex:1}.game small{color:#aaa;display:block;margin-top:6px}.game img{width:28px;height:28px;object-fit:contain}.game b{color:#d7b45a}.results{margin-top:18px}.empty{padding:35px;text-align:center;border:1px dashed #4a4440;color:#a6a4a6;border-radius:10px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metric{background:#0c0d10;border:1px solid #393439;border-radius:10px;padding:18px}.metric strong{display:block;color:#d7b45a;font-size:25px}.metric small{color:#aaa}.history{display:grid;grid-template-columns:110px 1fr 90px;gap:10px;padding:12px;border-bottom:1px solid #343136;font-size:13px}.chart{height:130px;display:flex;align-items:end;gap:8px;margin:30px 0 10px;border-bottom:1px solid #6c5e42}.bar{background:#888;width:38px;max-width:10%;border-radius:4px 4px 0 0}.bar.hit{background:#d0ac56}.warning{background:#33281a;color:#eacb85;border-left:3px solid #d2ac4f;padding:14px;margin-top:18px}.error{color:#f9a3a3}footer{text-align:center;padding:35px 0}@media(max-width:850px){.layout{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}@media(max-width:520px){header aside{display:none}.cols{grid-template-columns:1fr}.panel{padding:16px}.history{grid-template-columns:80px 1fr 70px}}
+/* Selected-game automatic scanner */
+.scanner-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px}
+.scanner-actions .gold{flex:1;min-width:190px}
+.scanner-info{padding:18px;border:1px solid #474034;background:#111216;border-radius:10px;margin:20px 0}
+.scanner-info b{color:#e9ca76}
+.manual-research{border-top:1px solid #474044;margin-top:24px;padding-top:20px}
+.manual-research summary{cursor:pointer;color:#e9ca76;font-weight:700;padding:10px}
+.manual-research[open]>summary{margin-bottom:14px}
+.scan-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;margin-top:20px}
+.scan-card{padding:20px;border:1px solid #3d3936;border-radius:13px;background:linear-gradient(130deg,#202020,#0c0e11);min-width:0}
+.scan-top{display:flex;align-items:flex-start;gap:14px;justify-content:space-between}
+.scan-identity{display:flex;align-items:center;gap:12px;min-width:0}
+.scan-identity strong{font-size:16px;display:block}
+.scan-identity small{color:#9e9c9f;display:block;margin-top:4px;font-size:11px;line-height:1.5}
+.player-image,.player-initial{width:56px;height:56px;flex:none;border-radius:13px;object-fit:contain;background:#2e2b24}
+.player-initial{display:grid;place-items:center;color:#e1bb6b;font-weight:900}
+.trend-badge{background:#332b1b;border:1px solid #8d703a;color:#ecd17d;padding:7px 10px;border-radius:8px;font-size:10px;font-weight:800;white-space:nowrap}
+.scan-line{padding:16px 0;font-size:15px;color:#dfddda;border-bottom:1px solid #39312b}
+.scan-line strong{font-size:24px;color:#e5c575;margin:0 4px}
+.scan-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.scan-stats div{background:#121318;border:1px solid #322e2d;border-radius:8px;padding:12px 8px;text-align:center}
+.scan-stats strong{display:block;font-size:19px;color:#efd18b}
+.scan-stats small{color:#9997a1;font-size:10px;line-height:1.4;display:block;margin-top:5px}
+.research-label{font-size:10px;line-height:1.6;color:#dbc38d;background:#2b251c;padding:9px 10px;margin:16px 0;border-left:3px solid #c99d40}
+.scan-card details{border-top:1px solid #3a3431;margin-top:12px;padding-top:12px}
+.scan-card details summary{cursor:pointer;color:#e7c777;font-weight:700;font-size:12px}
+.scan-card details h4{color:#d5c9b5;font-size:12px;margin-top:20px}
+.scan-card .history{grid-template-columns:96px 1fr 48px;font-size:12px}
+.gold-value{color:#e6c16c}
+#scanProgress{min-height:24px}
+@media(max-width:900px){.scan-grid{grid-template-columns:1fr}}
+@media(max-width:540px){.scan-top{flex-direction:column}.scan-stats strong{font-size:15px}.scan-card{padding:13px}}
