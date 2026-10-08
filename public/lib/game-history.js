@@ -21,7 +21,12 @@ export function renderGameHistory(games, line, market, options={}) {
   const heading=options.heading??"Recent games";
   const name=escapeHistoryHtml(market||"Recorded stat");
   const countLabel=escapeHistoryHtml(options.countLabel??(list.length+" recorded games"));
-  const title='<div class="game-log-title"><strong>'+escapeHistoryHtml(heading)+'</strong><span>'+countLabel+'</span></div>';
+  const hitRate=options.hitRate;
+  const hitText=hitRate&&Number.isInteger(hitRate.hits)&&Number.isInteger(hitRate.sample)&&hitRate.sample>0
+    ?'<div class="game-log-hit-rate"><strong>'+hitRate.hits+'/'+hitRate.sample+' — '+
+      Math.round(hitRate.hits/hitRate.sample*100)+'%</strong><small>Verified historical OVER results; not a future probability</small></div>'
+    :hitRate?'<div class="game-log-hit-rate unavailable">Matchup hit rate unavailable — no verified comparable games</div>':"";
+  const title='<div class="game-log-title"><strong>'+escapeHistoryHtml(heading)+'</strong><span>'+countLabel+'</span></div>'+hitText;
   if(!list.length) {
     const message=escapeHistoryHtml(options.emptyMessage??"No verified recorded games available for this market.");
     return '<section class="game-log-section" aria-label="'+escapeHistoryHtml(heading)+'">'+
@@ -32,8 +37,10 @@ export function renderGameHistory(games, line, market, options={}) {
     const resultClass=result.toLowerCase();
     const opponent=game.opponent?escapeHistoryHtml(game.opponent):"Opponent unavailable";
     const comparableMetric=options.showOpponentDefense&&Number.isFinite(game.opponentAllowed)&&game.opponentDefenseGames>=2
-      ?'<small class="game-log-opponent-defense">Allowed '+escapeHistoryHtml(game.opponentAllowed.toFixed(1))+
-        '/game · '+escapeHistoryHtml(game.opponentDefenseGames)+' defensive games</small>'
+      ?'<small class="game-log-opponent-defense">'+escapeHistoryHtml(game.metricLabel||"Position/stat allowed")+
+        ': '+escapeHistoryHtml(game.opponentAllowed.toFixed(1))+
+        '/game · '+escapeHistoryHtml(game.opponentDefenseGames)+' pregame records'+
+        (Number.isInteger(game.opponentRanking)?' · rank #'+escapeHistoryHtml(game.opponentRanking):'')+'</small>'
       :"";
     const careerTeam=options.showCareerTeam&&game.playedTeamName
       ?'<small class="game-log-career-team">Player team: '+escapeHistoryHtml(game.playedTeamName)+'</small>'
@@ -41,10 +48,14 @@ export function renderGameHistory(games, line, market, options={}) {
     const rawDate=String(game.date??"");
     const date=escapeHistoryHtml(readableGameDate(rawDate,options.showYear===true));
     const stat=escapeHistoryHtml(game.value);
+    const lineDetail=options.showLine&&Number.isFinite(line)
+      ?'<small class="game-log-line">OVER '+escapeHistoryHtml(line)+'</small>':"";
+    const explanation=options.showComparableReason&&game.comparableReason
+      ?'<small class="game-log-match-reason">Why similar: '+escapeHistoryHtml(game.comparableReason)+'</small>':"";
     return '<div class="game-log-row" role="row">'+
       '<span class="game-log-date" role="cell">'+date+'</span>'+
-      '<strong class="game-log-opponent" role="cell" title="'+opponent+'">'+opponent+careerTeam+comparableMetric+'</strong>'+
-      '<strong class="game-log-stat" role="cell" aria-label="'+stat+' '+name+'">'+stat+'</strong>'+
+      '<strong class="game-log-opponent" role="cell" title="'+opponent+'">'+opponent+careerTeam+comparableMetric+explanation+'</strong>'+
+      '<strong class="game-log-stat" role="cell" aria-label="'+stat+' '+name+'">'+stat+lineDetail+'</strong>'+
       '<span class="game-log-status '+resultClass+'" role="cell">'+result+'</span>'+
       '</div>';
   }).join("");
