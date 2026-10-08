@@ -117,63 +117,77 @@ function drawFilteredPickCards(){
     :'<div class="empty filtered-empty">No picks match this combination. Choose All stats, All teams, or All positions to broaden the results.</div>';
 }
 function renderPickCard(p){
-
-    const recentRatio=p.recentSample?p.recentHits+'/'+p.recentSample:'—';
-    const photo=p.headshot
-      ?'<img class="player-image" src="'+safe(p.headshot)+'" alt="" loading="lazy" onerror="this.hidden=true">'
-      :'<div class="player-initial">'+safe(p.player.split(" ").map(x=>x[0]).slice(0,2).join(""))+'</div>';
-    // Always display recorded performance, opponent and result on the front of each card.
-    // The same table renderer is shared by NFL, NBA, MLB, NCAAF, NCAAB and soccer.
-    const recent=renderGameHistory(p.history,p.line,p.market,{heading:"Current-season games · Last "+(p.history?.length||0)+" recorded",limit:5});
-    const compared=(p.similarGames||[]).filter(g=>Number.isFinite(g.value)).slice(0,4);
-    const hasPosition=!!p.matchupPosition;
-    const hasDefensiveBaseline=Number.isFinite(p.targetDefense)&&p.targetDefense>0;
-    const gapReason=!hasPosition
-      ?"ESPN did not supply a verified player position in the available game or roster data. The scanner will not guess from the player's stat."
-      :!hasDefensiveBaseline
-        ?"The upcoming opponent does not have at least two usable position-specific defensive game records yet."
-        :"No historical opponent with a comparable "+(p.matchupMetric||"positional defensive rate")+
-        " was verified within the three-season source sample.";
-    const lastFourSimilar=compared.length
-      ?renderGameHistory(compared,p.line,p.market,{
-        heading:"Last 4 similar-defense matchups · 3-season career",
-        limit:4,
-        countLabel:compared.length+" of 4 verified",
-        showOpponentDefense:true,showYear:true,showCareerTeam:true
-      })
-      :'<div class="similar-empty"><strong>Similar-defense history not verified</strong>'+
-       '<span>0 of 4 matching career games available</span><p>'+safe(gapReason)+'</p></div>';
-    const defense=hasDefensiveBaseline?p.targetDefense.toFixed(1):"N/A";
-    const defenseMarket=p.matchupMetric||"Position-based defensive rate unavailable";
-    const defenseSample=Number.isInteger(p.targetDefenseGames)&&p.targetDefenseGames>0?" · "+p.targetDefenseGames+" games":"";
-    const defenseRole=p.matchupPosition||"Unverified player position";
-    const trendYears=(p.matchedSeasons||[]).join(", ")||"Not established";
-    const careerYears=[...new Set((p.similarGames||[])
-      .map(g=>g.season).filter(v=>v!==null&&v!==undefined))].sort((a,b)=>b-a).join(", ")||"None";
-    const yearsAvailable=(p.seasonsLoaded||[]).join(", ")||"Not established";
-    const careerTeams=p.careerTeamsIncluded?.length
-      ?p.careerTeamsIncluded.length+" verified previous franchise(s)":"No previous franchise verified";
-    const careerLoaded=(p.careerSeasonsVerified||[]).join(", ")||"Not available";
-    return '<article class="scan-card">'+
-      '<div class="scan-top"><div class="scan-identity">'+photo+'<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+'</small><small>'+safe(p.position||"Player")+'</small></div></div><span class="trend-badge">100% '+(p.scanMode==="similar"?"SIMILAR":"RECENT")+' · '+p.matched+'/'+p.sample+(p.coveragePartial?" · PARTIAL DATA":"")+'</span></div>'+
-      '<div class="scan-line">RESEARCH OVER <strong>'+p.line+'</strong> '+safe(p.market)+'</div>'+
-      '<div class="scan-stats"><div><strong>'+p.matched+'/'+p.sample+'</strong><small>Qualifying history</small></div><div><strong>'+recentRatio+'</strong><small>Last '+p.recentSample+' OVER</small></div><div><strong>'+defense+'</strong><small>'+safe(defenseMarket)+safe(defenseSample)+'</small></div></div>'+
-      '<p class="muted">'+safe(p.reason)+'. Every qualifying recorded game exceeded the displayed threshold.</p>'+
-      '<p class="season-evidence">Recent: current season '+safe(p.recentSeason??"")+
-        ' only · Similar-defense career seasons: '+safe(careerYears)+
-        ' · Research threshold qualifying seasons: '+safe(trendYears)+
-        ' · Historical athlete logs verified: '+safe(careerLoaded)+
-        ' · '+safe(careerTeams)+'</p>'+
-      recent+
-      '<div class="similar-history'+(!compared.length?' similar-history-missing':'')+'">'+lastFourSimilar+
-        (compared.length?'<p class="game-log-method">Compared '+safe(defenseMarket)+' for '+safe(defenseRole)+' within 25% of the upcoming opponent, using verified pregame records (minimum 2 defensive games).</p>':'')+
-      '</div>'+
-      '<div class="research-label">CALCULATED ALT THRESHOLD • NOT A VERIFIED PRIZEPICKS / SPORTSBOOK OFFER</div>'+
-      '<details><summary>How was this 100% historical trend calculated?</summary>'+
-        '<p class="muted">'+safe(p.reason)+'. The '+(p.scanMode==="similar"?"similar-defense":"recent-game")+
-        ' percentage is based on '+p.matched+' OVER results in '+p.sample+' qualifying recorded games. Other rows may be BELOW. This is not a prediction of future performance.</p>'+
-      '</details></article>';
-
+  const ratio=(hits,sample)=>sample>0
+    ?hits+"/"+sample+" · "+Math.round(hits/sample*100)+"%"
+    :"Not verified";
+  const hasSimilar=p.similarSample>0;
+  const similarLabel=hasSimilar?ratio(p.similarHits,p.similarSample):"No verified matches";
+  const recentLabel=ratio(p.recentHits,p.recentSample);
+  const image=p.headshot
+    ?'<img class="player-image" src="'+safe(p.headshot)+'" alt="" loading="lazy" onerror="this.hidden=true">'
+    :'<div class="player-initial">'+safe(String(p.player).split(" ").map(x=>x[0]).slice(0,2).join(""))+'</div>';
+  const recent=renderGameHistory(p.history,p.line,p.market,{
+    heading:"Recent 5 Games — Current Season Only",
+    limit:5,showYear:true,showLine:true,
+    hitRate:{hits:p.recentHits,sample:p.recentSample}
+  });
+  const compared=(p.similarGames||[]).slice(0,4);
+  const history=compared.length?renderGameHistory(compared,p.line,p.market,{
+    heading:"Last 4 Matchups vs Similar Defenses — 3-Season Career",
+    limit:4,showYear:true,showLine:true,
+    showOpponentDefense:true,showComparableReason:true,showCareerTeam:true,
+    countLabel:compared.length+" of 4 genuinely comparable",
+    hitRate:{hits:p.similarHits,sample:p.similarSample}
+  }):'<div class="similar-empty"><strong>No verified similar-defense trend</strong>'+
+    '<span>0 of 4 comparable historical games available</span>'+
+    '<p>'+safe(p.reason||"Verified defensive matchup data is unavailable.")+'</p></div>';
+  const defense=Number.isFinite(p.targetDefense)
+    ?p.targetDefense.toFixed(1):"Not verified";
+  const defenseMetric=p.matchupMetric||"Position and stat-specific defense";
+  const targetCount=p.targetDefenseGames>0?" · "+p.targetDefenseGames+" pregame records":"";
+  const playerYears=(p.matchedSeasons||[]).join(", ")||"No verified comparable seasons";
+  const careerLoaded=(p.careerSeasonsVerified||[]).join(", ")||"No separate athlete career logs";
+  const knownTeam=p.careerTeamsIncluded?.length
+    ?p.careerTeamsIncluded.length+" verified prior franchise(s)"
+    :"No former team verified";
+  const pctBadge=hasSimilar?Math.round(p.similarHits/p.similarSample*100)+"% MATCHUP"
+    :"RECENT FORM ONLY";
+  const badge=hasSimilar?similarLabel:recentLabel;
+  const lineType=p.lineVerified
+    ?"VERIFIED "+String(p.lineType||"SPORTSBOOK")+" OVER"
+    :"RESEARCH-ONLY OVER";
+  const scope=p.lineVerified
+    ?"Quoted line: "+(p.marketSource||"verified price source")
+    :"The research line is based on the player's current-season form. It is NOT a current PrizePicks/sportsbook line or payout offer.";
+  return '<article class="scan-card">'+
+    '<div class="scan-top"><div class="scan-identity">'+image+
+      '<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+
+      ' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+
+      '</small><small>'+safe(p.position||"Position not verified")+'</small></div></div>'+
+      '<span class="trend-badge'+(!hasSimilar?' trend-unverified':'')+'">'+safe(pctBadge)+
+      ' · '+safe(badge)+(p.coveragePartial?' · PARTIAL DATA':'')+'</span></div>'+
+    '<div class="scan-line">'+safe(lineType)+' <strong>'+safe(p.line)+'</strong> '+safe(p.market)+'</div>'+
+    '<div class="scan-stats">'+
+      '<div><strong>'+safe(recentLabel)+'</strong><small>Current-season recent trend</small></div>'+
+      '<div><strong>'+safe(similarLabel)+'</strong><small>Three-season matchup trend</small></div>'+
+      '<div><strong>'+safe(defense)+'</strong><small>'+safe(defenseMetric)+safe(targetCount)+'</small></div>'+
+    '</div>'+
+    '<p class="muted matchup-rationale">'+safe(p.reason)+'</p>'+
+    '<p class="season-evidence">Recent games: '+safe(p.recentSeason)+
+      ' season only · Similar-defense seasons verified: '+safe(playerYears)+
+      ' · Separate career lookups: '+safe(careerLoaded)+' · '+safe(knownTeam)+'</p>'+
+    recent+
+    '<div class="similar-history'+(!hasSimilar?' similar-history-missing':'')+'">'+history+
+      (hasSimilar?'<p class="game-log-method">Only exact player-position and stat-specific defenses within 25% of the upcoming opponent qualify. Each row explains its measured concession rate and evidence.</p>':'')+
+    '</div>'+
+    (p.sampleWarning?'<p class="sample-warning">'+safe(p.sampleWarning)+'</p>':'')+
+    '<div class="research-label">'+safe(scope)+'</div>'+
+    '<details><summary>How were these trends calculated?</summary>'+
+      '<p class="muted">Recent form: '+safe(recentLabel)+' from recorded games in the selected season. '+
+      'Matchup history: '+safe(similarLabel)+' from the last four verifiable defenses with comparable position/stat concessions over up to three seasons. '+
+      'The threshold is not calculated from the minimum result of the matching historical games. '+
+      'Availability, injuries, projected minutes, and role changes are not independently verified. A 100% past hit rate is not a future win probability.</p>'+
+    '</details></article>';
 }
 function renderAutomaticResults(items,failures,completed){
   if(!items.length){
@@ -207,7 +221,7 @@ function renderAutomaticResults(items,failures,completed){
       safe(requested)+' · Usable seasons: '+safe(loaded||"None")+evidence+'</p>';
   }).join("");
   const warnings=items.flatMap(x=>x.notes||[]).filter(n=>/unavailable|missing|partial|incomplete|not loaded|roster|scheme|source request cap|current-season|limited lookback|same-team|lacked verified positions|position lookup/i.test(n));
-  el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' historical 100% research thresholds. These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
+  el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' OVER research cards (hit rates calculated from actual recorded games). These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
     coverage+(warnings.length?'<div class="warning">'+[...new Set(warnings)].map(safe).join(" · ")+'</div>':"")+
     (failures.length?'<div class="warning">'+safe(failures.length)+' games or partial data sources could not be analyzed. '+failures.slice(0,5).map(safe).join(" · ")+'</div>':"")+
     (pendingCareerCount?'<p class="warning">Career data was prioritized for active players. '+pendingCareerCount+
