@@ -335,13 +335,19 @@ export function scanTrends(records,team,game,defenseProfiles,mode="similar",minS
   const picks=[];
   for(const entry of grouped.values()){
     const chronological=entry.history.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
-    // Three-season inputs may arrive in arbitrary source order. Treat the
-    // athlete's MOST RECENT recorded position as the active comparison role.
-    const position=chronological.find(g=>g.positionAtGame)?.positionAtGame||entry.position;
+    // Last 5 are CURRENT-season appearances only; multi-year career records
+    // must never spill into the "recent games" sample.
+    const currentSeason=Number(game.season);
+    const current=Number.isInteger(currentSeason)&&game.season!==undefined&&game.season!==null
+      ?chronological.filter(g=>g.season!==null&&Number(g.season)===currentSeason)
+      :chronological;
+    if(!current.length)continue;
+    // An older team/position must not override the latest current-season role.
+    const position=current.find(g=>g.positionAtGame)?.positionAtGame||entry.position;
     const role=matchupRole(game.sport,position,entry.stat);
     const metricKey=role?profileKey(entry.stat,role.role):null;
     const targetProfile=metricKey?defenseProfiles?.[team.targetOpponentId]?.target?.[metricKey]:null;
-    const recent=chronological.slice(0,5);
+    const recent=current.slice(0,5);
     const decorated=chronological.map(g=>{
       const hist=metricKey?defenseProfiles?.[g.opponentId]?.[g.gameId]?.[metricKey]:null;
       return {...g,opponentAllowed:hist?.average??null,opponentDefenseGames:hist?.games??0};
@@ -359,7 +365,9 @@ export function scanTrends(records,team,game,defenseProfiles,mode="similar",minS
         Math.abs(g.opponentAllowed-target)/target<=0.25;
     }).slice(0,4);
     const comparable=mode==="similar"?similar:recent;
-    if(recent.length<4||comparable.length<minSample)continue;
+    // Similar-defense history can qualify during the first few current-season
+    // games. Recent-form thresholds require at least three CURRENT-season logs.
+    if(comparable.length<minSample)continue;
     const floor=Math.min(...comparable.map(g=>g.value));
     const line=Math.round((floor-0.5)*2)/2;
     if(line<entry.minValue-0.5||line<0.5)continue;
@@ -374,6 +382,8 @@ export function scanTrends(records,team,game,defenseProfiles,mode="similar",minS
       line,marketSource:"Research threshold — NOT a PrizePicks/sportsbook line",
       matched:hits,sample:comparable.length,
       recentHits:recent.filter(g=>g.value>line).length,recentSample:recent.length,
+      recentSeason:game.season??null,careerSampleSeasons:chronological
+        .map(g=>g.season).filter(s=>s!==null&&s!==undefined),
       similarHits:similar.filter(g=>g.value>line).length,
       similarSample:similar.length,similarTarget:4,
       targetDefense:targetProfile?.average??null,
