@@ -108,8 +108,11 @@ export async function onRequestGet({request}){
     if(!Number.isFinite(Date.parse(selectedDate)))return respond({error:"Game kickoff date unavailable."},422);
     const season=String(event.season?.year||date.slice(0,4));
     const firstYear=Number(season);
+    // "current" resolves the league's actual selected season (important
+    // for Jan/Feb football and spring soccer/basketball cross-year games).
     const requestedSeason=query.get("historySeason");
-    const historySeason=requestedSeason===null?firstYear:Number(requestedSeason);
+    const historySeason=requestedSeason===null||requestedSeason==="current"
+      ?firstYear:Number(requestedSeason);
     if(!Number.isInteger(historySeason)||historySeason<firstYear-2||
        historySeason>firstYear||!/^\\d{4}$/.test(String(historySeason))){
       return respond({error:"Historical season must be the selected season or one of the two seasons before it."},400);
