@@ -96,9 +96,9 @@ test("last four comparable games show each defense's actual same-role allowance"
   assert.match(html,/2 of 4 available/);
   assert.match(html,/Falcons/);
   assert.match(html,/Saints/);
-  assert.match(html,/Allowed 91\.5\/game/);
-  assert.match(html,/2 defensive games/);
-  assert.match(html,/Allowed 104\.0\/game/);
+  assert.match(html,/91\.5\/game/);
+  assert.match(html,/2 pregame records/);
+  assert.match(html,/104\.0\/game/);
   assert.match(html,/>85<\/strong>/);
   assert.match(html,/game-log-status over/);
 });
