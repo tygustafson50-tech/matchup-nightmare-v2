@@ -19,7 +19,7 @@ function central(iso){try{return new Intl.DateTimeFormat("en-US",{timeZone:"Amer
 function chooseSport(s){current=s;selected.clear();el("sports").querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.s===s));el("market").innerHTML=sports[s].markets.map(m=>'<option>'+safe(m)+'</option>').join("");el("leagueWrap").hidden=s!=="soccer";loadGames();}
 function drawGames(){el("count").textContent=selected.size+" / 16 games selected";el("games").innerHTML=games.length?games.map(g=>'<button class="game '+(selected.has(g.id)?"active":"")+'" data-id="'+safe(g.id)+'" aria-pressed="'+selected.has(g.id)+'">'+(g.away.logo?'<img alt="" src="'+safe(g.away.logo)+'">':"")+'<div>'+safe(g.away.name)+' @ '+safe(g.home.name)+'<small>'+central(g.date)+' · '+safe(g.status)+'</small></div>'+(g.home.logo?'<img alt="" src="'+safe(g.home.logo)+'">':"")+'<b>'+(selected.has(g.id)?"✓":"+")+'</b></button>').join(""):'<div class="empty">No games returned. Try another date.</div>';
 el("games").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{if(selected.has(b.dataset.id))selected.delete(b.dataset.id);else if(selected.size<16)selected.add(b.dataset.id);else return alert("Maximum 16 games");drawGames();}));}
-async function loadGames(){games=[];selected.clear();el("games").innerHTML="";el("scheduleStatus").textContent="Loading real schedules…";let url="/api/games?sport="+current+"&date="+encodeURIComponent(el("date").value);if(current==="soccer")url+="&league="+encodeURIComponent(el("league").value);
+async function loadGames(){clearAutomaticResearch();resetPickFilterInputs();games=[];selected.clear();el("games").innerHTML="";el("scheduleStatus").textContent="Loading real schedules…";let url="/api/games?sport="+current+"&date="+encodeURIComponent(el("date").value);if(current==="soccer")url+="&league="+encodeURIComponent(el("league").value);
 try{const r=await fetch(url),data=await r.json();if(!r.ok)throw Error(data.details||data.error);games=data.games||[];el("scheduleStatus").textContent=games.length+" scheduled games · "+data.source;drawGames();}catch(e){el("scheduleStatus").textContent="Schedule unavailable: "+e.message;drawGames();}}
 function metric(name,r){return '<div class="metric"><strong>'+(r.percentage===null?"—":r.percentage+"%")+'</strong><small>'+name+' · '+r.hits+'/'+r.total+' OVER · '+r.pushes+' pushes</small></div>';}
 el("sports").innerHTML=Object.entries(sports).map(([id,x])=>'<button data-s="'+id+'">'+x.label+'</button>').join("");
@@ -52,7 +52,70 @@ chooseSport("nfl");
 const scanBtn=el("scanSelected");
 const scanProgress=el("scanProgress");
 function clearAutomaticResearch(){
+  allPickCards=[];
+  visiblePickLimit=PAGE_SIZE;
+  el("pickFilters").hidden=true;
   el("scanOutput").innerHTML='<div class="empty">Select your games and click Scan Selected Games.</div>';
+}
+/** Reset only the browsing controls; the fixed scanner model never changes. */
+function resetPickFilterInputs(){
+  visiblePickLimit=PAGE_SIZE;
+  el("filterSearch").value="";
+  for(const id of ["filterMarket","filterGame","filterTeam","filterPosition","filterEvidence"])
+    el(id).value="all";
+  el("filterSort").value=INITIAL_FILTERS.sort;
+  el("pickTrendChips").querySelectorAll("button[data-trend]").forEach(button=>{
+    const active=button.dataset.trend==="all";
+    button.classList.toggle("active",active);
+    button.setAttribute("aria-pressed",String(active));
+  });
+}
+function selectedTrend(){
+  return el("pickTrendChips").querySelector('button[aria-pressed="true"]')?.dataset.trend||"all";
+}
+function collectPickFilters(){
+  return {
+    search:el("filterSearch").value,
+    game:el("filterGame").value,
+    team:el("filterTeam").value,
+    market:el("filterMarket").value,
+    position:el("filterPosition").value,
+    evidence:el("filterEvidence").value,
+    sort:el("filterSort").value,
+    trend:selectedTrend()
+  };
+}
+function setPickSelectOptions(id,allLabel,entries){
+  const select=el(id),old=select.value||"all";
+  const options=entries.map(entry=>typeof entry==="string"
+    ?{value:entry,label:entry}:entry);
+  select.innerHTML='<option value="all">'+safe(allLabel)+'</option>'+
+    options.map(entry=>'<option value="'+safe(entry.value)+'">'+safe(entry.label)+'</option>').join("");
+  select.value=options.some(entry=>entry.value===old)?old:"all";
+}
+function refreshPickFilterChoices(picks){
+  const options=getPickOptions(picks);
+  setPickSelectOptions("filterMarket","All stats",options.markets);
+  setPickSelectOptions("filterGame","All games",options.games);
+  setPickSelectOptions("filterTeam","All teams",options.teams);
+  setPickSelectOptions("filterPosition","All positions",options.positions);
+  el("pickFilters").hidden=picks.length===0;
+}
+function drawFilteredPickCards(){
+  const mount=el("pickCardMount");
+  if(!mount)return;
+  const matched=filterPickCards(allPickCards,collectPickFilters());
+  const visible=matched.slice(0,visiblePickLimit);
+  const count=el("pickResultCount");
+  count.textContent=visible.length+" shown · "+matched.length+" matching · "+
+    allPickCards.length+" total scan cards";
+  mount.innerHTML=matched.length
+    ?'<div class="scan-grid">'+visible.map(renderPickCard).join("")+'</div>'+
+      (visible.length<matched.length
+        ?'<div class="load-picks-row"><button type="button" id="loadMorePicks" class="secondary">'+
+          'Show '+Math.min(PAGE_SIZE,matched.length-visible.length)+' more picks'+
+          ' ('+(matched.length-visible.length)+' remaining)</button></div>':"")
+    :'<div class="empty filtered-empty">No cards match these filters. Try a different stat, player, team, or trend. <button type="button" id="emptyResetFilters" class="secondary">Clear filters</button></div>';
 }
 function renderPickCard(p){
 
