@@ -3,23 +3,59 @@
 <main>
 <p class="eyebrow">SIX-SPORT MATCHUP RESEARCH</p><h1>Scan the matchup<span>.</span></h1><p class="muted">Recent game trends, real schedules when reachable, and clear comparable-opponent history.</p>
 <nav id="sports"></nav>
-<div class="layout">
-<section class="panel"><h2>01 / Game selection</h2><div class="cols"><label>Game date<input id="date" type="date"></label><label id="leagueWrap" hidden>Soccer league<select id="league"></select></label></div>
-<p class="muted" id="scheduleStatus">Loading schedules…</p><p class="muted" id="count">0 / 16 games selected</p><div id="games" class="games"></div><div class="scanner-actions"><button id="scanSelected" class="gold">⚡ Scan Selected Games</button><button id="refresh" class="secondary">Refresh schedule</button></div><p class="muted" id="scanProgress" aria-live="polite">Select a game, then scan for historical 100% OVER thresholds.</p></section>
-<section class="panel"><h2>02 / Scan settings</h2>
-<p class="muted">Select games, then scan. <b>Recent Games</b> uses only the player's CURRENT season. <b>Similar Positional Defenses</b> searches the player's career over the selected season and previous two, including verified former-team games when available.</p>
-<label>Historical 100% filter
-<select id="scanMode"><option value="both" selected>Both: similar defense vs position + recent</option><option value="similar">Similar defenses vs position only</option><option value="recent">Recent games only</option></select>
-</label>
-<label>Career similar-defense history
-<select id="historyWindow">
-  <option value="3" selected>Three-season player career (current + previous 2)</option>
-  <option value="1">Selected season only — faster</option>
-</select>
-</label>
-<div class="warning">Automatically calculated alternative thresholds are research-only, NOT actual PrizePicks lines. Connecting an authorized PrizePicks or sportsbook data provider is a separate step.</div>
-<div class="scanner-info"><b>Scan rules</b><p class="muted">OVERS ONLY · minimum 3 qualifying historical games · Recent = last five appearances this season ONLY · Similar Defenses = up to four position-matched games across a three-season career window (including former teams when verified) · no future games. Positional-defense comparisons use the selected stat (WR receiving yards, guard points, etc.) and require actual past box scores. Recent-only trends are labeled separately.</p></div>
-<details class="manual-research"><summary>Optional: manual player research</summary>
+<section class="panel game-selection"><h2>01 / Select games</h2><div class="cols"><label>Game date<input id="date" type="date"></label><label id="leagueWrap" hidden>Soccer league<select id="league"></select></label></div>
+<p class="muted" id="scheduleStatus">Loading schedules…</p><p class="muted" id="count">0 / 16 games selected</p><div id="games" class="games"></div><div class="scanner-actions"><button id="scanSelected" class="gold">⚡ Scan Selected Games</button><button id="refresh" class="secondary">Refresh schedule</button></div><p class="muted" id="scanProgress" aria-live="polite">Select a game, then scan for historical 100% OVER thresholds.</p></section><p class="scan-rule-mini"><strong>One-click scan:</strong> OVERS ONLY · Last 5 games from the current season · Last 4 similar defenses from the past 3 career seasons · historical research thresholds, not live PrizePicks lines.</p>
+
+<section class="panel results" id="autoResults">
+  <div class="results-heading">
+    <div><h2>02 / Matchup picks</h2><p class="muted">Filter your OVER research cards instantly—no rescan needed.</p></div>
+    <span class="results-sport-tag">ALL SPORTS · SAME LOGIC</span>
+  </div>
+  <div id="pickFilters" class="pick-filters" hidden>
+    <div class="pick-filter-top">
+      <label class="filter-search-label" for="filterSearch">Find a player or stat
+        <input id="filterSearch" type="search" autocomplete="off" spellcheck="false" placeholder="Search player, team or stat…">
+      </label>
+      <button id="filterReset" type="button" class="secondary filter-reset">Reset filters</button>
+    </div>
+    <div id="pickTrendChips" class="pick-trend-tabs" role="group" aria-label="Trend type">
+      <button type="button" class="active" data-trend="all" aria-pressed="true">All picks</button>
+      <button type="button" data-trend="similar" aria-pressed="false">100% similar defense</button>
+      <button type="button" data-trend="recent" aria-pressed="false">100% recent games</button>
+    </div>
+    <div class="pick-filter-grid">
+      <label>Stat category<select id="filterMarket"><option value="all">All stats</option></select></label>
+      <label>Matchup<select id="filterGame"><option value="all">All games</option></select></label>
+      <label>Team<select id="filterTeam"><option value="all">All teams</option></select></label>
+      <label>Position<select id="filterPosition"><option value="all">All positions</option></select></label>
+      <label>Matchup evidence
+        <select id="filterEvidence">
+          <option value="all">All available evidence</option>
+          <option value="similar-any">With similar-defense games</option>
+          <option value="similar-four">4 verified similar games</option>
+          <option value="recent-five">5 current-season games</option>
+        </select>
+      </label>
+      <label>Sort picks
+        <select id="filterSort">
+          <option value="similar">Best historical matchups first</option>
+          <option value="sample">Largest qualifying sample</option>
+          <option value="player">Player A–Z</option>
+          <option value="market">Stat A–Z</option>
+          <option value="line-high">Highest research OVER line</option>
+          <option value="line-low">Lowest research OVER line</option>
+          <option value="game-time">Earliest game first</option>
+        </select>
+      </label>
+    </div>
+    <div class="pick-filter-footer">
+      <span id="pickResultCount" role="status" aria-live="polite">Scan games to load pick filters.</span>
+      <span class="pick-filter-hint">Filters change only which cards you see—not the research calculation.</span>
+    </div>
+  </div>
+  <div id="scanOutput" class="empty">Select up to 16 games, then click Scan Selected Games.</div>
+</section>
+<section class="panel optional-research"><details class="manual-research"><summary>Advanced · manual player research</summary>
 <p class="muted">You can still enter your own sourced historical game logs. This is separate from the automatic game scanner.</p>
 <div class="cols"><label>Player<input id="player" placeholder="Player name"></label><label>Market<select id="market"></select></label></div>
 <div class="cols"><label>OVER line<input id="line" type="number" step=".5" min="0" placeholder="49.5"></label><label>Opponent: same stat allowed to this position per game (optional)<input id="defense" type="number" min=".1" step=".1" placeholder="For basic matchup comparison"></label></div>
@@ -28,8 +64,7 @@
 <label class="check"><input id="perfect" type="checkbox"> 100% historical comparable trend filter (at least 3 games)</label>
 <button id="scan" class="gold">Analyze OVER →</button>
 <p class="muted">Manual comparison uses position-specific stat allowed that you provide. These numbers are unverified and historical percentages are not predictions.</p></details></section>
-</div>
-<section class="panel results" id="autoResults"><h2>03 / Automatic scan results</h2><div id="scanOutput" class="empty">Select up to 16 games, then click Scan Selected Games.</div></section>
+
 <section class="panel results" id="manualResults" hidden><h2>Manual research results</h2><div id="output" class="empty">Enter a player, market, OVER line, and sourced historical games to analyze.</div></section>
 <footer>Research only. Automated boxscore research uses provisional public data when reachable. No connected PrizePicks odds or real-money wagering. 100% historical trends are not guarantees.</footer></main>
 <script type="module" src="/app.js"></script></body></html>
