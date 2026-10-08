@@ -111,3 +111,20 @@ test("opponent defensive averages are hidden when source evidence is incomplete"
   assert.ok(!html.includes("Allowed 300"));
   assert.match(html,/No source/);
 });
+
+
+test("cross-season opponent rows include calendar year",()=>{
+  const rows=[
+    {date:"2024-09-08T18:00:00Z",opponent:"2024 Opponent",value:61},
+    {date:"2025-09-14T18:00:00Z",opponent:"2025 Opponent",value:72},
+    {date:"2026-09-20T18:00:00Z",opponent:"2026 Opponent",value:85}
+  ];
+  const html=renderGameHistory(rows,49.5,"Receiving yards",{
+    heading:"Last 4 matchups vs similar positional defenses",
+    showYear:true,limit:4
+  });
+  assert.match(html,/Sep 8, 2024/);
+  assert.match(html,/Sep 14, 2025/);
+  assert.match(html,/Sep 20, 2026/);
+  assert.match(html,/2024 Opponent/);
+});
