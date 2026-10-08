@@ -1,5 +1,6 @@
 import {analyze,parseLogs} from "/lib/engine.js";
 import {renderGameHistory} from "/lib/game-history.js";
+import {combineSeasonBatches,seasonsFor} from "/lib/three-seasons.js";
 const sports={
 nfl:{label:"🏈 NFL",markets:["Passing yards","Passing attempts","Completions","Rushing yards","Rushing attempts","Receptions","Receiving yards","Targets"]},
 nba:{label:"🏀 NBA",markets:["Points","Rebounds","Assists","3-pointers","PRA","Steals","Blocks"]},
@@ -72,17 +73,21 @@ function renderAutomaticResults(items,failures,completed){
       limit:4,
       countLabel:compared.length+" of 4 available",
       showOpponentDefense:true,
+      showYear:true,
       emptyMessage:"Position- and stat-specific defensive comparisons unavailable or insufficient."
     });
     const defense=Number.isFinite(p.targetDefense)?p.targetDefense.toFixed(1):"N/A";
     const defenseMarket=p.matchupMetric||"Position-specific matchup data unavailable";
     const defenseSample=Number.isInteger(p.targetDefenseGames)&&p.targetDefenseGames>0?" · "+p.targetDefenseGames+" games":"";
     const defenseRole=p.matchupPosition||"Unknown position";
+    const yearsUsed=(p.matchedSeasons||[]).join(", ")||"Not established";
+    const yearsAvailable=(p.seasonsLoaded||[]).join(", ")||"Not established";
     return '<article class="scan-card">'+
       '<div class="scan-top"><div class="scan-identity">'+photo+'<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+'</small><small>'+safe(p.position||"Player")+'</small></div></div><span class="trend-badge">100% '+(p.scanMode==="similar"?"SIMILAR":"RECENT")+' · '+p.matched+'/'+p.sample+'</span></div>'+
       '<div class="scan-line">RESEARCH OVER <strong>'+p.line+'</strong> '+safe(p.market)+'</div>'+
       '<div class="scan-stats"><div><strong>'+p.matched+'/'+p.sample+'</strong><small>Qualifying history</small></div><div><strong>'+recentRatio+'</strong><small>Last '+p.recentSample+' OVER</small></div><div><strong>'+defense+'</strong><small>'+safe(defenseMarket)+safe(defenseSample)+'</small></div></div>'+
       '<p class="muted">'+safe(p.reason)+'. Every qualifying recorded game exceeded the displayed threshold.</p>'+
+      '<p class="season-evidence">Historical seasons scanned: '+safe(yearsAvailable)+' · Qualifying matches from: '+safe(yearsUsed)+'</p>'+
       recent+
       '<div class="similar-history">'+lastFourSimilar+
         '<p class="game-log-method">Comparable = '+safe(defenseMarket)+' for '+safe(defenseRole)+' within 25% of the upcoming opponent, using pregame box scores (minimum 2 defensive games). Baseball uses pitching-staff or lineup tendencies. No total-points fallback.</p>'+
@@ -94,7 +99,14 @@ function renderAutomaticResults(items,failures,completed){
       '</details></article>';
   }).join("");
   const message=all.length>100?'<p class="muted">Showing the first 100 of '+all.length+' results.</p>':"";
+  const coverage=items.map(x=>{
+    const requested=(x.yearsRequested||[]).join(", ");
+    const loaded=(x.yearsLoaded||[]).join(", ");
+    return '<p class="season-evidence">Historical season window: '+safe(requested)+' · Loaded: '+safe(loaded||"None")+'</p>';
+  }).join("");
+  const warnings=items.flatMap(x=>x.notes||[]).filter(n=>/unavailable|missing|partial|incomplete|not loaded|roster|scheme|source request cap|current-season/i.test(n));
   el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' historical 100% research thresholds. These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
+    coverage+(warnings.length?'<div class="warning">'+[...new Set(warnings)].map(safe).join(" · ")+'</div>':"")+
     (failures.length?'<div class="warning">'+safe(failures.length)+' games or partial data sources could not be analyzed. '+failures.slice(0,5).map(safe).join(" · ")+'</div>':"")+
     message+'<div class="scan-grid">'+cards+'</div>';
 }
@@ -105,42 +117,69 @@ scanBtn.addEventListener("click",async()=>{
     el("scanOutput").innerHTML='<div class="empty">Select one or more games, then press Scan Selected Games.</div>';
     return;
   }
-  const sport=current;
-  const date=el("date").value;
-  const league=el("league").value;
+  const sport=current,date=el("date").value,league=el("league").value;
   const mode=el("scanMode").value;
+  const window=Number(el("historyWindow").value);
+  if(window!==1&&window!==3){
+    scanProgress.textContent="Select either one or three seasons.";
+    return;
+  }
   const batches=[],failures=[];
-  let completed=0,cursor=0;
-  scanBtn.disabled=true;scanBtn.textContent="Scanning…";
-  el("scanOutput").innerHTML='<div class="empty">Fetching completed-game boxscores for the selected teams. This can take a little time, especially for several games. Results are never invented.</div>';
-  scanProgress.textContent="Scanning 0 of "+chosen.length+" selected games…";
+  let completed=0,cursor=0,seasonsCompleted=0;
+  scanBtn.disabled=true;scanBtn.textContent="Scanning historical seasons…";
+  el("scanOutput").innerHTML='<div class="empty">Loading historical games and comparing position-specific defenses. Three-season research is split into small requests to keep the website on free hosting. Missing games are never invented.</div>';
+  scanProgress.textContent="Loading historical seasons: 0 of "+chosen.length*window+" batches…";
+
+  async function scanSeason(game,seasonParam){
+    const params=new URLSearchParams({sport,date,gameId:game.id,mode,historySeason:String(seasonParam)});
+    if(sport==="soccer")params.set("league",league);
+    try{
+      const response=await fetch("/api/scan?"+params);
+      const data=await response.json();
+      if(!response.ok)throw Error(data.details||data.error||"Historical data unavailable");
+      if(!data.seasonBatch)throw Error("Historical season batch was not provided.");
+      return data;
+    }finally{
+      seasonsCompleted++;
+      scanProgress.textContent="Processed "+seasonsCompleted+" of up to "+chosen.length*window+" season batches · "+completed+" games finished";
+    }
+  }
   async function worker(){
     while(cursor<chosen.length){
-      const idx=cursor++;
-      const item=chosen[idx];
-      const q=new URLSearchParams({sport,date,gameId:item.id,mode});
-      if(sport==="soccer")q.set("league",league);
+      const index=cursor++;
+      const game=chosen[index];
+      const gameLabel=game.away.name+" @ "+game.home.name;
       try{
-        const response=await fetch("/api/scan?"+q);
-        const body=await response.json();
-        if(!response.ok)throw Error(body.details||body.error||"Data source unavailable");
-        batches.push(body);
-        if(body.diagnostics?.boxscoreFailures||body.diagnostics?.defenseFailures){
-          failures.push(safe(item.away.name+" @ "+item.home.name)+": incomplete historical feeds.");
+        // Resolve the actual sports season from the scheduled event rather
+        // than assuming its calendar year (e.g. January football).
+        const currentBatch=await scanSeason(game,"current");
+        const years=seasonsFor(currentBatch.selectedSeason,window);
+        const responses=[currentBatch];
+        const missing=[];
+        for(const season of years.slice(1)){
+          try{responses.push(await scanSeason(game,season));}
+          catch(error){
+            missing.push(season+": "+String(error.message).slice(0,100));
+          }
         }
+        const combined=combineSeasonBatches(responses,{sport,mode,window});
+        if(missing.length)combined.notes.push("Unavailable seasons for "+gameLabel+": "+missing.join("; "));
+        batches.push(combined);
       }catch(error){
-        failures.push(item.away.name+" @ "+item.home.name+": "+String(error.message).slice(0,130));
+        failures.push(gameLabel+": "+String(error.message).slice(0,150));
       }finally{
         completed++;
-        scanProgress.textContent="Scanned "+completed+" of "+chosen.length+" games · "+batches.reduce((n,b)=>n+(b.results?.length||0),0)+" historical 100% thresholds identified";
+        scanProgress.textContent="Scanned "+completed+" of "+chosen.length+" selected games · "+
+          batches.reduce((n,b)=>n+b.count,0)+" historical research thresholds";
       }
     }
   }
   try{
     await Promise.all(Array.from({length:Math.min(2,chosen.length)},()=>worker()));
-    if(sport!==current || date!==el("date").value)return;
+    if(sport!==current||date!==el("date").value)return;
     renderAutomaticResults(batches,failures,completed);
-    scanProgress.textContent="Scan completed: "+completed+" games. "+batches.reduce((n,b)=>n+(b.results?.length||0),0)+" historical 100% thresholds found.";
+    scanProgress.textContent="Scan complete: "+completed+" games · up to "+window+" seasons each · "+
+      batches.reduce((n,b)=>n+b.count,0)+" research thresholds identified.";
   }finally{
     scanBtn.disabled=false;scanBtn.textContent="⚡ Scan Selected Games";
   }
