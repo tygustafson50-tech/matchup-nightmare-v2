@@ -151,3 +151,14 @@ test("backend core exports same scanner used in the browser",async()=>{
   const browser=await import("../public/lib/auto-scan.js");
   assert.equal(browser.scanTrends.toString(),scanTrends.toString());
 });
+
+
+test("an empty 2024 response is not counted as a loaded historical season",()=>{
+  const empty=batch(2024);
+  empty.seasonBatch.records={"1":[],"2":[]};
+  const result=combineSeasonBatches([batch(2026),batch(2025),empty],
+    {sport:"nfl",mode:"similar",window:3});
+  assert.deepEqual(result.yearsLoaded,[2026,2025]);
+  assert.deepEqual(result.yearsMissing,[2024]);
+  assert.match(result.notes.join(" "),/without usable player records/);
+});
