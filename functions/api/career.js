@@ -7,7 +7,8 @@
  * verify their actual team, stats and positional opponent.
  */
 import {
-  CONFIG,SOCCER_LEAGUES,priorGames,buildPositionProfile
+  CONFIG,SOCCER_LEAGUES,priorGames,buildPositionProfile,
+  extractBoxscore,rosterPositionIndex,attachRosterPositions,matchupRole
 } from "../../lib/auto-scan.js";
 import {
   parseCareerEventRefs,seasonFromDate,athleteCareerAppearance
@@ -70,7 +71,8 @@ export async function onRequestGet({request}){
   const path=sport==="soccer"?"soccer/"+league:CONFIG[sport].path;
   const gameBase=SCORE+path,athleteBase=ATHLETES+path;
   const stats={requests:0,gamelogEvents:0,verifiedAppearances:0,
-    opponentProfiles:0,sourceFailures:0};
+    opponentProfiles:0,sourceFailures:0,rosterLookups:0,
+    rostersWithPositions:0,careerPositionsResolved:0,careerPositionsMissing:0};
   const get=fetcher(stats),warnings=[];
   try{
     const board=await get(gameBase+"/scoreboard?dates="+date.replaceAll("-","")+"&limit=100");
@@ -144,6 +146,63 @@ export async function onRequestGet({request}){
       if(data[i].ok)box.set(hist[i].id,data[i].value);
       else stats.sourceFailures++;
     }
+    // Historical ESPN boxscore rows often lack positions. Verify roles from
+    // the correct historical season's team roster, prioritizing the actual
+    // team the athlete played for and then defender-opponent offensive teams.
+    const rosterNeeded=new Map();
+    function want(id,priority){
+      const key=String(id||"");
+      if(!/^\d+$/.test(key))return;
+      if(!rosterNeeded.has(key)||rosterNeeded.get(key)>priority)
+        rosterNeeded.set(key,priority);
+    }
+    for(const app of appearances){
+      if(!app.players[0]?.position)want(app.playedTeamId,0);
+    }
+    if(sport!=="mlb"){
+      for(const {row,prior} of demands){
+        for(const g of prior){
+          const summary=box.get(g.id);
+          if(!summary)continue;
+          for(const t of summary.boxscore?.players||[]){
+            const id=String(t.team?.id||"");
+            if(id===String(row.opponentId))continue;
+            const athletes=extractBoxscore(summary,sport,id);
+            if(athletes.some(p=>(CONFIG[sport]?.markets||[]).some(([stat])=>
+              Number.isFinite(p.stats?.[stat])&&!matchupRole(sport,p.position,stat))))
+              want(id,1);
+          }
+        }
+      }
+    }
+    const wanted=[...rosterNeeded].sort((a,b)=>a[1]-b[1]).map(x=>x[0]);
+    const capacity=Math.max(0,Math.min(10,LIMIT-stats.requests-1));
+    const looks=await fetchPool(wanted.slice(0,capacity),id=>
+      get(gameBase+"/teams/"+id+"/roster?season="+year));
+    stats.rosterLookups=looks.length;
+    const rosterIndices={};
+    for(let i=0;i<looks.length;i++){
+      if(!looks[i].ok)continue;
+      const id=wanted[i],positions=rosterPositionIndex(looks[i].value,id);
+      if(Object.keys(positions[id]||{}).length){
+        rosterIndices[id]=positions[id];
+        stats.rostersWithPositions++;
+      }
+    }
+    // Re-resolve original game appearances after attaching verified hints,
+    // retaining the same athlete ID, historical team, date and true stat.
+    for(let i=0;i<completed.length;i++){
+      if(!completed[i].ok)continue;
+      const enriched=attachRosterPositions(completed[i].value,rosterIndices);
+      const updated=athleteCareerAppearance(enriched,sport,playerId,
+        references[i].id,year,references[i].date);
+      if(!updated)continue;
+      const existing=appearances.findIndex(x=>x.id===updated.id);
+      if(existing>=0)appearances[existing]=updated;
+    }
+    for(const [id,summary] of box)box.set(id,attachRosterPositions(summary,rosterIndices));
+    stats.careerPositionsResolved=appearances.filter(x=>x.players[0]?.position).length;
+    stats.careerPositionsMissing=appearances.length-stats.careerPositionsResolved;
     for(const {row,prior} of demands){
       const valid=prior.filter(g=>box.has(g.id)).map(g=>({id:g.id,summary:box.get(g.id)}));
       const profile=buildPositionProfile(valid,sport,row.opponentId,2);
@@ -152,6 +211,10 @@ export async function onRequestGet({request}){
       if(Object.keys(profile).length)stats.opponentProfiles++;
     }
     if(stats.sourceFailures)warnings.push("Some career events or defensive boxscores were unavailable.");
+    if(stats.careerPositionsMissing)
+      warnings.push(stats.careerPositionsMissing+" career game appearances lacked a verified position and cannot establish a defense-vs-position trend.");
+    if(wanted.length>stats.rosterLookups)
+      warnings.push("Some career roster lookups were skipped to stay within free-plan request limits.");
     if(stats.requests>=LIMIT)warnings.push("Career scan reached the per-request free-tier budget.");
     if(sport==="soccer")warnings.push("Soccer career history is limited to the selected league; moves between leagues may be omitted.");
     warnings.push("Career lookup checks up to eight additional verifiable appearances per season (after skipping known team games), with up to six opponent defensive profiles; it is not a complete-season archive.");
