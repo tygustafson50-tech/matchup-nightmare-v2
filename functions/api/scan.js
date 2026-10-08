@@ -53,7 +53,8 @@ export async function onRequestGet({request}){
   const sport=params.get("sport")||"nfl";
   const date=params.get("date");
   const gameId=params.get("gameId")||"";
-  const mode=params.get("mode")==="recent"?"recent":"similar";
+  const requestedMode=params.get("mode");
+  const mode=requestedMode==="recent"?"recent":requestedMode==="similar"?"similar":"both";
   const league=sport==="soccer"?(params.get("league")||"eng.1"):CONFIG[sport]?.path?.split("/")[1];
 
   if(!Object.hasOwn(CONFIG,sport)||!validDate(date||"")||!/^\d{5,15}$/.test(gameId)){
@@ -116,7 +117,7 @@ export async function onRequestGet({request}){
     }
 
     const defenses=new Map();
-    if(mode==="similar"){
+    if(mode!=="recent"){
       const opponents=new Set([...teams.map(t=>t.id),...history.map(h=>h.opponentId)]);
       const missing=[...opponents].filter(id=>!scheduleByTeam[id]);
       const profiles=await pool(missing,id=>jsonFrom(base+"/teams/"+id+"/schedule?season="+season+"&limit=100"));
@@ -129,7 +130,7 @@ export async function onRequestGet({request}){
     }
 
     const allProfiles={};
-    if(mode==="similar"){
+    if(mode!=="recent"){
       for(const team of teams){
         const opponent=team.targetOpponentId;
         allProfiles[opponent]??={};
@@ -149,18 +150,22 @@ export async function onRequestGet({request}){
       const records=teamGames[team.id].filter(g=>byGame[g.id]).map(g=>({
         ...g,players:extractBoxscore(byGame[g.id],sport,team.id)
       }));
-      trends.push(...scanTrends(records,team,{
-        id:gameId,date:selectedDate,sport
-      },allProfiles,mode,3));
+      const inputs={id:gameId,date:selectedDate,sport};
+      if(mode==="both"){
+        trends.push(...scanTrends(records,team,inputs,allProfiles,"similar",3));
+        trends.push(...scanTrends(records,team,inputs,allProfiles,"recent",3));
+      }else{
+        trends.push(...scanTrends(records,team,inputs,allProfiles,mode,3));
+      }
     }
     if(!trends.length){
       notes.push("No 100% qualifying OVER thresholds found with at least 3 historical games and adequate source data.");
     }
     if(diagnostics.boxscoreFailures)notes.push("Some completed-game boxscores were unavailable; results are incomplete.");
     if(sport==="soccer")notes.push("Soccer player-level boxscores are often unavailable in this provisional source.");
-    notes.push(mode==="similar"
-      ?"Opponent comparison is based on historical TEAM scoring allowed (not defense against position)."
-      :"Recent-game scan is not filtered for similar defenses.");
+    notes.push(mode==="recent"
+      ?"Recent-game scan is not filtered for similar defenses."
+      :"Comparable-defensive trends use historical TEAM scoring allowed (not defense against position). Recent-only results are labeled separately.");
     notes.push("Calculated thresholds are RESEARCH-ONLY. They are not verified PrizePicks or sportsbook offers.");
     notes.push("Historical 100% hit rates are not future winning probabilities.");
 
