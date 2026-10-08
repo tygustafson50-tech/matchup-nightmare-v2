@@ -75,12 +75,16 @@ export async function onRequestGet({ request }) {
       return {
         id: String(event.id),
         date: event.date,
+        season: Number.isInteger(Number(event.season?.year))
+          ? Number(event.season.year) : null,
         status: event.status?.type?.description || "Scheduled",
         home: {
+          id:String(home.team?.id || ""),
           name: home.team?.displayName || "Home",
           logo: home.team?.logo || ""
         },
         away: {
+          id:String(away.team?.id || ""),
           name: away.team?.displayName || "Away",
           logo: away.team?.logo || ""
         }
