@@ -117,8 +117,9 @@ export async function onRequestGet({request}){
       }else diagnostics.boxscoreFailures++;
     }
 
-    const defenses=new Map();
-    if(mode!=="recent"){
+    // All scan cards display the last four comparable defenses, even when
+    // the ranking filter is set to RECENT rather than SIMILAR.
+    {
       const opponents=new Set([...teams.map(t=>t.id),...history.map(h=>h.opponentId)]);
       const missing=[...opponents].filter(id=>!scheduleByTeam[id]);
       const profiles=await pool(missing,id=>jsonFrom(base+"/teams/"+id+"/schedule?season="+season+"&limit=100"));
@@ -131,7 +132,7 @@ export async function onRequestGet({request}){
     }
 
     const allProfiles={};
-    if(mode!=="recent"){
+    {
       for(const team of teams){
         const opponent=team.targetOpponentId;
         allProfiles[opponent]??={};
