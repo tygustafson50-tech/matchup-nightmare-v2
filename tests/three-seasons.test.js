@@ -74,7 +74,7 @@ test("a missing season is reported instead of filled with fictional games",()=>{
     {sport:"nfl",mode:"similar",window:3});
   assert.deepEqual(combined.yearsLoaded,[2026,2025]);
   assert.deepEqual(combined.yearsMissing,[2024]);
-  assert.match(combined.notes.join(" "),/without usable player records/i);
+  assert.match(combined.notes.join(" "),/without usable current-team player records/i);
   assert.equal(combined.results.every(p=>p.coveragePartial),true);
 });
 
@@ -160,7 +160,7 @@ test("an empty 2024 response is not counted as a loaded historical season",()=>{
     {sport:"nfl",mode:"similar",window:3});
   assert.deepEqual(result.yearsLoaded,[2026,2025]);
   assert.deepEqual(result.yearsMissing,[2024]);
-  assert.match(result.notes.join(" "),/without usable player records/);
+  assert.match(result.notes.join(" "),/without usable current-team player records/);
 });
 
 
