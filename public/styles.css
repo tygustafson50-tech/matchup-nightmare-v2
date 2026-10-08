@@ -180,3 +180,55 @@
 .similar-empty strong{color:#f1d78f;font-size:13px;line-height:1.5}
 .similar-empty span{color:#d9c49a;font-size:11px;font-weight:700}
 .similar-empty p{color:#b3b0ac;font-size:11px;line-height:1.65;margin:5px 0 0}
+
+
+/* V2 pick finder: single scan path, full-width matchup selection. */
+.game-selection{width:100%}
+.game-selection .games{grid-template-columns:repeat(2,minmax(0,1fr));max-height:420px}
+.game-selection .game{min-width:0}
+.game-selection .game div{min-width:0;overflow-wrap:anywhere}
+.scan-rule-mini{margin:11px 0 18px;padding:10px 14px;border:1px solid #4c4231;border-radius:9px;color:#c6bcab;background:#171614;font-size:12px;line-height:1.6}
+.scan-rule-mini strong{color:#e5c77f}
+.results-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+.results-heading h2{margin:0 0 6px}
+.results-heading .muted{margin:0}
+.results-sport-tag{font-size:10px;font-weight:850;letter-spacing:1.1px;color:#e0be6a;border:1px solid #685635;border-radius:6px;padding:9px 10px;white-space:nowrap}
+.pick-filters{border:1px solid #574834;background:linear-gradient(135deg,#232019,#16171b 70%);padding:18px;border-radius:13px;margin:18px 0 22px}
+.pick-filter-top{display:flex;align-items:end;gap:12px;margin-bottom:15px}
+.pick-filter-top .filter-search-label{flex:1;margin:0;min-width:0;font-weight:700;color:#e5ce91}
+.pick-filter-top input{margin:8px 0 0;border-color:#776239;background:#111216;font-size:14px}
+.pick-filter-top input:focus,.pick-filter-grid select:focus{border-color:#d5b05e;box-shadow:0 0 0 2px rgba(215,181,91,.17)}
+.filter-reset{min-width:118px;height:46px;padding:8px 12px}
+.pick-trend-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.pick-trend-tabs button{color:#cec4b3;border:1px solid #45403a;background:#18191e;padding:10px 13px;border-radius:8px;font-size:12px;font-weight:700}
+.pick-trend-tabs button.active{background:#3c311c;border-color:#d6b35c;color:#f7d88a}
+.pick-trend-tabs button:focus-visible,.filter-reset:focus-visible,#loadMorePicks:focus-visible{outline:2px solid #d7bd82;outline-offset:2px}
+.pick-filter-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px 13px}
+.pick-filter-grid label{min-width:0;margin:0;color:#cdb991;font-size:11px;font-weight:650}
+.pick-filter-grid select{font-size:12px;min-width:0;width:100%;margin:7px 0 0;padding:11px 9px;min-height:42px;white-space:nowrap;text-overflow:ellipsis}
+.pick-filter-footer{margin-top:15px;border-top:1px solid #433a2b;padding-top:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:12px}
+#pickResultCount{font-weight:800;color:#f0d491;font-variant-numeric:tabular-nums}
+.pick-filter-hint{color:#9f9c98;font-size:11px}
+.scan-output{min-width:0}
+.scan-output>.muted{margin:14px 0}
+.filtered-empty{padding:35px 16px}
+.filtered-empty button{display:inline-block;margin:12px 0 0 10px;padding:10px 12px}
+.load-picks-row{display:flex;justify-content:center;margin-top:24px}
+#loadMorePicks{border-color:#a18446;color:#efcf81;padding:13px 24px;font-weight:700}
+.optional-research{margin-top:18px;background:#141418}
+.optional-research .manual-research{border:0;padding:0;margin:0}
+.optional-research .manual-research summary{padding:6px 0}
+@media(max-width:980px){
+  .pick-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:650px){
+  .game-selection .games{grid-template-columns:1fr}
+  .pick-filters{padding:13px}
+  .pick-filter-top{align-items:stretch;flex-direction:column}
+  .filter-reset{height:40px;min-width:0;align-self:flex-start}
+  .pick-filter-grid{grid-template-columns:1fr}
+  .results-heading{align-items:flex-start;flex-wrap:wrap}
+  .results-sport-tag{font-size:9px}
+  .pick-trend-tabs button{flex:1;min-width:120px}
+  .pick-filter-footer{align-items:flex-start;flex-direction:column}
+}
