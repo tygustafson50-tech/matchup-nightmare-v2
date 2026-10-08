@@ -123,9 +123,18 @@ function renderAutomaticResults(items,failures,completed){
     const requested=(x.yearsRequested||[]).join(", ");
     const loaded=(x.yearsLoaded||[]).join(", ");
     const label=(x.game?.away?.name||"Away")+" @ "+(x.game?.home?.name||"Home");
-    return '<p class="season-evidence">'+safe(label)+' · Searched seasons: '+safe(requested)+' · Usable seasons: '+safe(loaded||"None")+'</p>';
+    const coverage=x.positionCoverage||{};
+    const verified=coverage.resolvedPositionRows||0;
+    const unknown=coverage.missingPositionRows||0;
+    const roster=coverage.rostersWithPositions||0;
+    const evidence=verified||unknown||roster
+      ?'<span class="coverage-detail"> · Player positions verified: '+safe(verified)+
+        ' · Missing: '+safe(unknown)+' · Roster lookups successful: '+safe(roster)+'</span>'
+      :"";
+    return '<p class="season-evidence">'+safe(label)+' · Searched seasons: '+
+      safe(requested)+' · Usable seasons: '+safe(loaded||"None")+evidence+'</p>';
   }).join("");
-  const warnings=items.flatMap(x=>x.notes||[]).filter(n=>/unavailable|missing|partial|incomplete|not loaded|roster|scheme|source request cap|current-season|limited lookback|same-team/i.test(n));
+  const warnings=items.flatMap(x=>x.notes||[]).filter(n=>/unavailable|missing|partial|incomplete|not loaded|roster|scheme|source request cap|current-season|limited lookback|same-team|lacked verified positions|position lookup/i.test(n));
   el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' historical 100% research thresholds. These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
     coverage+(warnings.length?'<div class="warning">'+[...new Set(warnings)].map(safe).join(" · ")+'</div>':"")+
     (failures.length?'<div class="warning">'+safe(failures.length)+' games or partial data sources could not be analyzed. '+failures.slice(0,5).map(safe).join(" · ")+'</div>':"")+
