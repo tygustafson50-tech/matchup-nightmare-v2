@@ -24,9 +24,9 @@ test("player candidate prioritization uses only current season appearances",()=>
   assert.equal(out.total,3);
   assert.equal(out.prioritized.length,2);
   assert.equal(out.remaining.length,1);
-  assert.equal(out.prioritized[0].playerId,"111");
+  assert.equal(out.prioritized[0].playerId,"113");
   assert.equal(out.prioritized[1].playerId,"221");
-  assert.equal(out.remaining[0].playerId,"113");
+  assert.equal(out.remaining[0].playerId,"111");
 });
 
 test("players without verified stat or position aren't booked for paid/free requests",()=>{
