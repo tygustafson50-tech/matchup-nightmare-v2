@@ -114,7 +114,7 @@ export async function onRequestGet({request}){
     const historySeason=requestedSeason===null||requestedSeason==="current"
       ?firstYear:Number(requestedSeason);
     if(!Number.isInteger(historySeason)||historySeason<firstYear-2||
-       historySeason>firstYear||!/^\\d{4}$/.test(String(historySeason))){
+       historySeason>firstYear||!/^\d{4}$/.test(String(historySeason))){
       return respond({error:"Historical season must be the selected season or one of the two seasons before it."},400);
     }
     const seasonYear=String(historySeason);
