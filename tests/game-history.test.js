@@ -82,3 +82,32 @@ test("missing similar-defense history shows a titled honest no-data state",()=>{
   assert.match(html,/No comparable opponents/);
   assert.ok(!html.includes(">0</strong>"));
 });
+
+
+test("last four comparable games show each defense's actual same-role allowance",()=>{
+  const rows=[
+    {date:"2026-09-20",opponent:"Falcons",value:85,opponentAllowed:91.5,opponentDefenseGames:2},
+    {date:"2026-09-14",opponent:"Saints",value:62,opponentAllowed:104,opponentDefenseGames:3}
+  ];
+  const html=renderGameHistory(rows,60,"Receiving yards",{
+    heading:"Last 4 matchups vs similar positional defenses",
+    countLabel:"2 of 4 available",showOpponentDefense:true
+  });
+  assert.match(html,/2 of 4 available/);
+  assert.match(html,/Falcons/);
+  assert.match(html,/Saints/);
+  assert.match(html,/Allowed 91\.5\/game/);
+  assert.match(html,/2 defensive games/);
+  assert.match(html,/Allowed 104\.0\/game/);
+  assert.match(html,/>85<\/strong>/);
+  assert.match(html,/game-log-status over/);
+});
+
+test("opponent defensive averages are hidden when source evidence is incomplete",()=>{
+  const rows=[
+    {date:"2026-09-20",opponent:"No source",value:12,opponentAllowed:300,opponentDefenseGames:1}
+  ];
+  const html=renderGameHistory(rows,10,"Assists",{showOpponentDefense:true});
+  assert.ok(!html.includes("Allowed 300"));
+  assert.match(html,/No source/);
+});
