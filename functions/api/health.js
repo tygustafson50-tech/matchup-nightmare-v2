@@ -7,7 +7,9 @@ export function onRequestGet(){
   return new Response(JSON.stringify({
     ok:true,service:"matchup-nightmare-v2",
     runtime:"cloudflare-pages-functions",
-    apiRoutes:["/api/games","/api/scan","/api/career","/api/health"],
+    apiRoutes:["/api/games","/api/espn","/api/scan","/api/career","/api/health"],
+    recommendedSourceRoute:"/api/espn",
+    historyAssembly:"browser-side for Cloudflare Free CPU compatibility",
     scanMode:"over-only",
     source:"server-side JSON route"
   }),{
