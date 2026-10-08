@@ -197,7 +197,7 @@ function renderAutomaticResults(items,failures,completed){
     el("scanOutput").innerHTML=unavailable
       ?'<div class="empty"><strong>Scan unavailable — no picks were calculated.</strong><p class="muted">Cloudflare did not return the historical statistics required for this game. This is an API/deployment problem, not a zero-hit matchup.</p></div>'+
         failures.map(e=>'<p class="error">'+safe(e)+'</p>').join("")
-      :'<div class="empty">No verified 100% historical OVER research thresholds were found in the usable data. This is not a guaranteed prediction.</div>';
+      :'<div class="empty">No verified historical OVER research cards were found in the usable data. This is not a guaranteed prediction.</div>';
     return;
   }
   const all=items.flatMap(x=>(x.results||[]).map(p=>({...p,sourceGame:x.game,provider:x.provider})));
@@ -227,7 +227,7 @@ function renderAutomaticResults(items,failures,completed){
     (pendingCareerCount?'<p class="warning">Career data was prioritized for active players. '+pendingCareerCount+
       ' additional player histories can still be checked.</p><button id="scanMoreCareers" class="gold">Scan more player careers ('+pendingCareerCount+' remaining)</button>':"")+
     (all.length?'<div id="pickCardMount"></div>':
-      '<div class="empty">No qualifying 100% OVER research cards were found in the available season data. Missing historical boxscores or comparable opponents can also cause an empty scan.</div>');
+      '<div class="empty">No historical OVER research cards could be calculated from the available season data. Missing historical boxscores or comparable opponents can also cause an empty scan.</div>');
   drawFilteredPickCards();
 }
 scanBtn.addEventListener("click",async()=>{
