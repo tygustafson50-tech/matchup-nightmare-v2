@@ -51,6 +51,43 @@ chooseSport("nfl");
 /* Automatic fixed-rule scan. Optional manual research is below the pick results. */
 const scanBtn=el("scanSelected");
 const scanProgress=el("scanProgress");
+/* All sport pages use the same controls. Changing filters never calls /api. */
+el("filterSearch").addEventListener("input",()=>{
+  visiblePickLimit=PAGE_SIZE;
+  drawFilteredPickCards();
+});
+for(const id of ["filterMarket","filterGame","filterTeam","filterPosition","filterEvidence","filterSort"]){
+  el(id).addEventListener("change",()=>{
+    visiblePickLimit=PAGE_SIZE;
+    drawFilteredPickCards();
+  });
+}
+el("pickTrendChips").addEventListener("click",event=>{
+  const button=event.target.closest("button[data-trend]");
+  if(!button)return;
+  el("pickTrendChips").querySelectorAll("button[data-trend]").forEach(b=>{
+    const active=b===button;
+    b.classList.toggle("active",active);
+    b.setAttribute("aria-pressed",String(active));
+  });
+  visiblePickLimit=PAGE_SIZE;
+  drawFilteredPickCards();
+});
+el("filterReset").addEventListener("click",()=>{
+  resetPickFilterInputs();
+  drawFilteredPickCards();
+});
+el("autoResults").addEventListener("click",event=>{
+  if(event.target.closest("#loadMorePicks")){
+    visiblePickLimit+=PAGE_SIZE;
+    drawFilteredPickCards();
+  }
+  if(event.target.closest("#emptyResetFilters")){
+    resetPickFilterInputs();
+    drawFilteredPickCards();
+  }
+});
+
 function clearAutomaticResearch(){
   allPickCards=[];
   visiblePickLimit=PAGE_SIZE;
