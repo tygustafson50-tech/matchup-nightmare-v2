@@ -21,6 +21,7 @@ el("sports").querySelectorAll("button").forEach(b=>b.addEventListener("click",()
 el("league").innerHTML=Object.entries(leagues).map(([id,x])=>'<option value="'+id+'">'+x+'</option>').join("");
 el("date").value=new Date().toLocaleDateString("en-CA",{timeZone:"America/Chicago"});el("date").addEventListener("change",loadGames);el("league").addEventListener("change",loadGames);el("refresh").addEventListener("click",loadGames);
 el("scan").addEventListener("click",()=>{
+el("manualResults").hidden=false;
 try{const name=el("player").value.trim(),market=el("market").value,raw=el("line").value;
 if(!name)throw Error("Enter a player.");if(raw.trim()==="")throw Error("Enter an OVER line.");
 const line=Number(raw);if(!Number.isFinite(line)||line<0)throw Error("Line must be nonnegative.");
@@ -39,3 +40,88 @@ result.recent.map(g=>'<div class="history"><span>'+safe(g.date)+'</span><span>'+
 }catch(e){el("output").innerHTML='<p class="error">'+safe(e.message)+'</p>';}
 });
 chooseSport("nfl");
+
+
+/* Automatic scan of selected matchups. Manual research above remains optional. */
+const scanBtn=el("scanSelected");
+const scanProgress=el("scanProgress");
+function clearAutomaticResearch(){
+  el("scanOutput").innerHTML='<div class="empty">Select your games and click Scan Selected Games.</div>';
+}
+function renderAutomaticResults(items,failures,completed){
+  if(!items.length){
+    el("scanOutput").innerHTML=
+      '<div class="empty">No 100% qualifying OVER thresholds returned from the available completed-game history.<p class="muted">This could mean no qualified matches, fewer than 3 comparable opponents, missing source boxscores, or unavailable scoring-defense data. Try switching to Recent completed games for a broader historical scan. Nothing is guaranteed.</p></div>'+
+      failures.map(e=>'<p class="error">'+safe(e)+'</p>').join("");
+    return;
+  }
+  const all=items.flatMap(x=>x.results.map(p=>({...p,sourceGame:x.game,provider:x.provider})))
+    .sort((a,b)=>b.sample-a.sample || b.recentHits-a.recentHits || b.line-a.line);
+  const cards=all.slice(0,100).map(p=>{
+    const recentRatio=p.recentSample?p.recentHits+'/'+p.recentSample:'—';
+    const photo=p.headshot
+      ?'<img class="player-image" src="'+safe(p.headshot)+'" alt="" loading="lazy" onerror="this.hidden=true">'
+      :'<div class="player-initial">'+safe(p.player.split(" ").map(x=>x[0]).slice(0,2).join(""))+'</div>';
+    const qualifying=(p.qualifyingGames||[]).map(g=>'<div class="history"><span>'+safe(g.date?.slice(0,10))+'</span><span>'+safe(g.opponent)+'</span><b>'+g.value+'</b></div>').join("");
+    const recent=(p.history||[]).map(g=>'<div class="history"><span>'+safe(g.date?.slice(0,10))+'</span><span>'+safe(g.opponent)+'</span><b class="'+(g.value>p.line?'gold-value':'')+'">'+g.value+'</b></div>').join("");
+    const defense=Number.isFinite(p.targetDefense)?p.targetDefense.toFixed(1):"Unavailable";
+    return '<article class="scan-card">'+
+      '<div class="scan-top"><div class="scan-identity">'+photo+'<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+'</small><small>'+safe(p.position||"Player")+'</small></div></div><span class="trend-badge">100% HISTORICAL · '+p.matched+'/'+p.sample+'</span></div>'+
+      '<div class="scan-line">RESEARCH OVER <strong>'+p.line+'</strong> '+safe(p.market)+'</div>'+
+      '<div class="scan-stats"><div><strong>'+p.matched+'/'+p.sample+'</strong><small>Qualifying history</small></div><div><strong>'+recentRatio+'</strong><small>Last '+p.recentSample+' OVER</small></div><div><strong>'+defense+'</strong><small>Opponent scoring allowed</small></div></div>'+
+      '<p class="muted">'+safe(p.reason)+'. Every qualifying recorded game exceeded the displayed threshold.</p>'+
+      '<div class="research-label">CALCULATED ALT THRESHOLD • NOT A VERIFIED PRIZEPICKS / SPORTSBOOK OFFER</div>'+
+      '<details><summary>Show the actual historical games</summary><h4>100% qualifying sample</h4>'+qualifying+'<h4>Most recent player appearances</h4>'+recent+'</details></article>';
+  }).join("");
+  const message=all.length>100?'<p class="muted">Showing the first 100 of '+all.length+' results.</p>':"";
+  el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' historical 100% research thresholds. These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
+    (failures.length?'<div class="warning">'+safe(failures.length)+' games or partial data sources could not be analyzed. '+failures.slice(0,5).map(safe).join(" · ")+'</div>':"")+
+    message+'<div class="scan-grid">'+cards+'</div>';
+}
+scanBtn.addEventListener("click",async()=>{
+  const chosen=games.filter(g=>selected.has(g.id));
+  if(!chosen.length){
+    scanProgress.textContent="Select at least one matchup first.";
+    el("scanOutput").innerHTML='<div class="empty">Select one or more games, then press Scan Selected Games.</div>';
+    return;
+  }
+  const sport=current;
+  const date=el("date").value;
+  const league=el("league").value;
+  const mode=el("scanMode").value;
+  const batches=[],failures=[];
+  let completed=0,cursor=0;
+  scanBtn.disabled=true;scanBtn.textContent="Scanning…";
+  el("scanOutput").innerHTML='<div class="empty">Fetching completed-game boxscores for the selected teams. This can take a little time, especially for several games. Results are never invented.</div>';
+  scanProgress.textContent="Scanning 0 of "+chosen.length+" selected games…";
+  async function worker(){
+    while(cursor<chosen.length){
+      const idx=cursor++;
+      const item=chosen[idx];
+      const q=new URLSearchParams({sport,date,gameId:item.id,mode});
+      if(sport==="soccer")q.set("league",league);
+      try{
+        const response=await fetch("/api/scan?"+q);
+        const body=await response.json();
+        if(!response.ok)throw Error(body.details||body.error||"Data source unavailable");
+        batches.push(body);
+        if(body.diagnostics?.boxscoreFailures||body.diagnostics?.defenseFailures){
+          failures.push(safe(item.away.name+" @ "+item.home.name)+": incomplete historical feeds.");
+        }
+      }catch(error){
+        failures.push(item.away.name+" @ "+item.home.name+": "+String(error.message).slice(0,130));
+      }finally{
+        completed++;
+        scanProgress.textContent="Scanned "+completed+" of "+chosen.length+" games · "+batches.reduce((n,b)=>n+(b.results?.length||0),0)+" historical 100% thresholds identified";
+      }
+    }
+  }
+  try{
+    await Promise.all(Array.from({length:Math.min(2,chosen.length)},()=>worker()));
+    if(sport!==current || date!==el("date").value)return;
+    renderAutomaticResults(batches,failures,completed);
+    scanProgress.textContent="Scan completed: "+completed+" games. "+batches.reduce((n,b)=>n+(b.results?.length||0),0)+" historical 100% thresholds found.";
+  }finally{
+    scanBtn.disabled=false;scanBtn.textContent="⚡ Scan Selected Games";
+  }
+});
