@@ -19,7 +19,8 @@ export function seasonOf(game,sport){
   return year;
 }
 function seasonRecord(g,year,sport){
-  const actual=Number.isInteger(Number(g.season))?Number(g.season):seasonOf(g,sport);
+  const actual=g.season!==null&&g.season!==undefined&&Number.isInteger(Number(g.season))
+    ?Number(g.season):seasonOf(g,sport);
   return actual===year;
 }
 const errorText=err=>String(err?.message||err).slice(0,180);
