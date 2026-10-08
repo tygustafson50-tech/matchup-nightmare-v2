@@ -4,6 +4,7 @@ import {combineSeasonBatches,seasonsFor} from "/lib/three-seasons.js";
 import {eligibleCareerPlayers} from "/lib/career-candidates.js";
 import {FIXED_SCAN,INITIAL_FILTERS,getPickOptions,filterPickCards} from "/lib/pick-filters.js";
 import {parseApiResponse} from "/lib/api-client.js";
+import {createEspnSourceClient,loadSeasonFromEspn} from "/lib/season-source.js";
 const sports={
 nfl:{label:"🏈 NFL",markets:["Passing yards","Passing attempts","Completions","Rushing yards","Rushing attempts","Receptions","Receiving yards","Targets"]},
 nba:{label:"🏀 NBA",markets:["Points","Rebounds","Assists","3-pointers","PRA","Steals","Blocks"]},
@@ -250,53 +251,31 @@ scanBtn.addEventListener("click",async()=>{
   const rightPage=()=>sport===current&&date===el("date").value&&
     (sport!=="soccer"||league===el("league").value);
 
+  // Heavy historical parsing now runs on this computer. Each Cloudflare
+  // invocation streams ONE validated ESPN document and stays CPU-light.
+  const sourceClient=createEspnSourceClient({
+    concurrency:3,onProgress:({completed,active})=>{
+      if(rightPage())scanProgress.textContent=
+        "Verifying ESPN documents: "+completed+" received"+
+        (active?" · "+active+" loading":"")+
+        " · Selected games: "+completedGames+"/"+chosen.length;
+    }
+  });
+  let completedGames=0;
   async function requestSeason(game,season){
-    // Cloudflare Free imposes a very small CPU budget per Pages Function.
-    // Each request processes one team, then the browser merges verified
-    // records and position profiles. No invented or averaged results.
-    async function part(side){
-      const q=new URLSearchParams({sport,date,gameId:game.id,mode,
-        historySeason:String(season),focusTeam:side});
-      if(sport==="soccer")q.set("league",league);
-      try{
-        const r=await fetch("/api/scan?"+q,{
-          headers:{Accept:"application/json"}
-        });
-        const payload=await parseApiResponse(r,"/api/scan ("+side+", "+season+")");
-        if(!payload.seasonBatch||payload.focusTeam!==side)
-          throw Error("The "+side+" team's scan did not return a verified season batch.");
-        return payload;
-      }finally{seasonBatchesDone++;}
+    seasonBatchesDone++;
+    try{
+      return await loadSeasonFromEspn({
+        sport,league,game,season,client:sourceClient,
+        onStage:message=>{
+          if(rightPage())scanProgress.textContent=message+
+            " · "+completedGames+"/"+chosen.length+" selected games";
+        }
+      });
+    }catch(error){
+      throw Error("ESPN "+season+" season: "+
+        String(error?.message||error).slice(0,300));
     }
-    const sides=await Promise.allSettled([part("home"),part("away")]);
-    const good=sides.filter(x=>x.status==="fulfilled").map(x=>x.value);
-    const errors=sides.map((x,i)=>x.status==="rejected"
-      ?(i===0?"Home":"Away")+" team: "+String(x.reason?.message||x.reason):null)
-      .filter(Boolean);
-    if(!good.length)throw Error(errors.join(" | ")||
-      "Both Cloudflare historical API requests failed.");
-    const first=good[0];
-    const records={},profiles={},diagnostics={},notes=[];
-    for(const piece of good){
-      Object.assign(records,piece.seasonBatch.records||{});
-      for(const [teamId,details] of Object.entries(piece.seasonBatch.defenseProfiles||{})){
-        profiles[teamId]??={};
-        Object.assign(profiles[teamId],details);
-      }
-      for(const [key,value] of Object.entries(piece.diagnostics||{})){
-        if(typeof value==="number")diagnostics[key]=(diagnostics[key]||0)+value;
-      }
-      notes.push(...(piece.notes||[]));
-    }
-    if(errors.length)notes.push("Partial historical season: "+errors.join(" | "));
-    return {
-      ...first,notes,diagnostics,
-      completeTeamSides:good.length,
-      seasonBatch:{
-        ...first.seasonBatch,teams:first.seasonBatch.teams,
-        records,defenseProfiles:profiles
-      }
-    };
   }
   async function requestCareer(state,player,season){
     const game=state.game;
@@ -400,6 +379,7 @@ scanBtn.addEventListener("click",async()=>{
         failures.push(title+": "+String(error.message).slice(0,150));
       }finally{
         completed++;
+        completedGames=completed;
         scanProgress.textContent="Selected games analyzed: "+completed+"/"+chosen.length+
           " · Cross-team career lookups completed: "+careerBatchesDone;
       }
