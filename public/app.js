@@ -66,7 +66,11 @@ function historyBlock(label,games,line,similar=false){
     '<div class="game-log-header" role="row"><span>Date</span><span>Opponent</span>'+
     '<span>Recorded stat</span><span>Result</span></div>'+
     games.map(g=>outcomeCell(g,line)+(similar?
-      '<div class="game-log-method">Similarity: '+safe(g.similarity)+"% · "+
+      '<div class="game-log-method">'+
+      (g.rankLane
+        ?'Verified '+safe(g.rankLane)+' defense ranks: historical #'+
+          safe(g.historicalRank)+' vs upcoming #'+safe(g.targetRank)+' · '
+        :'Similarity: '+safe(g.similarity)+'% · ')+
       safe(g.defenseReason)+'</div>':'')).join("")+'</div></details>';
 }
 function hitText(x){return x.tracked?x.hits+"/"+x.tracked+
@@ -92,6 +96,12 @@ function renderCard(c){
     (archived?'<p class="sample-warning">Previously saved research from '+
       safe(kickoff(c.cachedAt))+
       '. The price, line and player availability have NOT been reverified. Do not treat this as an active sportsbook offer.</p>':'')+
+    (c.defenseMatchMethod?.includes("rank")
+      ?'<p class="season-evidence">NFL defensive matchup: '+
+        safe(c.defenseMatchMethod)+
+        ' · Upcoming opponent rank: '+safe(c.upcomingDefenseRank??
+          "not verified")+
+        ' (1 = fewest yards allowed). Historical opponent ranks are season aggregates, not necessarily pregame rankings.</p>':'')+
     '<p class="season-evidence">Original book quote last updated '+safe(kickoff(c.quotedAt))+
       ' · Selected from '+safe(c.quotesConsidered||1)+' real sportsbook line(s)'+
       ' · Three-season window '+safe(c.seasonWindow.join(" / "))+'</p>'+
