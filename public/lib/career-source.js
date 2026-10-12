@@ -8,7 +8,7 @@ import {
 } from "./auto-scan.js";
 import {parseCareerEventRefs,athleteCareerAppearance} from "./career-history.js";
 
-const MAX_EXTRA_GAME_IDS=8,MAX_DEFENSIVE_OPPONENTS=4;
+const MAX_EXTRA_GAME_IDS=14,MAX_DEFENSIVE_OPPONENTS=12;
 const asText=e=>String(e?.message||e).slice(0,150);
 export async function loadCareerFromEspn({
   client,sport,league="eng.1",game,player,season,knownIds=[]
