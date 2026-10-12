@@ -1,10 +1,11 @@
 import {CONFIG,matchupRole} from "./auto-scan.js";
+import {playingTimeEligibility} from "./participation.js";
 
 /** Rank CURRENT-season athletes for bounded automatic career enrichment.
  * This only controls which career lookbacks load first; low-volume players
  * remain eligible for a later on-demand history expansion.
  */
-export function eligibleCareerPlayers(currentBatch,sport,maxPerTeam=6){
+export function eligibleCareerPlayers(currentBatch,sport,maxPerTeam=6,strict=false){
   const teams=currentBatch?.seasonBatch?.teams||[];
   const records=currentBatch?.seasonBatch?.records||{};
   const output=[],remaining=[];
@@ -12,7 +13,7 @@ export function eligibleCareerPlayers(currentBatch,sport,maxPerTeam=6){
   if(!markets.length)return {prioritized:[],remaining:[],total:0};
   for(const team of teams){
     const games=[...(records[team.id]||[])].filter(r=>Array.isArray(r.players))
-      .sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,3);
+      .sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,5);
     const players=new Map();
     for(const g of games){
       for(const athlete of g.players){
@@ -23,9 +24,10 @@ export function eligibleCareerPlayers(currentBatch,sport,maxPerTeam=6){
           Number.isFinite(athlete.stats?.[stat])&&athlete.stats[stat]>=min);
         if(!valid.length)continue;
         const existing=players.get(id)||{playerId:id,teamId:String(team.id),
-          name:athlete.name||"Player",appearances:0,markets:new Set(),
+          name:athlete.name||"Player",appearances:0,observations:[],markets:new Set(),
           maxStatStrength:0};
         existing.appearances++;
+        existing.observations.push(athlete);
         for(const [stat,,min] of valid){
           existing.markets.add(stat);
           existing.maxStatStrength=Math.max(existing.maxStatStrength,
@@ -34,7 +36,9 @@ export function eligibleCareerPlayers(currentBatch,sport,maxPerTeam=6){
         players.set(id,existing);
       }
     }
-    const ranked=[...players.values()].sort((a,b)=>
+    const ranked=[...players.values()]
+      .filter(p=>!strict||playingTimeEligibility(p.observations,sport).eligible)
+      .sort((a,b)=>
       b.appearances-a.appearances||
       b.markets.size-a.markets.size||
       b.maxStatStrength-a.maxStatStrength||
