@@ -97,8 +97,8 @@ export function combineSeasonBatches(responses,{
     if(d.offenseSchedules<2)warnings.push(year+": one or more team schedules unavailable.");
     if(d.missingOffenseBoxscores||d.missingDefenseBoxscores)
       warnings.push(year+": some historical player/defense boxscores were unavailable.");
-    if(d.upstreamRequests>=46)
-      warnings.push(year+": source request cap reached; historical coverage is partial.");
+    // Browser mode proxies each ESPN source through a separate Pages request.
+    // Total scanned documents are not a per-worker 46-request cap.
   }
   if(missingBoxscores)warnings.push("Missing source boxscores were excluded, never changed to zero.");
 
