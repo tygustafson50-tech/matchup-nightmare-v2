@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {analyzeVerifiedProp,buildDefensiveCohorts,hitSummary,
   resultAtLine,seasonWindow,positionGroup,rankEvidence} from "../public/lib/research-v3.js";
+import {supportsMarket} from "../public/lib/research-v3.js";
 import {playersFromBoxscore,gamelogEvents,concededAgainstPosition} from "../public/lib/evidence-client-v3.js";
 
 const sourceDate=new Date().toISOString();
@@ -135,7 +136,9 @@ test("ESPN G/F basketball roles resolve to actual guard/forward groups",()=>{
   for(const pos of ["G","PG","SG","Guard","Point Guard"])
     assert.equal(positionGroup("ncaab",pos),"G",pos);
   for(const pos of ["F","SF","PF","Forward"])
-    assert.equal(positionGroup("nba",pos),"F",pos);
+    assert.equal(positionGroup("ncaab",pos),"F",pos);
+  assert.equal(positionGroup("nba","PG"),"PG");
+  assert.equal(positionGroup("nba","SF"),"SF");
   assert.equal(positionGroup("nba","C"),"C");
   for(const stat of ["points","assists","rebounds","threes"])
     assert.equal(supportsMarket("ncaab","G",stat),true,stat);
