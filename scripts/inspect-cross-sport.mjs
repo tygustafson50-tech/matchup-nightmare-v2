@@ -34,3 +34,27 @@ for(const [sport,path,date] of cases){
  }).slice(0,8500));
  }catch(e){console.log("ERR "+sport+" "+date+" "+String(e).slice(0,400))}
 }
+
+for(const league of ["usa.1","eng.1"]){
+ try{
+ const board=await get(base+"soccer/"+league+"/scoreboard?dates=20261010&limit=100");
+ const game=board.events?.[0];
+ if(!game){console.log("SOCCERDEEP "+league+" no game");continue;}
+ const summary=await get(base+"soccer/"+league+"/summary?event="+game.id);
+ const box=summary.boxscore||{},rosters=summary.rosters||{};
+ const firstTeam=game.competitions?.[0]?.competitors?.[0]?.team;
+ const roster=await get(base+"soccer/"+league+"/teams/"+firstTeam.id+"/roster?season=2026");
+ const athlete=(roster.athletes||[])[0];
+ const athleteId=athlete?.id;
+ const log=athleteId?await get(web+"soccer/"+league+"/athletes/"+athleteId+"/gamelog?season=2026"):null;
+ console.log("SOCCERDEEP "+JSON.stringify({league,game:game.id,
+  summaryKeys:Object.keys(summary),boxKeys:Object.keys(box),
+  boxSummary:JSON.stringify(box).slice(0,2500),
+  rosterKeys:Object.keys(rosters),rosterSample:JSON.stringify(rosters).slice(0,2600),
+  lineupSample:JSON.stringify(summary.lineups||summary.rosters||summary.players||{}).slice(0,2500),
+  firstAthlete:athlete&&{id:athlete.id,name:athlete.fullName,position:athlete.position,
+   statsKeys:Object.keys(athlete.statistics||{})},
+  athleteLogKeys:Object.keys(log||{}),athleteLogSample:JSON.stringify(log).slice(0,1200)
+ }).slice(0,10500));
+ }catch(e){console.log("SOCCERDEEP ERROR "+league+" "+String(e).slice(0,500))}
+}
