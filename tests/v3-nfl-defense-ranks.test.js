@@ -113,7 +113,10 @@ test("NFL UI shows defense ranks and clearly labels season aggregate look-ahead"
   // analyzer silently uses the old incompatible defensive cohort algorithm
   // and displays zero verified NFL similar-defense games.
   assert.match(app,/matchupModel:input\.matchupModel/);
-  assert.match(app,/historicalRank/);
+  const history=readFileSync(new URL("../public/lib/verified-history-ui.js",
+    import.meta.url),"utf8");
+  assert.match(history,/historicalRank/);
+  assert.match(history,/verified-actual-number/);
   assert.match(app,/upcomingDefenseRank/);
   assert.match(app,/not necessarily pregame rankings/);
 });
