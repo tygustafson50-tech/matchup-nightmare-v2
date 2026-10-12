@@ -84,18 +84,27 @@ function readFixtureFilter(raw){
     return {fixtures};
   }catch{return {error:"Invalid selected fixture data."};}
 }
-function sameTeam(a,b){
+function sameTeam(a,b,sport){
   const x=teamNorm(a),y=teamNorm(b);
-  // An abbreviated ESPN location may differ. Require an 8-character
-  // common suffix (not just e.g. "Tigers") to avoid mixing college teams.
-  return x===y||x.length>=8&&y.length>=8&&
-    (x.endsWith(y)||y.endsWith(x));
+  if(!x||!y)return false;
+  if(x===y||x.length>=8&&y.length>=8&&
+    (x.endsWith(y)||y.endsWith(x)))return true;
+  // Professional US teams have unique mascot names *within the sport*.
+  // ESPN may say "LA Lakers", DraftKings "Los Angeles Lakers".
+  if(["nfl","nba","mlb"].includes(sport)){
+    const last=x=>String(x||"").toLowerCase().trim()
+      .split(/[^a-z0-9]+/).filter(Boolean).at(-1)||"";
+    const m=last(a),n=last(b);
+    return m.length>=4&&m===n;
+  }
+  // No mascot-only matching for NCAA: many Tigers and Bulldogs.
+  return false;
 }
-function matchesRequestedEvent(event,fixture){
+function matchesRequestedEvent(event,fixture,sport){
   if(fixture.all)return true; // Compatibility with old direct API clients.
   if(event.espn_event_id&&String(event.espn_event_id)===fixture.id)return true;
-  return sameTeam(event.home_team,fixture.home)&&
-    sameTeam(event.away_team,fixture.away);
+  return sameTeam(event.home_team,fixture.home,sport)&&
+    sameTeam(event.away_team,fixture.away,sport);
 }
 
 // Intentionally omit DFS, exchanges, prediction markets and synthetic pick-'em pricing.
@@ -202,6 +211,9 @@ export async function onRequestGet({request,env={}}){
   if(!CHOICES[sport]||!validDate(date)||
      sport==="soccer"&&!SOCCER[league])
     return reply({status:"invalid-request",error:"Valid sport, league and date required."},400);
+    const requested=readFixtureFilter(q.get("fixtures"));
+    if(requested.error)
+      return reply({status:"invalid-request",error:requested.error},400);
   if(!str(env.PROPLINE_API_KEY))
     return reply({status:"integration-required",source:"PropLine",projections:[],
       error:"PropLine API key not connected. Get a free key at prop-line.com and add PROPLINE_API_KEY as a Cloudflare Pages secret."},503);
@@ -226,13 +238,10 @@ export async function onRequestGet({request,env={}}){
       env.PROPLINE_API_KEY);
     if(!Array.isArray(eventList.body))
       throw Error("PropLine did not return a verified event list.");
-    const requested=readFixtureFilter(q.get("fixtures"));
-    if(requested.error)
-      return reply({status:"invalid-request",error:requested.error},400);
     const today=eventList.body.filter(e=>e?.id&&
       Number.isFinite(Date.parse(e.commence_time))&&
       dateCentral(e.commence_time)===date&&
-      requested.fixtures.some(f=>matchesRequestedEvent(e,f)));
+      requested.fixtures.some(f=>matchesRequestedEvent(e,f,sport)));
     const MAX_EVENTS=16;
     const candidates=today.slice(0,MAX_EVENTS);
     const eventOdds=await Promise.allSettled(candidates.map(e=>
