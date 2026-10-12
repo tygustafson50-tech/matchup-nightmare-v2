@@ -46,3 +46,21 @@ for(const teamId of ["14","2"]){
    subgroups:d.groups?.slice(0,2)
  }).slice(0,5000))
 }
+
+const {gamelogEvents,playersFromBoxscore,loadVerifiedEvidence}=await import("../public/lib/evidence-client-v3.js");
+const {analyzeVerifiedProp}=await import("../public/lib/research-v3.js");
+for(const [player,id,team,stat] of [["Matthew Stafford","12483","14","passingYards"],
+  ["Josh Allen","3918298","2","passingYards"]]){
+ const raw=await (await fetch(base+id+"/gamelog?season=2026")).json();
+ const events=gamelogEvents(raw,2026,"2026-10-14T00:00:00Z");
+ const first=events[0];
+ const box=first?await (await fetch(esBase+"summary?event="+first.id)).json():null;
+ const athlete=box?playersFromBoxscore(box,"nfl",team).find(p=>p.id===id):null;
+ console.log("PIPELINE",JSON.stringify({
+  player,year:2026,totalEvents:Object.keys(raw.events||{}).length,
+  selectedEvents:events.length,first:first&&{id:first.id,date:first.date},
+  boxScoreTeams:box?.boxscore?.players?.map(x=>x.team?.id),
+  foundPlayer:Boolean(athlete),actualPassingYards:athlete?.stats?.passingYards,
+  statFields:athlete?Object.keys(athlete.stats):[]
+ }));
+}
