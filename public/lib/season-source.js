@@ -232,7 +232,8 @@ export async function loadSeasonFromEspn({
         }
         return {id:String(g.id),date:g.date,season:year,
           opponent:g.opponent,opponentId:String(g.opponentId),
-          playedTeamId:team.id,playedTeamName:team.name,players};
+          playedTeamId:team.id,playedTeamName:team.name,
+           league:sport==="soccer"?league:null,players};
       });
   }
   if(diagnostics.missingOffenseBoxscores||diagnostics.missingDefenseBoxscores)
