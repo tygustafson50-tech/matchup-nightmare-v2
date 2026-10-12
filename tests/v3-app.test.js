@@ -104,3 +104,43 @@ test("quota fallback is wired into the real scan and quote-refresh paths",()=>{
   assert.match(app,/quotaPaused/);
   assert.match(app,/c\.cachedAt/);
 });
+
+test("live MLB ESPN boxscore with no group name resolves hitters and pitchers",()=>{
+  const summary={boxscore:{players:[
+    {team:{id:"1"},statistics:[
+      {labels:["H-AB","AB","R","H","RBI","HR","BB","K","#P","AVG"],
+        athletes:[{athlete:{id:"11",displayName:"Real Hitter",
+          position:{abbreviation:"LF"}},stats:["2-4","4","1","2","0","0","1","0","12",".300"]}]},
+      {labels:["IP","H","R","ER","BB","K","HR","PC-ST","ERA"],
+        athletes:[{athlete:{id:"12",displayName:"Real Pitcher",
+          position:{abbreviation:"SP"}},stats:["5.2","4","2","2","1","8","0","100-66","2.20"]}]}
+    ]},
+    {team:{id:"2"},statistics:[]}
+  ]}};
+  const got=playersFromBoxscore(summary,"mlb","1");
+  const hitter=got.find(x=>x.id==="11"),pitcher=got.find(x=>x.id==="12");
+  assert.equal(hitter.stats.hits,2);
+  assert.equal(hitter.stats.runs,1);
+  assert.equal(hitter.stats.atBats,4);
+  assert.equal(pitcher.stats.pitcherKs,8);
+  assert.equal(pitcher.stats.pitchingOuts,17);
+});
+
+test("real NBA generic G/F boxscore roles match verified PG or SG defensive samples",()=>{
+  const summary={boxscore:{players:[
+    {team:{id:"1"},statistics:[{labels:["MIN","PTS","FG","3PT","FT","REB","AST","TO","STL","BLK","OREB","DREB","PF"],
+      athletes:[
+        {athlete:{id:"11",displayName:"Guard",position:{abbreviation:"G"}},
+          stats:["25","23","9-18","2-5","3-3","3","7","2","1","0","0","3","2"]},
+        {athlete:{id:"12",displayName:"Forward",position:{abbreviation:"F"}},
+          stats:["29","15","5-12","1-3","4-5","7","3","1","0","1","2","5","1"]}
+      ]}]},
+    {team:{id:"2"},statistics:[]}
+  ]}};
+  const guards=concededAgainstPosition(summary,{sport:"nba",defenseId:"2",
+    role:"PG",stat:"points"});
+  assert.deepEqual(guards,{allowed:23,volume:18});
+  const points=playersFromBoxscore(summary,"nba","1");
+  assert.equal(points.find(x=>x.id==="11").stats.assists,7);
+  assert.equal(points.find(x=>x.id==="12").stats.rebounds,7);
+});
