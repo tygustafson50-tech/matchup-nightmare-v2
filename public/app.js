@@ -75,12 +75,14 @@ function renderCard(c){
     '<div class="scan-top"><div class="scan-identity">'+
       '<div class="player-initial">'+safe(c.player.split(" ").map(v=>v[0]).slice(0,2).join(""))+'</div>'+
       '<div><strong>'+safe(c.player)+'</strong><small>'+safe(c.team)+' vs '+safe(c.opponent)+'</small>'+
-      '<small>'+safe(c.position)+" · "+safe(c.variant==="alternative"?"ALT PropLine":"Standard PropLine")+
+      '<small>'+safe(c.position)+" · "+safe(c.book)+" · "+safe(c.variant==="alternative"?"ALT":c.variant==="standard"?"Main":"Quoted")+
       '</small></div></div>'+
       '<span class="trend-badge'+(rec?'':' trend-unverified')+'">'+
         (rec?"OVER supported":"INSUFFICIENT / MIXED EVIDENCE")+'</span></div>'+
-    '<div class="scan-line">VERIFIED PROPLINE '+safe(c.variant==="alternative"?"ALT":"STANDARD")+
-      ' PROJECTION: <strong>'+safe(c.line)+'</strong> '+safe(c.market)+'</div>'+
+    '<div class="scan-line">PROPLINE VERIFIED OVER LINE: <strong>'+safe(c.line)+
+      '</strong> '+safe(c.market)+
+      (Number.isFinite(c.price)?' · '+safe(c.price>0?'+':'')+safe(c.price):'')+
+      ' · '+safe(c.book)+'</div>'+
     '<p class="season-evidence">Book quote last updated '+safe(kickoff(c.quotedAt))+
       ' · Three-season window '+safe(c.seasonWindow.join(" / "))+'</p>'+
     '<div class="scan-stats">'+
@@ -170,7 +172,7 @@ async function scan(){
     const feed=await response.json();
     if(own!==scanId)return;
     if(!response.ok||feed.status!=="connected"){
-      el("scanOutput").innerHTML='<div class="warning"><strong>PropLine integration unavailable</strong>'+
+      el("scanOutput").innerHTML='<div class="warning"><strong>PropLine integration not connected</strong>'+
         '<p>'+safe(feed.error||"A PropLine API key is required. No fabricated lines will be generated.")+
         '</p><p>Current projections cannot be verified. Get a free key at prop-line.com/pricing, then add PROPLINE_API_KEY to Cloudflare Pages secrets. Historical research never substitutes made-up lines.</p></div>';
       status("No verified PropLine lines. Scanner safely stopped.");
@@ -186,7 +188,7 @@ async function scan(){
     watchedQuotes={sport:currentSport,date:day,league,
       offers:new Map(chosenPairs.map(({offer})=>[offer.id,
         {line:offer.line,status:offer.status,variant:offer.variant,price:offer.price}]))};
-    const preface='<p class="season-evidence">PropLine lines last verified: '+
+    const preface='<p class="season-evidence">PropLine sportsbook odds retrieved: '+
       safe(feed.sourceFetchedAt)+" · "+chosenPairs.length+
       ' active sportsbook OVER lines for selected games · Changes: '+
       safe(feed.changeTracking==="verified"?feed.changes.length+" tracked":
