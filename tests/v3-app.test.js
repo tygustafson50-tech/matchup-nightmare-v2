@@ -93,3 +93,14 @@ test("official PropLine shortcut opens externally without implying live projecti
   assert.match(html,/rel="noopener noreferrer"/);
   assert.match(html,/Get your own API key/);
 });
+
+test("quota fallback is wired into the real scan and quote-refresh paths",()=>{
+  assert.match(app,/import \{saveCompletedScan,readLastScan\}/);
+  assert.match(app,/if\(response\.status===429\|\|feed\.status==="rate-limited"\)/);
+  assert.match(app,/showSavedScan\(\{chosen,day,league,currentSport/);
+  assert.match(app,/saveCompletedScan\(\{sport:currentSport,date:day,league/);
+  assert.match(app,/LAST SAVED SCAN — NOT LIVE/);
+  assert.match(app,/LAST SAVED DRAFTKINGS OVER LINE/);
+  assert.match(app,/quotaPaused/);
+  assert.match(app,/c\.cachedAt/);
+});

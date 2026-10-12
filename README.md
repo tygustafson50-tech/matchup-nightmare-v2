@@ -40,3 +40,35 @@ Run `npm test` in Node 20+ for source-line, coverage, API-secret, date/fixture, 
 ## One sportsbook, one card per player/stat
 
 PropLine remains the API provider, but only actual **DraftKings** OVER quotes are used. Other bookmakers are ignored, even when their markets are available. Main and alternative DraftKings lines for the same athlete, game, and exact statistic are evaluated against the same verified historical results; only one strongest-evidenced quote is displayed. The chosen quote still has its real sportsbook line and price. A second canonical fixture/ESPN athlete-ID check prevents alternate markets with different source event IDs from producing duplicates. Missing DraftKings prices must remain missing; no substitute or invented line from another book is allowed.
+
+## When the free PropLine request limit is reached
+
+After a **successful** scan, the app automatically saves completed player-prop
+research for each selected *upcoming* game in the same browser's local storage.
+This includes the exact previously sourced DraftKings quotes, recorded game
+samples, calculated hit rates, and original timestamps.
+
+If PropLine responds with HTTP **429 / rate-limited**, or signals zero free
+requests remaining, Matchup Nightmare does not invent replacement lines.
+It automatically reopens the last saved scan for the **same sport, league,
+calendar date, and game ID**, with an obvious **LAST SAVED SCAN — NOT LIVE**
+warning. It labels each saved quote with the old bookmaker timestamp and
+original scan time; an old OVER research suggestion is presented as
+**previously supported**, not a currently tradable/bookable quote. A player
+stat still has exactly one card.
+
+No saved scan for another match/date will be used, and previous odds will no
+longer appear after the game's scheduled start or seven days after saving,
+whichever comes first. If only some selected games were previously scanned,
+results appear only for those games and the missing games are disclosed.
+If there is no compatible saved scan, the app clearly reports that condition
+instead of manufacturing lines. The app avoids repeated provider calls after
+detecting exhaustion; reload the page after your quota resets to attempt
+fresh quotes again.
+
+**Important**: Saving takes effect only **after this update** and only if
+at least one completed research card was produced before the free quota
+ran out. The cache lives in that browser/device, not your PropLine account.
+Private browsing, clearing website data, browser storage restrictions, or
+changing devices can make it unavailable. This does not bypass API quotas
+or guarantee an unchanged sportsbook line.
