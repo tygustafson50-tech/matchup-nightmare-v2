@@ -7,6 +7,7 @@ import {analyzeVerifiedProp,rankEvidence} from "/lib/research-v3.js";
 import {makeEvidenceClient,loadVerifiedEvidence} from "/lib/evidence-client-v3.js";
 import {groupOffersByPlayerStat,selectBestOverCard,dedupeVerifiedCards}
   from "/lib/one-line-per-stat.js";
+import {saveCompletedScan,readLastScan} from "/lib/last-scan-cache.js";
 const SPORTS={
   nfl:"🏈 NFL",nba:"🏀 NBA",mlb:"⚾ MLB",
   ncaaf:"🏈 College Football",ncaab:"🏀 College Basketball",
@@ -29,7 +30,7 @@ const kickoff=s=>{try{return new Intl.DateTimeFormat("en-US",{
 const normalize=s=>String(s||"").normalize("NFKD")
   .replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
 let sport="nfl",games=[],selected=new Set(),cards=[],scanId=0,visibleLimit=24;
-let watchedQuotes=null,watchBusy=false;
+let watchedQuotes=null,watchBusy=false,quotaPaused=false;
 function status(message){el("scanProgress").textContent=message;}
 function clearResults(){
   cards=[];watchedQuotes=null;visibleLimit=24;el("pickFilters").hidden=true;
@@ -71,6 +72,7 @@ function historyBlock(label,games,line,similar=false){
 function hitText(x){return x.tracked?x.hits+"/"+x.tracked+
   " — "+x.percent+"%":"Not verified (0 games)";}
 function renderCard(c){
+  const archived=Boolean(c.cachedAt);
   const rec=c.recommendation==="OVER";
   const total=c.similar.tracked;
   return '<article class="scan-card">'+
@@ -79,13 +81,18 @@ function renderCard(c){
       '<div><strong>'+safe(c.player)+'</strong><small>'+safe(c.team)+' vs '+safe(c.opponent)+'</small>'+
       '<small>'+safe(c.position)+" · "+safe(c.book)+" · "+safe(c.variant==="alternative"?"ALT":c.variant==="standard"?"Main":"Quoted")+
       '</small></div></div>'+
-      '<span class="trend-badge'+(rec?'':' trend-unverified')+'">'+
-        (rec?"OVER supported":"INSUFFICIENT / MIXED EVIDENCE")+'</span></div>'+
-    '<div class="scan-line">PROPLINE VERIFIED OVER LINE: <strong>'+safe(c.line)+
+      '<span class="trend-badge'+((!rec||archived)?' trend-unverified':'')+'">'+
+        (archived?"SAVED SCAN — NOT LIVE":rec?"OVER supported":
+          "INSUFFICIENT / MIXED EVIDENCE")+'</span></div>'+
+    '<div class="scan-line">'+(archived?"LAST SAVED DRAFTKINGS OVER LINE: ":
+      "PROPLINE VERIFIED OVER LINE: ")+'<strong>'+safe(c.line)+
       '</strong> '+safe(c.market)+
       (Number.isFinite(c.price)?' · '+safe(c.price>0?'+':'')+safe(c.price):'')+
       ' · '+safe(c.book)+'</div>'+
-    '<p class="season-evidence">Book quote last updated '+safe(kickoff(c.quotedAt))+
+    (archived?'<p class="sample-warning">Previously saved research from '+
+      safe(kickoff(c.cachedAt))+
+      '. The price, line and player availability have NOT been reverified. Do not treat this as an active sportsbook offer.</p>':'')+
+    '<p class="season-evidence">Original book quote last updated '+safe(kickoff(c.quotedAt))+
       ' · Selected from '+safe(c.quotesConsidered||1)+' real sportsbook line(s)'+
       ' · Three-season window '+safe(c.seasonWindow.join(" / "))+'</p>'+
     '<div class="scan-stats">'+
@@ -93,7 +100,11 @@ function renderCard(c){
       '<div><strong>'+safe(hitText(c.similar))+'</strong><small>Similar defenses — three seasons</small></div>'+
       '<div><strong>'+safe(total)+'</strong><small>Verified qualifying historical matchups</small></div>'+
     '</div>'+
-    '<p class="muted matchup-rationale">'+(rec?"Recommendation: OVER "+safe(c.line)+" "+safe(c.market)+". ":"No OVER recommendation. ")+
+    '<p class="muted matchup-rationale">'+(archived
+      ?(rec?"Previously supported OVER "+safe(c.line)+" "+safe(c.market)+
+        ". Recheck live availability before using. ":"Previously insufficient evidence; cached scan only. ")
+      :rec?"Recommendation: OVER "+safe(c.line)+" "+safe(c.market)+". ":
+        "No OVER recommendation. ")+
       safe(c.why)+'</p>'+
     historyBlock("Recent Games — Current Season",c.recentGames,c.line)+
     historyBlock("Similar Defenses — Last 3 Seasons",c.similarGames,c.line,true)+
@@ -155,6 +166,49 @@ async function loadGames(){
   }
   drawGames();
 }
+function scanStorage(){
+  try{return window.localStorage;}catch{return null;}
+}
+function showSavedScan({chosen,day,league,currentSport,reason}){
+  quotaPaused=true;
+  const saved=readLastScan({sport:currentSport,date:day,league,
+    games:chosen},scanStorage());
+  watchedQuotes=null;
+  if(!saved.cards.length){
+    el("scanOutput").innerHTML='<div class="warning"><strong>PropLine free quota reached</strong>'+
+      '<p>'+safe(reason)+
+      '</p><p>No previous completed scan is saved in this browser for the selected upcoming game(s). Run a successful scan after the quota resets to create one. No substitute lines were generated.</p></div>';
+    status("Quota exhausted; no compatible last scan saved on this device.");
+    return;
+  }
+  cards=rankEvidence(dedupeVerifiedCards(saved.cards));
+  // A second canonical fixture and athlete check applies to archived
+  // research exactly as it does to fresh research.
+  const seen=new Set();
+  cards=cards.filter(c=>{
+    const key=[c.sport,c.fixtureId,
+      c.offer?.espnPlayerId||normalize(c.player),c.stat].join("|");
+    if(seen.has(key))return false;seen.add(key);return true;
+  });
+  el("pickFilters").hidden=!cards.length;
+  if(cards.length){
+    const unique=a=>[...new Set(a)].sort();
+    setOptions("filterMarket",unique(cards.map(c=>c.market)),"All stats");
+    setOptions("filterTeam",unique(cards.map(c=>c.team)),"All teams");
+    setOptions("filterPosition",unique(cards.map(c=>c.position)),"All positions");
+  }
+  el("scanOutput").innerHTML='<div class="warning"><strong>LAST SAVED SCAN — NOT LIVE</strong>'+
+    '<p>'+safe(reason)+
+    '</p><p>Showing '+cards.length+' previously researched player/stat cards from '+
+    safe(kickoff(saved.oldestSavedAt))+
+    '. These odds and player statuses may have changed. '+
+    (saved.missing.length?'No saved results for '+saved.missing.length+
+      ' selected game(s). ':'')+
+    'Historical percentages are from the saved scan, not new data.</p></div>'+
+    (cards.length?'<div id="pickCardMount"></div>':'');
+  if(cards.length)renderCards();
+  status("Using last completed scan (not live) — PropLine quota exhausted.");
+}
 function fixtureMatches(offer,game){
   const a=normalize(game.away.name),h=normalize(game.home.name);
   const sameEvent=offer.gameId && String(offer.gameId)===String(game.id);
@@ -174,6 +228,11 @@ async function scan(){
       {headers:{Accept:"application/json"},cache:"no-store"});
     const feed=await response.json();
     if(own!==scanId)return;
+    if(response.status===429||feed.status==="rate-limited"){
+      showSavedScan({chosen,day,league,currentSport,
+        reason:"PropLine has reached its request limit. Showing only saved research where available."});
+      return;
+    }
     if(!response.ok||feed.status!=="connected"){
       el("scanOutput").innerHTML='<div class="warning"><strong>PropLine integration not connected</strong>'+
         '<p>'+safe(feed.error||"A PropLine API key is required. No fabricated lines will be generated.")+
@@ -181,6 +240,8 @@ async function scan(){
       status("No verified PropLine lines. Scanner safely stopped.");
       return;
     }
+    quotaPaused=Number(feed.dailyRequestsRemaining)===0 &&
+      feed.dailyRequestsRemaining!==null;
     const chosenPairs=[];
     const rejected=[];
     for(const offer of feed.projections||[]){
@@ -283,7 +344,15 @@ async function scan(){
       (cards.length?'<div id="pickCardMount"></div>':
         '<div class="empty">No verifiable historical evidence was available for the returned DraftKings lines. No placeholders were generated.</div>');
     if(cards.length)renderCards();
-    status("Evidence scan finished. Every displayed line came from the verified PropLine feed.");
+    const saved=saveCompletedScan({sport:currentSport,date:day,league,
+      games:chosen,cards},scanStorage());
+    if(saved.failed)status("Scan finished. Browser couldn't save "+
+      saved.failed+" game(s); check available local storage.");
+    else if(saved.saved)status("Scan finished and last successful scan saved for "+
+      saved.saved+" game(s). "+(quotaPaused?
+      "PropLine quota is empty; saved scan will be used next time.":""));
+    else status("Scan finished, but no complete player cards could be saved for this matchup.");
+
   }catch(e){
     if(own!==scanId)return;
     el("scanOutput").innerHTML='<div class="error">Source validation failed: '+
@@ -297,7 +366,7 @@ async function scan(){
 // changes a quote, discard old evidence and force a new source-verified scan.
 setInterval(async()=>{
   const snapshot=watchedQuotes;
-  if(!snapshot||watchBusy||document.visibilityState==="hidden")return;
+  if(!snapshot||watchBusy||quotaPaused||document.visibilityState==="hidden")return;
   watchBusy=true;
   try{
     const response=await fetch("/api/lines?"+new URLSearchParams({
@@ -305,10 +374,18 @@ setInterval(async()=>{
     }),{cache:"no-store"});
     const feed=await response.json();
     if(snapshot!==watchedQuotes)return;
+    if(response.status===429||feed.status==="rate-limited"){
+      showSavedScan({chosen:games.filter(g=>selected.has(String(g.id))),
+        day:snapshot.date,league:snapshot.league,currentSport:snapshot.sport,
+        reason:"PropLine ran out of free API requests during its quote refresh."});
+      return;
+    }
     if(!response.ok||feed.status!=="connected"){
       clearResults();status("PropLine quote verification expired or became unavailable. Rescan after reconnecting.");
       return;
     }
+    if(feed.dailyRequestsRemaining!==null&&
+      Number(feed.dailyRequestsRemaining)===0)quotaPaused=true;
     const latest=new Map(feed.projections.map(p=>[p.id,p]));
     for(const [id,old] of snapshot.offers){
       const current=latest.get(id);
