@@ -349,6 +349,7 @@ export function priorGames(schedule,teamId,beforeDate,limit=7){
     if(!opp?.team?.id&&!opp?.id)return [];
     return [{
       id:String(e.id),date:e.date,season:e.season?.year??null,
+       week:e.week?.number??e.competitions?.[0]?.week?.number??null,
       opponentId:String(opp.team?.id||opp.id),
       opponent:opp.team?.displayName||opp.team?.name||"Opponent",
       teams
