@@ -114,7 +114,8 @@ test("DraftKings only: exclude FanDuel even on a valid selected match",async()=>
 });
 test("selected fixtures: never spend free API requests on games not selected",async()=>{
   const a=event({id:"10"});
-  const b=event({id:"11",home:"New York Jets",away:"New England Patriots"});
+  const b={...event({id:"11",home:"New York Jets",away:"New England Patriots"}),
+    espn_event_id:"401999112"};
   const {response,hits}=await call({odds:[a,b],request:req("nfl",[
     {id:"401999111",home:"Los Angeles Rams",away:"Buffalo Bills"}
   ])});
