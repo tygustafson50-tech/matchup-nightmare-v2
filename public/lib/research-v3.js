@@ -41,7 +41,7 @@ export function positionGroup(sport,position){
     if(["F","FW","ST","CF","LW","RW","FORWARD"].includes(p))return "F";
     if(["M","MF","CM","CDM","CAM","MIDFIELDER"].includes(p))return "M";
     if(["D","DF","CB","LB","RB","DEFENDER"].includes(p))return "D";
-    if(["GK","GOALKEEPER"].includes(p))return "GK";
+    if(["G","GK","GOALKEEPER"].includes(p))return "GK";
   }
   return null;
 }
