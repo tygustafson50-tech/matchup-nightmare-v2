@@ -21,10 +21,17 @@ export function positionGroup(sport,position){
     if(["TE","TIGHTEND"].includes(p))return "TE";
   }
   if(BASKETBALL.has(sport)){
-    const keys=["PG","SG","SF","PF","C"];
-    if(keys.includes(p))return p;
-    return ({POINTGUARD:"PG",SHOOTINGGUARD:"SG",SMALLFORWARD:"SF",
-      POWERFORWARD:"PF",CENTER:"C"})[p]||null;
+    // Preserve NBA's five verified position groups. NCAA team feeds often
+    // only specify generic Guard or Forward: use the real G/F grouping.
+    const specific={PG:"PG",SG:"SG",SF:"SF",PF:"PF",C:"C",
+      POINTGUARD:"PG",SHOOTINGGUARD:"SG",SMALLFORWARD:"SF",
+      POWERFORWARD:"PF",CENTER:"C"};
+    const resolved=specific[p]||(
+      ["G","GUARD","COMBOGUARD","GF","FG"].includes(p)?"G":
+      ["F","FORWARD","FC","FORWARDCENTER"].includes(p)?"F":null);
+    if(sport==="nba")return resolved;
+    return ["PG","SG","G"].includes(resolved)?"G":
+      ["SF","PF","F"].includes(resolved)?"F":resolved;
   }
   if(sport==="mlb"){
     if(["P","SP","RP","CP","STARTINGPITCHER","PITCHER"].includes(p))return "P";
@@ -34,7 +41,7 @@ export function positionGroup(sport,position){
     if(["F","FW","ST","CF","LW","RW","FORWARD"].includes(p))return "F";
     if(["M","MF","CM","CDM","CAM","MIDFIELDER"].includes(p))return "M";
     if(["D","DF","CB","LB","RB","DEFENDER"].includes(p))return "D";
-    if(["GK","GOALKEEPER"].includes(p))return "GK";
+    if(["G","GK","GOALKEEPER"].includes(p))return "GK";
   }
   return null;
 }
@@ -128,15 +135,32 @@ function compareMatch(target,historical,cohorts,sport,role,stat,league){
     return {ok:false,reason:"Missing verified position/stat pregame defense evidence."};
   if(sport==="soccer" && (!league||target.league!==league||historical.league!==league))
     return {ok:false,reason:"Soccer competition could not be verified consistently."};
-  if(sport==="mlb"&&role==="BATTER" &&
-     (!["L","R"].includes(target.pitcherHand)||target.pitcherHand!==historical.pitcherHand))
-    return {ok:false,reason:"Verified opposing starting pitcher handedness is missing or different."};
-  let sum=0;
+  // ESPN boxscores do not consistently provide the opposing starter's
+  // verified handedness here. Compare only independently recorded defensive
+  // stats; do not invent a handedness split or reject all MLB hitters.
+  const ownKey=[sport,target.season,role,stat,league||""].join("|");
+  const pastKey=[sport,historical.season,role,stat,league||""].join("|");
+  const ownDist=cohorts[ownKey],pastDist=cohorts[pastKey];
+  if(!ownDist||!pastDist){
+    // When fewer than five independent defenses are available in a season,
+    // compare the ESPN-recorded pregame allowed/usage means DIRECTLY instead
+    // of fabricating a season-wide ranking or defaulting every sport to 0.
+    const t=target.metrics||{},h=historical.metrics||{};
+    if(!["allowed","volume"].every(k=>nonnegative(t[k])&&nonnegative(h[k])))
+      return {ok:false,reason:"Recorded defensive position and usage averages unavailable."};
+    const allowance=Math.abs(t.allowed-h.allowed)/Math.max(1,t.allowed,h.allowed);
+    const usage=Math.abs(t.volume-h.volume)/Math.max(1,t.volume,h.volume);
+    if(allowance>0.3||usage>0.4)
+      return {ok:false,reason:"Observed pregame defense conceded-stat profiles not similar."};
+    const score=Math.round(Math.max(0,100-65*allowance-35*usage));
+    return {ok:true,score,
+      context:"Verified "+role+" / "+stat+" pregame ESPN opponent allowances: "+
+        t.allowed.toFixed(1)+" vs "+h.allowed.toFixed(1)+
+        "; usage "+t.volume.toFixed(1)+" vs "+h.volume.toFixed(1)+
+        ". Raw same-position comparison (not league ranks, no verified handedness adjustment)."};
+  }
   const comparisons=[];
-  for(const [p,season] of [[target,target.season],[historical,historical.season]]){
-    const key=[sport,season,role,stat,league||""].join("|");
-    const dist=cohorts[key];
-    if(!dist)return {ok:false,reason:"Season-normalized defensive comparison unavailable for "+season+"."};
+  for(const [p,dist] of [[target,ownDist],[historical,pastDist]]){
     const vector=["allowed","volume"].map(field=>{
       const n=p.metrics?.[field],ref=dist.stats[field];
       return nonnegative(n)&&ref?.sd>0?(n-ref.mean)/ref.sd:null;

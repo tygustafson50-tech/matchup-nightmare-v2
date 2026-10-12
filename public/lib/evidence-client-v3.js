@@ -33,7 +33,13 @@ function statsFrom(group,row,sport){
   }return null;};
   const out={};
   const put=(key,value)=>{if(value!==null&&value>=0)out[key]=value;};
-  const cat=String(group.name||group.displayName||"").toLowerCase();
+  let cat=String(group.name||group.displayName||"").toLowerCase();
+  if(sport==="mlb"&&!cat){
+    // ESPN MLB summary box-score category often omits group.name. The
+    // mutually distinct IP and AB column sets are authoritative evidence.
+    cat=map.IP!==undefined?"pitching":
+      map.AB!==undefined||map["H-AB"]!==undefined?"batting":"";
+  }
   if(["nfl","ncaaf"].includes(sport)){
     if(cat.includes("passing")){
       put("passingYards",at("YDS"));put("passingTDs",at("TD","TDS"));
@@ -82,7 +88,42 @@ function statsFrom(group,row,sport){
   }
   return out;
 }
+// Soccer ESPN summaries expose per-athlete stats on summary.rosters rather
+// than summary.boxscore.players. Read only explicitly named recorded values.
+function soccerRosterPlayers(summary,teamId){
+  const clubs=Array.isArray(summary?.rosters)?summary.rosters:[];
+  const rows=clubs.filter(x=>String(x.team?.id)===String(teamId))
+    .flatMap(x=>Array.isArray(x.roster)?x.roster:[]);
+  const out=[];
+  for(const row of rows){
+    const athlete=row.athlete||{},stats={};
+    if(!idOk(athlete.id)||!nameOf(athlete))continue;
+    const raw=new Map((Array.isArray(row.stats)?row.stats:[])
+      .filter(x=>x&&typeof x.name==="string")
+      .map(x=>[x.name,x.value??x.displayValue]));
+    const put=(key,...fieldNames)=>{
+      for(const name of fieldNames){
+        const n=safeNum(raw.get(name));
+        if(n!==null&&n>=0){stats[key]=n;return;}
+      }
+    };
+    put("goals","totalGoals","goals");
+    put("assists","goalAssists","assists");
+    put("shots","totalShots","shots");
+    put("shotsOnTarget","shotsOnTarget");
+    put("tackles","totalTackles","tackles");
+    put("fouls","foulsCommitted");
+    put("saves","saves");
+    if(!Object.keys(stats).length)continue;
+    out.push({id:String(athlete.id),name:nameOf(athlete),
+      position:codeOf(row.position)||codeOf(athlete.position),
+      stats,verified:true});
+  }
+  const unique=new Map(out.map(x=>[x.id,x]));
+  return [...unique.values()];
+}
 export function playersFromBoxscore(summary,sport,teamId){
+  if(sport==="soccer")return soccerRosterPlayers(summary,teamId);
   const roster=summary?.boxscore?.players;
   if(!Array.isArray(roster))return [];
   const players=new Map();
@@ -141,6 +182,11 @@ export function completedTeamGames(schedule,teamId,before,season){
   return out.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
 }
 function playingClub(summary,id){
+  if(Array.isArray(summary?.rosters)){
+    const clubs=summary.rosters.filter(t=>(t.roster||[]).some(x=>
+      String(x.athlete?.id)===String(id)));
+    return clubs.length===1?{team:clubs[0].team}:null;
+  }
   const teams=summary?.boxscore?.players||[];
   const found=teams.filter(t=>(t.statistics||[]).some(s=>(s.athletes||[]).some(x=>
     String(x.athlete?.id||x.id)===String(id))));
@@ -161,7 +207,8 @@ function volumeStat(sport,role,stat){
   return null;
 }
 export function concededAgainstPosition(summary,{sport,defenseId,role,stat}){
-  const teams=summary?.boxscore?.players||[];
+  const teams=sport==="soccer"&&Array.isArray(summary?.rosters)
+    ?summary.rosters:summary?.boxscore?.players||[];
   if(teams.length!==2)return null;
   const other=teams.find(t=>String(t.team?.id)!==String(defenseId));
   if(!teams.some(t=>String(t.team?.id)===String(defenseId))||!other?.team?.id)return null;
@@ -171,7 +218,17 @@ export function concededAgainstPosition(summary,{sport,defenseId,role,stat}){
   const unitRole=sport==="mlb"&&role==="P"?"BATTER":role;
   const observedStat=sport==="mlb"&&role==="P"&&stat==="pitcherKs"
     ?"battingStrikeouts":stat;
-  const relevant=lineup.filter(x=>positionGroup(sport,x.position)===unitRole);
+  // NBA and college boxscores usually label players simply G or F, even
+  // when a team roster identifies PG/SG/SF/PF. Match recorded position
+  // *families* without guessing a more specific player role.
+  const comparableBasketRole=r=>["PG","SG","G"].includes(r)?"G":
+    ["SF","PF","F"].includes(r)?"F":r;
+  const relevant=lineup.filter(x=>{
+    const observed=positionGroup(sport,x.position);
+    return ["nba","ncaab"].includes(sport)
+      ?comparableBasketRole(observed)===comparableBasketRole(unitRole)
+      :observed===unitRole;
+  });
   if(!relevant.length)return null;
   // Unknown positive contributors can understate the full position group.
   // Prefer missing to a falsely low defensive allowance.
@@ -238,15 +295,17 @@ async function findVerifiedAthlete(client,offer,season,teamId,sport,league){
   });
   return matches.length===1?matches[0]:null;
 }
-function seasonFromEvent(sport,date,explicit){
+function seasonFromEvent(sport,date,explicit,league="eng.1"){
   if(Number.isInteger(Number(explicit))&&Number(explicit)>1900)return Number(explicit);
   const y=Number(String(date).slice(0,4)),m=Number(String(date).slice(5,7));
-  if(["nfl","ncaaf","soccer"].includes(sport))return m<7?y-1:y;
+  // MLS is calendar-year, unlike Aug-May European soccer competitions.
+  if(sport==="soccer")return league==="usa.1"?y:m<7?y-1:y;
+  if(["nfl","ncaaf"].includes(sport))return m<7?y-1:y;
   if(["nba","ncaab"].includes(sport))return m>=7?y+1:y;
   return y;
 }
 export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onStage=()=>{}}){
-  const sport=offer.sport,season=seasonFromEvent(sport,game.date,game.season);
+  const sport=offer.sport,season=seasonFromEvent(sport,game.date,game.season,league);
   // PropLine generally identifies the player without a roster position.
   // Verify the athlete on BOTH participating official ESPN team rosters,
   // requiring exactly one matching identity and usable role.
@@ -293,11 +352,13 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
       const values=playersFromBoxscore(box,sport,club.team.id)
         .filter(a=>a.id===player.id);
       if(values.length!==1||!Number.isFinite(values[0].stats[offer.stat]))continue;
-      const rival=(box.boxscore?.players||[])
-        .find(t=>String(t.team?.id)!==String(club.team.id));
+      const opponents=sport==="soccer"&&Array.isArray(box.rosters)
+        ?box.rosters:box.boxscore?.players||[];
+      const rival=opponents.find(t=>
+        String(t.team?.id)!==String(club.team.id));
       const date=box.header?.competitions?.[0]?.date||events[i].date;
       const officialSeason=seasonFromEvent(sport,date,
-        box.header?.events?.[0]?.season?.year??null);
+        box.header?.events?.[0]?.season?.year??null,league);
       if(!rival?.team?.id||!date||Date.parse(date)>=Date.parse(game.date)||
         officialSeason!==year)continue;
       records.push({id:events[i].id,date,season:year,playerId:player.id,

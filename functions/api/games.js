@@ -49,7 +49,13 @@ export async function onRequestGet({ request }) {
     return json({ error: "Unsupported soccer league" }, 400);
   }
 
-  const params = new URLSearchParams({ dates: date.replaceAll("-", ""), limit: "100" });
+  const params = new URLSearchParams({
+    dates: date.replaceAll("-", ""), limit: "200"
+  });
+  // ESPN's default college scoreboard is often just Top 25. Query the
+  // full FBS / D-I group so unranked games are selectable too.
+  if(sport==="ncaaf")params.set("groups","80");
+  if(sport==="ncaab")params.set("groups","50");
   const endpoint = "https://site.api.espn.com/apis/site/v2/sports/" +
     sports[sport][0] + "/" + league + "/scoreboard?" + params;
 

@@ -62,6 +62,51 @@ const MARKET_MAP={
 // Single designated sportsbook for every sport and market. PropLine remains
 // the data provider; ONLY real DraftKings quotes may enter our scanner.
 const BOOKS=new Set(["draftkings"]);
+// Only validated selected ESPN fixtures may trigger paid API calls.
+const teamNorm=x=>String(x||"").normalize("NFKD").toLowerCase()
+  .replace(/[\u0300-\u036f]/g,"").replace(/\bsaint\b/g,"st")
+  .replace(/\bstate\b/g,"st").replace(/\bfc\b|\bcf\b/g,"")
+  .replace(/\bthe\b/g,"").replace(/[^a-z0-9]/g,"");
+function readFixtureFilter(raw){
+  if(!raw)return {fixtures:[{all:true}]};
+  if(raw.length>4500)return {error:"Selected fixtures query is too large."};
+  try{
+    const items=JSON.parse(raw);
+    if(!Array.isArray(items)||items.length>16||!items.length)
+      return {error:"Select between one and sixteen verified ESPN fixtures."};
+    const fixtures=items.map(f=>({
+      id:String(f?.id||""),home:String(f?.home||"").trim(),
+      away:String(f?.away||"").trim()
+    }));
+    if(fixtures.some(f=>!/^\d{5,15}$/.test(f.id)||
+      !f.home||!f.away||f.home.length>110||f.away.length>110))
+      return {error:"Invalid ESPN game fixture selection."};
+    return {fixtures};
+  }catch{return {error:"Invalid selected fixture data."};}
+}
+function sameTeam(a,b,sport){
+  const x=teamNorm(a),y=teamNorm(b);
+  if(!x||!y)return false;
+  if(x===y||x.length>=8&&y.length>=8&&
+    (x.endsWith(y)||y.endsWith(x)))return true;
+  // Professional US teams have unique mascot names *within the sport*.
+  // ESPN may say "LA Lakers", DraftKings "Los Angeles Lakers".
+  if(["nfl","nba","mlb"].includes(sport)){
+    const last=x=>String(x||"").toLowerCase().trim()
+      .split(/[^a-z0-9]+/).filter(Boolean).at(-1)||"";
+    const m=last(a),n=last(b);
+    return m.length>=4&&m===n;
+  }
+  // No mascot-only matching for NCAA: many Tigers and Bulldogs.
+  return false;
+}
+function matchesRequestedEvent(event,fixture,sport){
+  if(fixture.all)return true; // Compatibility with old direct API clients.
+  if(event.espn_event_id&&String(event.espn_event_id)===fixture.id)return true;
+  return sameTeam(event.home_team,fixture.home,sport)&&
+    sameTeam(event.away_team,fixture.away,sport);
+}
+
 // Intentionally omit DFS, exchanges, prediction markets and synthetic pick-'em pricing.
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{
   status,headers:{"content-type":"application/json; charset=utf-8",
@@ -166,6 +211,9 @@ export async function onRequestGet({request,env={}}){
   if(!CHOICES[sport]||!validDate(date)||
      sport==="soccer"&&!SOCCER[league])
     return reply({status:"invalid-request",error:"Valid sport, league and date required."},400);
+    const requested=readFixtureFilter(q.get("fixtures"));
+    if(requested.error)
+      return reply({status:"invalid-request",error:requested.error},400);
   if(!str(env.PROPLINE_API_KEY))
     return reply({status:"integration-required",source:"PropLine",projections:[],
       error:"PropLine API key not connected. Get a free key at prop-line.com and add PROPLINE_API_KEY as a Cloudflare Pages secret."},503);
@@ -183,9 +231,55 @@ export async function onRequestGet({request,env={}}){
       return reply({status:"sport-unavailable",projections:[],source:"PropLine",
         error:"PropLine did not list a verified market for this selected sport/league."},424);
     const now=Date.now();
-    const {body,quota}=await api("sports/"+encodeURIComponent(matched.key)+"/odds",
-      env.PROPLINE_API_KEY,{markets:MARKETS[sport].join(","),includeBookIds:"true"});
-    const projections=normalizePropLineOdds(body,{sport,date,now});
+    // Bulk /odds documents GAME LINES. The real per-player markets live in
+    // /events/{event_id}/odds. Fetch only today's selected fixtures so a free
+    // API key is not drained by an entire college-football slate.
+    const eventList=await api("sports/"+encodeURIComponent(matched.key)+"/events",
+      env.PROPLINE_API_KEY);
+    if(!Array.isArray(eventList.body))
+      throw Error("PropLine did not return a verified event list.");
+    const today=eventList.body.filter(e=>e?.id&&
+      Number.isFinite(Date.parse(e.commence_time))&&
+      dateCentral(e.commence_time)===date&&
+      requested.fixtures.some(f=>matchesRequestedEvent(e,f,sport)));
+    const MAX_EVENTS=16;
+    const candidates=today.slice(0,MAX_EVENTS);
+    const eventOdds=await Promise.allSettled(candidates.map(e=>
+      api("sports/"+encodeURIComponent(matched.key)+"/events/"+
+        encodeURIComponent(String(e.id))+"/odds",env.PROPLINE_API_KEY,{
+          markets:MARKETS[sport].join(","),bookmakers:"draftkings",
+          includeBookIds:"true"
+        })));
+    let quota=eventList.quota;
+    const eventFailures=[];
+    const projections=[];
+    for(let i=0;i<eventOdds.length;i++){
+      const got=eventOdds[i],listed=candidates[i];
+      if(got.status!=="fulfilled"){
+        eventFailures.push(String(listed.id)+": "+
+          String(got.reason?.message||"provider unavailable").slice(0,90));
+        continue;
+      }
+      if(got.value.quota!=null)quota=got.value.quota;
+      // Event odds response can omit fixture metadata. Only inject fields
+      // from the verified /events source (never source our own point/price).
+      const original=got.value.body;
+      const priceRows=Array.isArray(original)?original:[original];
+      for(const priced of priceRows){
+        if(!priced||typeof priced!=="object")continue;
+        const verified={...listed,...priced,id:priced.id||listed.id,
+          commence_time:priced.commence_time||listed.commence_time,
+          home_team:priced.home_team||listed.home_team,
+          away_team:priced.away_team||listed.away_team};
+        try{
+          projections.push(...normalizePropLineOdds([verified],{sport,date,now}));
+        }catch{eventFailures.push(String(listed.id)+": malformed odds response");}
+      }
+    }
+    if(eventFailures.some(msg=>/HTTP 429/.test(msg))&&!projections.length)
+      return reply({status:"rate-limited",source:"PropLine",
+        projections:[],error:"PropLine quota reached while loading selected game props."},429);
+    const fetchedEvents=candidates.length;
     let changes=[],changeTracking="unavailable";
     if(env.PROJECTION_SNAPSHOTS&&
        typeof env.PROJECTION_SNAPSHOTS.get==="function"&&
@@ -201,9 +295,18 @@ export async function onRequestGet({request,env={}}){
     return reply({status:"connected",source:"PropLine",sportsbook:"DraftKings",sport,sportKey:matched.key,
       date,sourceFetchedAt:new Date(now).toISOString(),refreshedAt:new Date(now).toISOString(),
       projections,changes,changeTracking,
+      eventsFound:today.length,eventsChecked:fetchedEvents,
+      eventsFailed:eventFailures.length,providerWarnings:eventFailures.slice(0,8),
       dailyRequestsRemaining:quota!==null&&Number.isFinite(Number(quota))?Number(quota):null,
-      notes:projections.length?[]:[
-        "No active, fresh DraftKings OVER lines were returned for this date. Other sportsbooks are intentionally excluded and no substitute lines were generated."
+      notes:[
+        ...(today.length>MAX_EVENTS?["Only the first "+MAX_EVENTS+
+          " events were checked to limit API usage; select fewer fixtures."]:[]),
+        ...(eventFailures.length?[
+          eventFailures.length+" selected event prop request(s) were unavailable."]:[]),
+        ...(!projections.length?[
+          today.length===0?"No selected events were found by PropLine for that date.":
+          "No active, fresh DraftKings OVER lines were returned for the selected events. This can mean DraftKings does not offer player props for that sport/date. No substitute lines were generated."]:[]
+        )
       ]});
   }catch(error){
     const limited=error.status===429,unauthorized=error.status===401||error.status===403;

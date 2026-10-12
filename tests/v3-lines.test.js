@@ -1,66 +1,100 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {onRequestGet,normalizePropLineOdds} from "../functions/api/lines.js";
+import {onRequestGet,normalizePropLineOdds}
+  from "../functions/api/lines.js";
 
 const stamp=()=>new Date().toISOString();
-const request=new Request("https://matchup-nightmare-v2.pages.dev/api/lines?sport=nfl&date=2026-10-11");
-const env={PROPLINE_API_KEY:"my-propline-secret"};
-const event=({point=0.5,suspended=false,stampAt=stamp()}={})=>({
-  id:"10",espn_event_id:"401999111",sport_key:"football_nfl",
-  home_team:"Los Angeles Rams",away_team:"Buffalo Bills",
+const DATE="2026-10-11";
+const event=({id="10",point=0.5,suspended=false,stampAt=stamp(),
+  sportKey="football_nfl",home="Los Angeles Rams",away="Buffalo Bills",
+  marketKey="player_receptions",player="Verified Receiver (BUF)",
+  book="draftkings"}={})=>({
+  id,espn_event_id:"401999111",sport_key:sportKey,
+  home_team:home,away_team:away,
   commence_time:"2026-10-12T00:20:00Z",
-  bookmakers:[
-    {key:"draftkings",title:"DraftKings",markets:[{
-      key:"player_receptions",last_update:stampAt,
-      line_type:"alternate",suspended_at:suspended?stamp():null,
+  bookmakers:[{key:book,title:book==="draftkings"?"DraftKings":"FanDuel",
+    markets:[{key:marketKey,last_update:stampAt,line_type:"alternate",
+      suspended_at:suspended?stamp():null,
       outcomes:[
-        {name:"Over",description:"Verified Receiver (BUF)",point,price:-120,
+        {name:"Over",description:player,point,price:-120,
           player_id:"espn:12345",outcome_id:"price1001"},
-        {name:"Under",description:"Verified Receiver (BUF)",point,price:100}
-      ]}]},
-    {key:"prizepicks",title:"PrizePicks",markets:[{
-      key:"player_receptions",last_update:stampAt,outcomes:[
-        {name:"Over",description:"Excluded DFS",point:1.5,price:100}
-      ]}]}
-  ]
+        {name:"Under",description:player,point,price:100}
+      ]}]
+  }]
 });
-const call=async({odds=[event()],sports=[{key:"football_nfl",title:"NFL"}],secret=env,
-  quota="995",status=200}={})=>{
+const metadata=e=>({
+  id:e.id,espn_event_id:e.espn_event_id,sport_key:e.sport_key,
+  home_team:e.home_team,away_team:e.away_team,
+  commence_time:e.commence_time
+});
+function req(sport="nfl",fixtures=null,date=DATE){
+  const q=new URLSearchParams({sport,date});
+  if(fixtures)q.set("fixtures",JSON.stringify(fixtures));
+  return new Request("https://matchup-nightmare-v2.pages.dev/api/lines?"+q);
+}
+const env={PROPLINE_API_KEY:"my-propline-secret"};
+async function call({odds=[event()],events=null,sports=null,secret=env,
+  quota="995",request=req(),failStatus=null}={}){
   const old=globalThis.fetch;
   const hits=[];
   globalThis.fetch=async(url,opts)=>{
-    const parsed=new URL(url);
-    hits.push(parsed.toString());
+    const parsed=new URL(url);hits.push(parsed.toString());
     assert.equal(parsed.hostname,"api.prop-line.com");
     assert.equal(opts.headers["X-API-Key"],"my-propline-secret");
-    if(parsed.pathname==="/v1/sports")
-      return new Response(JSON.stringify(sports),{status:200});
+    if(parsed.pathname==="/v1/sports"){
+      return new Response(JSON.stringify(sports||[
+        {key:"football_nfl",title:"NFL"},{key:"basketball_nba",title:"NBA"},
+        {key:"baseball_mlb",title:"MLB"},{key:"football_ncaaf",title:"NCAAF"},
+        {key:"basketball_ncaab",title:"NCAAB"},
+        {key:"soccer_epl",title:"Premier League"},
+        {key:"soccer_spain_la_liga",title:"La Liga"}
+      ]),{status:200});
+    }
+    if(parsed.pathname.endsWith("/events")){
+      return new Response(JSON.stringify(events||odds.map(metadata)),{
+        status:200,headers:{"X-Daily-Remaining":quota}
+      });
+    }
+    assert.match(parsed.pathname,/\/events\/[^/]+\/odds$/);
     assert.equal(parsed.searchParams.get("includeBookIds"),"true");
-    assert.ok(parsed.searchParams.get("markets").includes("player_receptions"));
-    return new Response(JSON.stringify(odds),{status,headers:{"X-Daily-Remaining":quota}});
+    assert.equal(parsed.searchParams.get("bookmakers"),"draftkings");
+    assert.ok(parsed.searchParams.get("markets"));
+    if(failStatus)
+      return new Response(JSON.stringify({error:"quota"}),{
+        status:failStatus,headers:{"X-Daily-Remaining":"0"}});
+    const eventId=parsed.pathname.split("/").at(-2);
+    const record=odds.find(x=>x.id===eventId);
+    return new Response(JSON.stringify(record||{id:eventId,bookmakers:[]}),{
+      status:200,headers:{"X-Daily-Remaining":quota}
+    });
   };
   try{return {response:await onRequestGet({request,env:secret}),hits};}
   finally{globalThis.fetch=old;}
-};
-test("without own PropLine API key no guessed sportsbook lines are shown",async()=>{
-  const response=await onRequestGet({request,env:{}});
+}
+
+test("no private PropLine key means no fake lines",async()=>{
+  const response=await onRequestGet({request:req(),env:{}});
   assert.equal(response.status,503);
   const body=await response.json();
   assert.equal(body.status,"integration-required");
   assert.deepEqual(body.projections,[]);
-  assert.doesNotMatch(JSON.stringify(body),/PrizePicks|my-propline-secret/);
 });
-test("free API key uses PropLine v1 authenticated sportsbook odds with exact ALT line",async()=>{
+test("the official per-event PLAYER PROPS endpoint is used instead of bulk game lines",async()=>{
   const {response,hits}=await call();
-  assert.equal(response.status,200);
   const body=await response.json();
+  assert.equal(response.status,200);
   assert.equal(body.status,"connected");
   assert.equal(body.source,"PropLine");
+  assert.equal(body.sportsbook,"DraftKings");
   assert.equal(body.dailyRequestsRemaining,995);
-  assert.equal(hits.length,2);
+  assert.equal(hits.length,3);
+  assert.match(hits[1],/\/events$/);
+  assert.match(hits[2],/\/events\/10\/odds/);
+  assert.ok(hits[2].includes("bookmakers=draftkings"));
+  assert.equal(body.eventsFound,1);
+  assert.equal(body.eventsChecked,1);
   assert.equal(body.projections.length,1);
-  const [p]=body.projections;
-  assert.equal(p.book,"DraftKings");
+  const p=body.projections[0];
   assert.equal(p.bookKey,"draftkings");
   assert.equal(p.line,0.5);
   assert.equal(p.price,-120);
@@ -68,57 +102,106 @@ test("free API key uses PropLine v1 authenticated sportsbook odds with exact ALT
   assert.equal(p.espnPlayerId,"12345");
   assert.equal(p.gameId,"401999111");
   assert.equal(p.player,"Verified Receiver");
-  assert.equal(p.position,null);
   assert.equal(p.team,null);
   assert.doesNotMatch(JSON.stringify(body),/my-propline-secret/);
 });
-test("single-source enforcement excludes every book except DraftKings",async()=>{
-  const draftkings=event();
-  const otherBook=JSON.parse(JSON.stringify(draftkings.bookmakers[0]));
-  otherBook.key="fanduel";otherBook.title="FanDuel";
-  otherBook.markets[0].outcomes[0].point=4.5;
-  const allBooks={...draftkings,bookmakers:[
-    otherBook,draftkings.bookmakers[0],
-    {...otherBook,key:"betmgm",title:"BetMGM"}
-  ]};
-  const {response}=await call({odds:[allBooks]});
+test("DraftKings only: exclude FanDuel even on a valid selected match",async()=>{
+  const dk=event(),fd=event({point:2.5,book:"fanduel"});
+  const {response}=await call({odds:[{...dk,bookmakers:[...fd.bookmakers,...dk.bookmakers]}]});
   const body=await response.json();
-  assert.equal(body.status,"connected");
-  assert.equal(body.sportsbook,"DraftKings");
   assert.equal(body.projections.length,1);
-  assert.ok(body.projections.every(p=>p.bookKey==="draftkings"));
-  assert.equal(body.projections[0].line,0.5);
+  assert.equal(body.projections[0].bookKey,"draftkings");
 });
-test("unsupported and suspended markets do not create lines",()=>{
-  const quoted=normalizePropLineOdds([event({suspended:true})],{
-    sport:"nfl",date:"2026-10-11",now:Date.now()
-  });
-  assert.equal(quoted.length,0);
-  const stale=normalizePropLineOdds([event({stampAt:new Date(Date.now()-50*60000).toISOString()})],{
-    sport:"nfl",date:"2026-10-11",now:Date.now()
-  });
-  assert.equal(stale.length,0);
+test("selected fixtures: never spend free API requests on games not selected",async()=>{
+  const a=event({id:"10"});
+  const b={...event({id:"11",home:"New York Jets",away:"New England Patriots"}),
+    espn_event_id:"401999112"};
+  const {response,hits}=await call({odds:[a,b],request:req("nfl",[
+    {id:"401999111",home:"Los Angeles Rams",away:"Buffalo Bills"}
+  ])});
+  const body=await response.json();
+  assert.equal(body.projections.length,1);
+  assert.equal(body.eventsChecked,1);
+  assert.equal(hits.length,3);
+  assert.ok(hits.every(u=>!u.includes("/events/11/odds")));
 });
-test("sport catalog mismatch is identified as unavailable instead of substituting another league",async()=>{
-  const {response}=await call({sports:[{key:"basketball_nba",title:"NBA"}]});
-  const data=await response.json();
+test("team name abbreviations do not drop selected events",async()=>{
+  const a=event({home:"Los Angeles Rams",away:"Buffalo Bills"});
+  const {response}=await call({odds:[a],request:req("nfl",[
+    {id:"401999111",home:"LA Rams",away:"Buffalo Bills"}
+  ])});
+  assert.equal((await response.json()).eventsChecked,1);
+});
+test("invalid fixtures fail safely rather than querying unrelated odds",async()=>{
+  const {response,hits}=await call({request:req("nfl",[
+    {id:"unsafe",home:"Team 1",away:"Team 2"}
+  ])});
+  assert.equal(response.status,400);
+  assert.ok(hits.length<=2);
+});
+test("suspended and old markets never turn into new quote cards",()=>{
+  assert.equal(normalizePropLineOdds([event({suspended:true})],{
+    sport:"nfl",date:DATE,now:Date.now()}).length,0);
+  assert.equal(normalizePropLineOdds([event({
+    stampAt:new Date(Date.now()-50*60000).toISOString()
+  })],{sport:"nfl",date:DATE,now:Date.now()}).length,0);
+});
+test("missing game/season/league returns explicit no-event state, not fake props",async()=>{
+  const {response}=await call({events:[]});
+  const b=await response.json();
+  assert.equal(b.status,"connected");
+  assert.equal(b.eventsFound,0);
+  assert.deepEqual(b.projections,[]);
+  assert.match(b.notes.join(" "),/No selected events/);
+});
+test("no DraftKings player prices (NCAAB may be unsupported by the book)",async()=>{
+  const base=event({sportKey:"basketball_ncaab",
+    marketKey:"player_points",player:"Verified Guard",point:15.5});
+  const {response}=await call({odds:[{...base,bookmakers:[]}],
+    request:req("ncaab")});
+  const b=await response.json();
+  assert.equal(b.eventsChecked,1);
+  assert.deepEqual(b.projections,[]);
+  assert.match(b.notes.join(" "),/DraftKings/);
+});
+test("sport key mismatch never routes football odds to a basketball league",async()=>{
+  const {response}=await call({sports:[{key:"football_nfl",title:"NFL"}],
+    request:req("nba")});
   assert.equal(response.status,424);
-  assert.equal(data.status,"sport-unavailable");
-  assert.deepEqual(data.projections,[]);
+  assert.equal((await response.json()).status,"sport-unavailable");
 });
-test("PropLine odds quote updates are tracked only with explicitly configured snapshot storage",async()=>{
+test("all 6 sports correctly map a REAL quoted stat from the per-event endpoint",async()=>{
+  const cases=[
+    ["nfl","football_nfl","player_reception_yds","receivingYards",49.5],
+    ["ncaaf","football_ncaaf","player_rush_yds","rushingYards",79.5],
+    ["nba","basketball_nba","player_points","points",23.5],
+    ["ncaab","basketball_ncaab","player_assists","assists",4.5],
+    ["mlb","baseball_mlb","batter_hits","hits",0.5],
+    ["soccer","soccer_epl","player_assists","assists",0.5]
+  ];
+  for(const [sport,sportKey,marketKey,stat,point] of cases){
+    const quoted=event({sportKey,marketKey,point,player:"Verified Player"});
+    const {response}=await call({odds:[quoted],request:req(sport)});
+    const body=await response.json();
+    assert.equal(body.projections.length,1,sport+" "+JSON.stringify(body.notes));
+    assert.equal(body.projections[0].stat,stat,sport);
+    assert.equal(body.projections[0].line,point,sport);
+  }
+});
+test("provider 429 from per-event odds activates the existing saved-scan fallback",async()=>{
+  const {response}=await call({failStatus:429});
+  assert.equal(response.status,429);
+  assert.equal((await response.json()).status,"rate-limited");
+});
+test("source tracking changes only when KV cache is explicitly configured",async()=>{
   let stored=null;
-  const snapshots={get:async()=>stored,put:async(_key,data)=>{stored=data;}};
-  let r=await call({secret:{...env,PROJECTION_SNAPSHOTS:snapshots}});
-  assert.equal((await r.response.json()).changeTracking,"baseline-created");
-  r=await call({secret:{...env,PROJECTION_SNAPSHOTS:snapshots},
+  const snapshots={get:async()=>stored,put:async(_,value)=>{stored=value;}};
+  let x=await call({secret:{...env,PROJECTION_SNAPSHOTS:snapshots}});
+  assert.equal((await x.response.json()).changeTracking,"baseline-created");
+  x=await call({secret:{...env,PROJECTION_SNAPSHOTS:snapshots},
     odds:[event({point:1.5})]});
-  const b=await r.response.json();
+  const b=await x.response.json();
   assert.equal(b.changeTracking,"verified");
   assert.ok(b.changes.some(x=>x.kind==="removed-or-suspended"));
   assert.ok(b.changes.some(x=>x.kind==="added"));
-});
-test("valid event with empty bookmakers produces zero results, not placeholders",async()=>{
-  const {response}=await call({odds:[{...event(),bookmakers:[]}]});
-  assert.equal((await response.json()).projections.length,0);
 });
