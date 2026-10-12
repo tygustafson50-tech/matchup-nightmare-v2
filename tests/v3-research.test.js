@@ -130,3 +130,63 @@ test("gamelog only accepts dated games before event within specified season",()=
   assert.deepEqual(gamelogEvents(raw,2026,"2026-10-11T00:00:00Z").map(x=>x.id),
     ["12345"]);
 });
+
+test("ESPN G/F basketball roles resolve to actual guard/forward groups",()=>{
+  for(const pos of ["G","PG","SG","Guard","Point Guard"])
+    assert.equal(positionGroup("ncaab",pos),"G",pos);
+  for(const pos of ["F","SF","PF","Forward"])
+    assert.equal(positionGroup("nba",pos),"F",pos);
+  assert.equal(positionGroup("nba","C"),"C");
+  for(const stat of ["points","assists","rebounds","threes"])
+    assert.equal(supportsMarket("ncaab","G",stat),true,stat);
+});
+
+test("NBA and NCAAB use verified stat allowances when no five-team season cohort is available",()=>{
+  for(const sport of ["nba","ncaab"]){
+    const offer={id:"quoted-1",source:"PropLine",sport,status:"active",
+      player:"Actual Guard",espnPlayerId:"101",position:"G",
+      team:"Real Team",opponent:"Other Team",book:"DraftKings",
+      bookKey:"draftkings",stat:"points",market:"Points",line:21.5,
+      variant:"standard",quotedAt:new Date().toISOString(),
+      gameDateLocal:"2026-10-12"};
+    const past={verified:true,sport,teamId:"9",gameId:"game-1",position:"G",
+      season:2026,stat:"points",pregameGames:5,asOf:"2026-10-01T00:00:00Z",
+      metrics:{allowed:24,volume:15}};
+    const current={...past,teamId:"88",gameId:null,season:2027,
+      metrics:{allowed:22,volume:14}};
+    const game={id:"game-1",date:"2026-02-08T00:00:00Z",season:2026,
+      playerId:"101",stat:"points",sport,team:"Real Team",
+      opponent:"Other Team",opponentId:"9",actual:26,
+      source:"ESPN game summary",verified:true};
+    const result=analyzeVerifiedProp({offer,season:2027,
+      games:[game],upcomingDefense:current,
+      defensiveProfiles:[past,current]});
+    assert.equal(result.recent.tracked,0,sport);
+    assert.equal(result.similar.tracked,1,sport);
+    assert.equal(result.similarGames[0].actual,26,sport);
+    assert.match(result.similarGames[0].defenseReason,/Raw same-position comparison/);
+  }
+});
+
+test("MLB hitter comparable pitching profiles do not require unavailable invented pitcher handedness",()=>{
+  const offer={id:"hits-1",source:"PropLine",sport:"mlb",status:"active",
+    player:"Verified Hitter",espnPlayerId:"199",position:"DH",
+    team:"Real Team",opponent:"Other Team",book:"DraftKings",
+    bookKey:"draftkings",stat:"hits",market:"Hits",line:0.5,
+    variant:"standard",quotedAt:new Date().toISOString(),
+    gameDateLocal:"2026-10-12"};
+  const current={sport:"mlb",stat:"hits",position:"BATTER",verified:true,
+    teamId:"2",season:2026,gameId:null,pregameGames:6,asOf:"2026-10-11T00:00:00Z",
+    metrics:{allowed:8,volume:32}};
+  const historical={...current,teamId:"3",gameId:"mlb1",
+    metrics:{allowed:7,volume:30}};
+  const game={id:"mlb1",date:"2026-09-20T00:00:00Z",season:2026,
+    playerId:"199",stat:"hits",sport:"mlb",team:"Real Team",
+    opponent:"Other Team",opponentId:"3",actual:2,
+    source:"ESPN game summary",verified:true};
+  const result=analyzeVerifiedProp({offer,season:2026,games:[game],
+    upcomingDefense:current,defensiveProfiles:[historical,current]});
+  assert.equal(result.similar.tracked,1);
+  assert.equal(result.similarGames[0].actual,2);
+  assert.match(result.similarGames[0].defenseReason,/no verified handedness adjustment/);
+});
