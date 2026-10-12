@@ -5,7 +5,7 @@
 const finite=x=>typeof x==="number"&&Number.isFinite(x);
 const fraction=x=>finite(x)&&x>=0&&x<=1?x:null;
 const metricBySport={
-  nfl:"offensive/defensive snap share",ncaaf:"offensive/defensive snap share",
+  nfl:"offensive snap share",ncaaf:"offensive snap share",
   nba:"minutes / 48 regulation minutes",ncaab:"minutes / 40 regulation minutes",
   soccer:"minutes / 90 regulation minutes",mlb:"verified starting-lineup participation"
 };
@@ -35,14 +35,14 @@ export function playingTimeEligibility(appearances,sport,{minimumGames=3}={}){
   const verified=data.filter(finite);
   const total=verified.length;
   const averageShare=total?verified.reduce((a,b)=>a+b,0)/total:null;
-  const overHalf=verified.filter(v=>v>0.5).length;
+  const overHalf=verified.filter(v=>v>=0.5).length;
   // Can't establish an expected regular role from old seasons or a roster
   // designation. Require 3 recent known appearances including the latest.
   const eligible=total>=minimumGames && finite(data[0]) &&
-    data[0]>0.5 && averageShare>0.5 && overHalf>=minimumGames &&
+    data[0]>=0.5 && averageShare>=0.5 && overHalf>=minimumGames &&
     overHalf>total/2;
   return {eligible,metric,averageShare,samples:total,
     appearances:examined.length,overHalf,reason:!total?"No verified participation data":
-      eligible?"Verified regular playing time above 50%":
-      "50% playing-time eligibility not verified"};
+      eligible?"Verified regular playing time at least 50%":
+      "At least 50% playing-time eligibility not verified"};
 }
