@@ -40,11 +40,11 @@ export async function onRequestGet({request}){
     return json({error:"Unsupported soccer league."},400);
   const group=sport==="soccer"?"soccer/"+league:path;
   let route="";
-  if(kind==="schedule"||kind==="roster"){
+  if(kind==="schedule"||kind==="roster"||kind==="teamstats"){
     if(!/^\d{1,9}$/.test(teamId)||!/^(19|20)\d{2}$/.test(season))
       return json({error:"Valid team and historical season are required."},400);
-    route="/teams/"+teamId+"/"+kind+"?season="+season+
-      (kind==="schedule"?"&limit=100":"");
+    route="/teams/"+teamId+"/"+(kind==="teamstats"?"statistics":kind)+
+      "?season="+season+(kind==="schedule"?"&limit=100":"");
   }else if(kind==="summary"){
     if(!/^\d{5,15}$/.test(gameId))
       return json({error:"Valid historical game ID is required."},400);
@@ -82,6 +82,7 @@ export async function onRequestGet({request}){
       headers:{
         "content-type":"application/json; charset=utf-8",
         "cache-control":kind==="summary"?"public, max-age=3600":
+          kind==="teamstats"?"public, max-age=900":
           kind==="roster"?"public, max-age=1800":"public, max-age=300",
         "x-content-type-options":"nosniff",
         "x-espn-resource":kind

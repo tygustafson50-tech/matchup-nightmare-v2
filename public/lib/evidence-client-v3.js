@@ -5,6 +5,7 @@
  * ESPN public endpoints are provisional: missing source => incomplete evidence.
  */
 import {positionGroup,supportsMarket} from "./research-v3.js";
+import {parseFootballDefenseRanks} from "./football-defense-ranks.js";
 const safeNum=n=>{
   if(typeof n==="number")return Number.isFinite(n)?n:null;
   if(typeof n!=="string"||!n.trim())return null;
@@ -303,6 +304,43 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
         opponentId:String(rival.team.id),
         actual:values[0].stats[offer.stat],verified:true,source:"ESPN game summary"});
     }
+  }
+  // NFL: a much simpler real defensive rank comparison. Fetch each historical
+  // opponent's ESPN team statistics for its own season, plus this week's
+  // upcoming defense. Never rank a selected subset of player opponents.
+  if(sport==="nfl"){
+    onStage("Comparing ESPN NFL rushing/pass defense league rankings…");
+    const asked=new Map();
+    const add=(teamId,year)=>{
+      const key=String(teamId)+"|"+year;
+      if(!asked.has(key))asked.set(key,{teamId:String(teamId),year});
+    };
+    add(enemy.id,season);
+    for(const row of records)add(row.opponentId,row.season);
+    const needs=[...asked.values()];
+    const responses=await Promise.allSettled(needs.map(({teamId,year})=>
+      client.call({sport:"nfl",kind:"teamstats",teamId,season:String(year)})));
+    const rankingByTeamSeason=new Map();
+    for(let i=0;i<needs.length;i++){
+      const item=responses[i],entry=needs[i];
+      if(item.status!=="fulfilled")continue;
+      const parsed=parseFootballDefenseRanks(item.value,{
+        teamId:entry.teamId,season:entry.year
+      });
+      if(parsed)rankingByTeamSeason.set(entry.teamId+"|"+entry.year,parsed);
+    }
+    const selected=rankingByTeamSeason.get(String(enemy.id)+"|"+season)||null;
+    const profiles=records.map(g=>{
+      const defensive=rankingByTeamSeason.get(g.opponentId+"|"+g.season);
+      return defensive?{...defensive,gameId:g.id}:null;
+    }).filter(Boolean);
+    if(!selected)notes.push("Upcoming opponent's verified ESPN rushing/passing defensive ranks unavailable.");
+    if(profiles.length<records.length)notes.push(
+      "Some historical opponent defense ranks are unavailable; unmatched games are excluded.");
+    notes.push("NFL rank comparison uses ESPN season-aggregate rushing and passing defense ranks, within ±3 places; past season final rankings may include games after the matchup.");
+    return {player,team,enemy,season,games:records,upcomingDefense:selected,
+      defensiveProfiles:profiles,matchupModel:"nfl-ranks",notes,
+      source:"ESPN athlete game summaries + opponent league rankings"};
   }
   const role=positionGroup(sport,offer.position);
   const desired=[{teamId:String(enemy.id),season,cutoff:game.date,
