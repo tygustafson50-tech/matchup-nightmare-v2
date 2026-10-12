@@ -239,8 +239,8 @@
   .game-log-hit-rate small{text-align:left}
 }
 
-/* Official PrizePicks link: opens a new tab, does not imply API access. */
-.scanner-actions a.external-prizepicks{display:inline-flex;align-items:center;justify-content:center;
+/* PropLine API link: opens a new tab, does not imply API access. */
+.scanner-actions a.external-propline{display:inline-flex;align-items:center;justify-content:center;
   text-decoration:none;border-radius:8px;font:inherit;min-height:46px}
-.scanner-actions a.external-prizepicks:hover{border-color:#d2af5d;color:#f7d77a}
+.scanner-actions a.external-propline:hover{border-color:#d2af5d;color:#f7d77a}
 .site-link-note{margin:7px 0 0}
