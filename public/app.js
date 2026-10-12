@@ -27,9 +27,10 @@ const kickoff=s=>{try{return new Intl.DateTimeFormat("en-US",{
 const normalize=s=>String(s||"").normalize("NFKD")
   .replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
 let sport="nfl",games=[],selected=new Set(),cards=[],scanId=0,visibleLimit=24;
+let watchedQuotes=null,watchBusy=false;
 function status(message){el("scanProgress").textContent=message;}
 function clearResults(){
-  cards=[];visibleLimit=24;el("pickFilters").hidden=true;
+  cards=[];watchedQuotes=null;visibleLimit=24;el("pickFilters").hidden=true;
   el("scanOutput").innerHTML='<div class="empty">Select games and scan verified PrizePicks projections.</div>';
 }
 function setOptions(id,entries,label){
@@ -80,7 +81,7 @@ function renderCard(c){
         (rec?"OVER supported":"INSUFFICIENT / MIXED EVIDENCE")+'</span></div>'+
     '<div class="scan-line">VERIFIED PRIZEPICKS '+safe(c.variant==="alternative"?"ALT":"STANDARD")+
       ' PROJECTION: <strong>'+safe(c.line)+'</strong> '+safe(c.market)+'</div>'+
-    '<p class="season-evidence">Source line verified '+safe(prettyDate(c.quotedAt))+
+    '<p class="season-evidence">Source line verified '+safe(kickoff(c.quotedAt))+
       ' · Three-season window '+safe(c.seasonWindow.join(" / "))+'</p>'+
     '<div class="scan-stats">'+
       '<div><strong>'+safe(hitText(c.recent))+'</strong><small>Last five current-season games</small></div>'+
@@ -92,6 +93,7 @@ function renderCard(c){
     historyBlock("Recent Games — Current Season",c.recentGames,c.line)+
     historyBlock("Similar Defenses — Last 3 Seasons",c.similarGames,c.line,true)+
     (c.limitations.length?'<p class="sample-warning">'+c.limitations.map(safe).join(" · ")+'</p>':'')+
+    '<p class="season-evidence">Injuries, lineup status and future snap/minute shares are not independently confirmed by this provisional ESPN source. Verify current availability before using the research.</p>'+
     '<div class="research-label">Historical percentages are observed results, not probabilities. Today's PrizePicks line is used for all games, not claimed as their old betting line.</div>'+
     '</article>';
 }
@@ -180,6 +182,9 @@ async function scan(){
       if(matching.length===1)chosenPairs.push({offer,game:matching[0]});
       else if(matching.length>1)rejected.push("Ambiguous fixture for "+offer.player);
     }
+    watchedQuotes={sport:currentSport,date:day,
+      offers:new Map(chosenPairs.map(({offer})=>[offer.id,
+        {line:offer.line,status:offer.status,variant:offer.variant}]))};
     const preface='<p class="season-evidence">PrizePicks lines last verified: '+
       safe(feed.sourceFetchedAt)+" · "+chosenPairs.length+
       ' active projections for selected games · Changes: '+
@@ -248,6 +253,39 @@ async function scan(){
     if(own===scanId){button.disabled=false;button.textContent="⚡ Scan Selected Games";}
   }
 }
+// Poll only while a verified board is open. If the provider removes/suspends or
+// changes a quote, discard old evidence and force a new source-verified scan.
+setInterval(async()=>{
+  const snapshot=watchedQuotes;
+  if(!snapshot||watchBusy||document.visibilityState==="hidden")return;
+  watchBusy=true;
+  try{
+    const response=await fetch("/api/lines?"+new URLSearchParams({
+      sport:snapshot.sport,date:snapshot.date
+    }),{cache:"no-store"});
+    const feed=await response.json();
+    if(snapshot!==watchedQuotes)return;
+    if(!response.ok||feed.status!=="connected"){
+      clearResults();status("PrizePicks quote verification expired or became unavailable. Rescan after reconnecting.");
+      return;
+    }
+    const latest=new Map(feed.projections.map(p=>[p.id,p]));
+    for(const [id,old] of snapshot.offers){
+      const current=latest.get(id);
+      if(!current||current.line!==old.line||
+        current.variant!==old.variant||current.status!=="active"){
+        clearResults();
+        el("scanOutput").innerHTML='<div class="warning">PrizePicks projection moved, was suspended, or was removed. Old cards have been cleared. Scan again for current verified lines.</div>';
+        status("PrizePicks board changed — rescan required.");
+        return;
+      }
+    }
+  }catch{
+    if(snapshot===watchedQuotes){
+      clearResults();status("PrizePicks feed verification failed — old quotes were cleared.");
+    }
+  }finally{watchBusy=false;}
+},120000);
 el("sports").innerHTML=Object.entries(SPORTS)
   .map(([id,label])=>'<button data-s="'+id+'">'+safe(label)+'</button>').join("");
 el("sports").querySelectorAll("button").forEach(btn=>
