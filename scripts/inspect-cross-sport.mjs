@@ -4,7 +4,7 @@ const cases=[
  ["nba","basketball/nba","20261011"],["nba","basketball/nba","20261007"],
  ["mlb","baseball/mlb","20261010"],["ncaaf","football/college-football","20261010"],
  ["ncaab","basketball/mens-college-basketball","20251115"],
- ["soccer","soccer/eng.1","20261004"],["soccer","soccer/esp.1","20261004"]
+ ["soccer","soccer/eng.1","20260926"],["soccer","soccer/esp.1","20260927"],["soccer","soccer/usa.1","20261010"]
 ];
 async function get(url){let res=await fetch(url,{signal:AbortSignal.timeout(10000)});
 if(!res.ok)throw Error(res.status+" "+url);return res.json();}
