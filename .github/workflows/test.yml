@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - rebuild/prizepicks-evidence-v3
+      - fix/all-sports-props-events
   pull_request:
     branches: [main]
 permissions:
