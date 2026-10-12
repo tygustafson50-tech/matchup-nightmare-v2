@@ -1,10 +1,10 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Matchup Nightmare V3</title><link rel="stylesheet" href="/styles.css"></head><body>
-<header><div class="brand"><span>MN</span><div>MATCHUP NIGHTMARE<small>V3 / VERIFIED PRIZEPICKS RESEARCH</small></div></div><aside>DATA-AWARE · NO FAKE PICKS</aside></header>
+<header><div class="brand"><span>MN</span><div>MATCHUP NIGHTMARE<small>V3 / VERIFIED PROPLINE RESEARCH</small></div></div><aside>DATA-AWARE · NO FAKE PICKS</aside></header>
 <main>
-<p class="eyebrow">EVIDENCE-FIRST PLAYER PROP RESEARCH</p><h1>Scan the matchup<span>.</span></h1><p class="muted">Real, authorized PrizePicks lines · Last five current-season games · Three-season similar-defense evidence.</p>
+<p class="eyebrow">EVIDENCE-FIRST PLAYER PROP RESEARCH</p><h1>Scan the matchup<span>.</span></h1><p class="muted">Real PropLine sportsbook lines · Last five current-season games · Three-season similar-defense evidence.</p>
 <nav id="sports"></nav>
 <section class="panel game-selection"><h2>01 / Select games</h2><div class="cols"><label>Game date<input id="date" type="date"></label><label id="leagueWrap" hidden>Soccer league<select id="league"></select></label></div>
-<p class="muted" id="scheduleStatus">Loading schedules…</p><p class="muted" id="count">0 / 16 games selected</p><div id="games" class="games"></div><div class="scanner-actions"><button id="scanSelected" class="gold">⚡ Scan Selected Games</button><button id="refresh" class="secondary">Refresh schedule</button><a class="secondary external-prizepicks" href="https://www.prizepicks.com/" target="_blank" rel="noopener noreferrer" aria-label="Open official PrizePicks website in a new tab">↗ Open PrizePicks</a></div><p class="muted site-link-note">Opens the official PrizePicks website. This link does not sync or import projections into Matchup Nightmare.</p><p class="muted" id="scanProgress" aria-live="polite">Select a game, then scan verified PrizePicks offers and position-specific historical evidence.</p></section><p class="scan-rule-mini"><strong>One-click scan:</strong> AUTHORIZED PRIZEPICKS LINES ONLY · Last 5 games · All verifiable similar defenses from the last 3 seasons · NO synthetic projections.</p>
+<p class="muted" id="scheduleStatus">Loading schedules…</p><p class="muted" id="count">0 / 16 games selected</p><div id="games" class="games"></div><div class="scanner-actions"><button id="scanSelected" class="gold">⚡ Scan Selected Games</button><button id="refresh" class="secondary">Refresh schedule</button><a class="secondary external-propline" href="https://prop-line.com/pricing" target="_blank" rel="noopener noreferrer" aria-label="Get a free PropLine API key in a new tab">↗ Get Free PropLine Key</a></div><p class="muted site-link-note">Get your own API key and configure it as the PROPLINE_API_KEY secret in Cloudflare Pages to activate verified sportsbook lines.</p><p class="muted" id="scanProgress" aria-live="polite">Select a game, then scan verified PropLine offers and position-specific historical evidence.</p></section><p class="scan-rule-mini"><strong>One-click scan:</strong> REAL PROPLINE SPORTSBOOK LINES ONLY · Last 5 games · All verifiable similar defenses from the last 3 seasons · NO synthetic projections.</p>
 
 <section class="panel results" id="autoResults">
   <div class="results-heading">
@@ -29,5 +29,5 @@
   </div>
   <div id="scanOutput" class="scan-output"><div class="empty">Select up to 16 games, then click Scan Selected Games.</div></div>
 </section>
-<footer>Research only. PrizePicks integration requires licensed credentials; no data is fabricated if absent. Historical hit rates do not predict future results.</footer></main>
+<footer>Research only. PropLine integration requires licensed credentials; no data is fabricated if absent. Historical hit rates do not predict future results.</footer></main>
 <script type="module" src="/app.js"></script></body></html>
