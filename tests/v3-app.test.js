@@ -24,7 +24,7 @@ test("V3 never imports or invokes legacy model, historical alt-line maker or man
   assert.match(app,/\/api\/lines/);
   assert.match(app,/loadVerifiedEvidence/);
   assert.match(app,/analyzeVerifiedProp/);
-  assert.match(app,/No verified PrizePicks lines/);
+  assert.match(app,/No verified PropLine lines/);
   assert.match(app,/old quotes were cleared/);
 });
 test("all sport-specific positions and markets are kept separate",()=>{
@@ -87,9 +87,9 @@ test("ESPN client shares identical event requests and reports provider errors",a
   assert.equal(calls,1);
 });
 
-test("official PrizePicks shortcut opens externally without implying live projections",()=>{
-  assert.match(html,/href="https:\/\/www\.prizepicks\.com\/"/);
+test("official PropLine shortcut opens externally without implying live projections",()=>{
+  assert.match(html,/href="https:\/\/prop-line\.com\/pricing"/);
   assert.match(html,/target="_blank"/);
   assert.match(html,/rel="noopener noreferrer"/);
-  assert.match(html,/This link does not sync or import projections/);
+  assert.match(html,/Get your own API key/);
 });
