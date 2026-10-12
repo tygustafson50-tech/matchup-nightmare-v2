@@ -25,6 +25,9 @@ jobs:
           node --check public/lib/evidence-client-v3.js
           node --check functions/api/lines.js
           node --check server.js
+      - name: Diagnostic: verify ESPN sources across six sports
+        if: ${{ github.head_ref == 'fix/all-sports-props-events' }}
+        run: node scripts/inspect-cross-sport.mjs
       - name: Run Node tests
         id: suite
         shell: bash
