@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - main
-      - fix/strict-matchup-and-playing-time
+      - rebuild/prizepicks-evidence-v3
   pull_request:
     branches: [main]
 permissions:
@@ -18,6 +18,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Check app and data-source JavaScript syntax
+        run: |
+          node --check public/app.js
+          node --check public/lib/research-v3.js
+          node --check public/lib/evidence-client-v3.js
+          node --check functions/api/lines.js
+          node --check server.js
       - name: Run Node tests
         id: suite
         shell: bash
