@@ -152,21 +152,22 @@ function renderPickCard(p){
   const knownTeam=p.careerTeamsIncluded?.length
     ?p.careerTeamsIncluded.length+" verified prior franchise(s)"
     :"No former team verified";
-  const pctBadge=hasSimilar?Math.round(p.similarHits/p.similarSample*100)+"% MATCHUP"
-    :"RECENT FORM ONLY";
-  const badge=hasSimilar?similarLabel:recentLabel;
+  const pctBadge=p.isFullyQualified?"100% RECENT + MATCHUP"
+    :p.similarSample===4&&p.similarHits<p.similarSample?"100% RECENT · MATCHUP NOT 100%"
+    :p.similarSample>0?"100% RECENT · PARTIAL MATCHUP":"100% RECENT · MATCHUP UNVERIFIED";
+  const badge=p.isFullyQualified?similarLabel:"Not fully verified";
   const lineType=p.lineVerified
     ?"VERIFIED "+String(p.lineType||"SPORTSBOOK")+" OVER"
-    :"RESEARCH-ONLY OVER";
+    :"RESEARCH ALT OVER";
   const scope=p.lineVerified
     ?"Quoted line: "+(p.marketSource||"verified price source")
-    :"The research line is based on the player's current-season form. It is NOT a current PrizePicks/sportsbook line or payout offer.";
+    :"This ALT threshold is derived from recorded game results. It is NOT a verified available PrizePicks/sportsbook line or payout offer.";
   return '<article class="scan-card">'+
     '<div class="scan-top"><div class="scan-identity">'+image+
       '<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+
       ' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+
       '</small><small>'+safe(p.position||"Position not verified")+'</small></div></div>'+
-      '<span class="trend-badge'+(!hasSimilar?' trend-unverified':'')+'">'+safe(pctBadge)+
+      '<span class="trend-badge'+(!p.isFullyQualified?' trend-unverified':'')+'">'+safe(pctBadge)+
       ' · '+safe(badge)+(p.coveragePartial?' · PARTIAL DATA':'')+'</span></div>'+
     '<div class="scan-line">'+safe(lineType)+' <strong>'+safe(p.line)+'</strong> '+safe(p.market)+'</div>'+
     (p.playingTimeEligibility?.eligible?'<p class="season-evidence">Playing time: '+safe(p.playingTimeEligibility.metric)+' · '+safe(Math.round(p.playingTimeEligibility.averageShare*100))+'% across '+safe(p.playingTimeEligibility.samples)+' verified games</p>':'')+
@@ -188,7 +189,7 @@ function renderPickCard(p){
     '<details><summary>How were these trends calculated?</summary>'+
       '<p class="muted">Recent form: '+safe(recentLabel)+' from recorded games in the selected season. '+
       'Matchup history: '+safe(similarLabel)+' from the last four verifiable defenses with comparable position/stat concessions over up to three seasons. '+
-      'The threshold is not calculated from the minimum result of the matching historical games. '+
+      'The research ALT threshold is the highest half-point OVER line below the lowest observed result in the selected games. '+
       'Availability, injuries, projected minutes, and role changes are not independently verified. A 100% past hit rate is not a future win probability.</p>'+
     '</details></article>';
 }
@@ -200,7 +201,7 @@ function renderAutomaticResults(items,failures,completed){
     el("scanOutput").innerHTML=unavailable
       ?'<div class="empty"><strong>Scan unavailable — no picks were calculated.</strong><p class="muted">Cloudflare did not return the historical statistics required for this game. This is an API/deployment problem, not a zero-hit matchup.</p></div>'+
         failures.map(e=>'<p class="error">'+safe(e)+'</p>').join("")
-      :'<div class="empty">No player met the strict 5/5 recent OVER + 4/4 similar-defense OVER + verified over-50% playing-time criteria. Missing evidence is not counted as a successful matchup.</div>';
+      :'<div class="empty">No ALT OVER research lines had sufficient evidence for players at 50%+ playing time. Missing snap counts or zero-stat games cannot count as 100% OVER evidence.</div>';
     return;
   }
   const all=items.flatMap(x=>(x.results||[]).map(p=>({...p,sourceGame:x.game,provider:x.provider})));
@@ -223,14 +224,15 @@ function renderAutomaticResults(items,failures,completed){
     return '<p class="season-evidence">'+safe(label)+' · Searched seasons: '+
       safe(requested)+' · Usable seasons: '+safe(loaded||"None")+evidence+'</p>';
   }).join("");
-  const warnings=items.flatMap(x=>x.notes||[]).filter(n=>/unavailable|missing|partial|incomplete|not loaded|roster|scheme|source request cap|current-season|limited lookback|same-team|lacked verified positions|position lookup|strict|excluded|50%|no fully qualified/i.test(n));
-  el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' FULLY QUALIFIED 100% OVER cards (5/5 recent AND 4/4 similar-defense games; verified regular playing time). These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
+  const warnings=items.flatMap(x=>x.notes||[]).filter(n=>/unavailable|missing|partial|incomplete|not loaded|roster|scheme|source request cap|current-season|limited lookback|same-team|lacked verified positions|position lookup|strict|excluded|50%|no fully qualified|ALT-line mode|NFL playing-time data|snap-count source/i.test(n));
+  const fullyQualified=all.filter(p=>p.isFullyQualified).length;
+  el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' research ALT OVER thresholds for players with verified 50%+ playing time ('+fullyQualified+' with full 5/5 recent AND 4/4 similar-defense evidence). Incomplete matchup histories are labeled. These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
     coverage+(warnings.length?'<div class="warning">'+[...new Set(warnings)].map(safe).join(" · ")+'</div>':"")+
     (failures.length?'<div class="warning">'+safe(failures.length)+' games or partial data sources could not be analyzed. '+failures.slice(0,5).map(safe).join(" · ")+'</div>':"")+
     (pendingCareerCount?'<p class="warning">Career data was prioritized for active players. '+pendingCareerCount+
       ' additional player histories can still be checked.</p><button id="scanMoreCareers" class="gold">Scan more player careers ('+pendingCareerCount+' remaining)</button>':"")+
     (all.length?'<div id="pickCardMount"></div>':
-      '<div class="empty">No picks meet ALL filters: 5/5 current-season OVER, 4/4 similar-defense OVER in the last three seasons, and verified playing time over 50%. Missing source snap data or defensive boxscores do not qualify.</div>');
+      '<div class="empty">No ALT OVER thresholds supported by recorded games and verified 50%+ playing time. Missing snap counts and zero-stat games cannot be treated as guaranteed OVER hits.</div>');
   drawFilteredPickCards();
 }
 scanBtn.addEventListener("click",async()=>{
@@ -316,7 +318,7 @@ scanBtn.addEventListener("click",async()=>{
   function snapshot(){
     return states.map(state=>{
       const result=combineSeasonBatches(state.responses,{
-        sport,mode,window,strict:true,careerBatches:state.careerBatches,
+        sport,mode,window,strict:true,altMode:true,careerBatches:state.careerBatches,
         careerEligibleCount:state.candidateCount
       });
       result.careerPlayersRemaining=state.pendingPlayers.length;
