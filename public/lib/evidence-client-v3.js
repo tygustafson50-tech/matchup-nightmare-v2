@@ -88,7 +88,42 @@ function statsFrom(group,row,sport){
   }
   return out;
 }
+// Soccer ESPN summaries expose per-athlete stats on summary.rosters rather
+// than summary.boxscore.players. Read only explicitly named recorded values.
+function soccerRosterPlayers(summary,teamId){
+  const clubs=Array.isArray(summary?.rosters)?summary.rosters:[];
+  const rows=clubs.filter(x=>String(x.team?.id)===String(teamId))
+    .flatMap(x=>Array.isArray(x.roster)?x.roster:[]);
+  const out=[];
+  for(const row of rows){
+    const athlete=row.athlete||{},stats={};
+    if(!idOk(athlete.id)||!nameOf(athlete))continue;
+    const raw=new Map((Array.isArray(row.stats)?row.stats:[])
+      .filter(x=>x&&typeof x.name==="string")
+      .map(x=>[x.name,x.value??x.displayValue]));
+    const put=(key,...fieldNames)=>{
+      for(const name of fieldNames){
+        const n=safeNum(raw.get(name));
+        if(n!==null&&n>=0){stats[key]=n;return;}
+      }
+    };
+    put("goals","totalGoals","goals");
+    put("assists","goalAssists","assists");
+    put("shots","totalShots","shots");
+    put("shotsOnTarget","shotsOnTarget");
+    put("tackles","totalTackles","tackles");
+    put("fouls","foulsCommitted");
+    put("saves","saves");
+    if(!Object.keys(stats).length)continue;
+    out.push({id:String(athlete.id),name:nameOf(athlete),
+      position:codeOf(row.position)||codeOf(athlete.position),
+      stats,verified:true});
+  }
+  const unique=new Map(out.map(x=>[x.id,x]));
+  return [...unique.values()];
+}
 export function playersFromBoxscore(summary,sport,teamId){
+  if(sport==="soccer")return soccerRosterPlayers(summary,teamId);
   const roster=summary?.boxscore?.players;
   if(!Array.isArray(roster))return [];
   const players=new Map();
@@ -147,6 +182,11 @@ export function completedTeamGames(schedule,teamId,before,season){
   return out.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
 }
 function playingClub(summary,id){
+  if(Array.isArray(summary?.rosters)){
+    const clubs=summary.rosters.filter(t=>(t.roster||[]).some(x=>
+      String(x.athlete?.id)===String(id)));
+    return clubs.length===1?{team:clubs[0].team}:null;
+  }
   const teams=summary?.boxscore?.players||[];
   const found=teams.filter(t=>(t.statistics||[]).some(s=>(s.athletes||[]).some(x=>
     String(x.athlete?.id||x.id)===String(id))));
@@ -167,7 +207,8 @@ function volumeStat(sport,role,stat){
   return null;
 }
 export function concededAgainstPosition(summary,{sport,defenseId,role,stat}){
-  const teams=summary?.boxscore?.players||[];
+  const teams=sport==="soccer"&&Array.isArray(summary?.rosters)
+    ?summary.rosters:summary?.boxscore?.players||[];
   if(teams.length!==2)return null;
   const other=teams.find(t=>String(t.team?.id)!==String(defenseId));
   if(!teams.some(t=>String(t.team?.id)===String(defenseId))||!other?.team?.id)return null;
