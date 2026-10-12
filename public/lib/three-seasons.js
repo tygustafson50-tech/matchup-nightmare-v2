@@ -184,7 +184,8 @@ export function combineSeasonBatches(responses,{
     const eligibleIds=new Set();
     const participationByPlayer=new Map();
     for(const [id,appearances] of currentAthletes){
-      const participation=playingTimeEligibility(appearances,sport);
+      const participation=playingTimeEligibility(appearances,sport,
+        {minimumGames:altMode?1:3});
       participationByPlayer.set(id,participation);
       if(!strict||participation.eligible)eligibleIds.add(id);
       else excludedForPlayingTime++;
