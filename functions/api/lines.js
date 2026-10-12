@@ -64,9 +64,9 @@ const MARKET_MAP={
 const BOOKS=new Set(["draftkings"]);
 // Only validated selected ESPN fixtures may trigger paid API calls.
 const teamNorm=x=>String(x||"").normalize("NFKD").toLowerCase()
-  .replace(/[\\u0300-\\u036f]/g,"").replace(/\\bsaint\\b/g,"st")
-  .replace(/\\bstate\\b/g,"st").replace(/\\bfc\\b|\\bcf\\b/g,"")
-  .replace(/\\bthe\\b/g,"").replace(/[^a-z0-9]/g,"");
+  .replace(/[\u0300-\u036f]/g,"").replace(/\bsaint\b/g,"st")
+  .replace(/\bstate\b/g,"st").replace(/\bfc\b|\bcf\b/g,"")
+  .replace(/\bthe\b/g,"").replace(/[^a-z0-9]/g,"");
 function readFixtureFilter(raw){
   if(!raw)return {fixtures:[{all:true}]};
   if(raw.length>4500)return {error:"Selected fixtures query is too large."};
@@ -78,7 +78,7 @@ function readFixtureFilter(raw){
       id:String(f?.id||""),home:String(f?.home||"").trim(),
       away:String(f?.away||"").trim()
     }));
-    if(fixtures.some(f=>!/^\\d{5,15}$/.test(f.id)||
+    if(fixtures.some(f=>!/^\d{5,15}$/.test(f.id)||
       !f.home||!f.away||f.home.length>110||f.away.length>110))
       return {error:"Invalid ESPN game fixture selection."};
     return {fixtures};
@@ -86,13 +86,13 @@ function readFixtureFilter(raw){
 }
 function sameTeam(a,b){
   const x=teamNorm(a),y=teamNorm(b);
-  // A shortened team name from ESPN may omit a city: accept containment
-  // only when the shared part is at least 8 characters long.
+  // An abbreviated ESPN location may differ. Require an 8-character
+  // common suffix (not just e.g. "Tigers") to avoid mixing college teams.
   return x===y||x.length>=8&&y.length>=8&&
     (x.endsWith(y)||y.endsWith(x));
 }
 function matchesRequestedEvent(event,fixture){
-  if(fixture.all)return true; // Compatibility with older direct API clients.
+  if(fixture.all)return true; // Compatibility with old direct API clients.
   if(event.espn_event_id&&String(event.espn_event_id)===fixture.id)return true;
   return sameTeam(event.home_team,fixture.home)&&
     sameTeam(event.away_team,fixture.away);
