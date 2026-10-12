@@ -7,7 +7,7 @@ import {CONFIG,priorGames,extractBoxscore,buildPositionProfile,
 import {parseApiResponse} from "./api-client.js";
 
 const GOOD_ID=/^\d{1,15}$/;
-const MAX_HISTORY=5,DEFENSE_CANDIDATES=3,PROFILE_GAMES=2;
+const MAX_HISTORY=14,DEFENSE_CANDIDATES=14,PROFILE_GAMES=2;
 export function seasonOf(game,sport){
   if(Number.isInteger(Number(game?.season))&&Number(game.season)>1900)
     return Number(game.season);
@@ -232,7 +232,8 @@ export async function loadSeasonFromEspn({
         }
         return {id:String(g.id),date:g.date,season:year,
           opponent:g.opponent,opponentId:String(g.opponentId),
-          playedTeamId:team.id,playedTeamName:team.name,players};
+          playedTeamId:team.id,playedTeamName:team.name,
+           league:sport==="soccer"?league:null,players};
       });
   }
   if(diagnostics.missingOffenseBoxscores||diagnostics.missingDefenseBoxscores)

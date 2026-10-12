@@ -1,0 +1,41 @@
+name: Validate Matchup Nightmare
+on:
+  push:
+    branches:
+      - main
+      - fix/strict-matchup-and-playing-time
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  node-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run Node tests
+        id: suite
+        shell: bash
+        run: |
+          set +e
+          npm test > test-output.log 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          tail -n 150 test-output.log >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+      - name: Report test failures on PR
+        if: ${{ github.event_name == 'pull_request' && steps.suite.outputs.exit_code != '0' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          tail -n 150 test-output.log > failed-tests.txt
+          gh pr comment "$PR_NUMBER" --body-file failed-tests.txt
+      - name: Enforce successful tests
+        if: ${{ steps.suite.outputs.exit_code != '0' }}
+        run: exit 1

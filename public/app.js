@@ -169,6 +169,7 @@ function renderPickCard(p){
       '<span class="trend-badge'+(!hasSimilar?' trend-unverified':'')+'">'+safe(pctBadge)+
       ' · '+safe(badge)+(p.coveragePartial?' · PARTIAL DATA':'')+'</span></div>'+
     '<div class="scan-line">'+safe(lineType)+' <strong>'+safe(p.line)+'</strong> '+safe(p.market)+'</div>'+
+    (p.playingTimeEligibility?.eligible?'<p class="season-evidence">Playing time: '+safe(p.playingTimeEligibility.metric)+' · '+safe(Math.round(p.playingTimeEligibility.averageShare*100))+'% across '+safe(p.playingTimeEligibility.samples)+' verified games</p>':'')+
     '<div class="scan-stats">'+
       '<div><strong>'+safe(recentLabel)+'</strong><small>Current-season recent trend</small></div>'+
       '<div><strong>'+safe(similarLabel)+'</strong><small>Three-season matchup trend</small></div>'+
@@ -199,7 +200,7 @@ function renderAutomaticResults(items,failures,completed){
     el("scanOutput").innerHTML=unavailable
       ?'<div class="empty"><strong>Scan unavailable — no picks were calculated.</strong><p class="muted">Cloudflare did not return the historical statistics required for this game. This is an API/deployment problem, not a zero-hit matchup.</p></div>'+
         failures.map(e=>'<p class="error">'+safe(e)+'</p>').join("")
-      :'<div class="empty">No verified historical OVER research cards were found in the usable data. This is not a guaranteed prediction.</div>';
+      :'<div class="empty">No player met the strict 5/5 recent OVER + 4/4 similar-defense OVER + verified over-50% playing-time criteria. Missing evidence is not counted as a successful matchup.</div>';
     return;
   }
   const all=items.flatMap(x=>(x.results||[]).map(p=>({...p,sourceGame:x.game,provider:x.provider})));
@@ -222,14 +223,14 @@ function renderAutomaticResults(items,failures,completed){
     return '<p class="season-evidence">'+safe(label)+' · Searched seasons: '+
       safe(requested)+' · Usable seasons: '+safe(loaded||"None")+evidence+'</p>';
   }).join("");
-  const warnings=items.flatMap(x=>x.notes||[]).filter(n=>/unavailable|missing|partial|incomplete|not loaded|roster|scheme|source request cap|current-season|limited lookback|same-team|lacked verified positions|position lookup/i.test(n));
-  el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' OVER research cards (hit rates calculated from actual recorded games). These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
+  const warnings=items.flatMap(x=>x.notes||[]).filter(n=>/unavailable|missing|partial|incomplete|not loaded|roster|scheme|source request cap|current-season|limited lookback|same-team|lacked verified positions|position lookup|strict|excluded|50%|no fully qualified/i.test(n));
+  el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' FULLY QUALIFIED 100% OVER cards (5/5 recent AND 4/4 similar-defense games; verified regular playing time). These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
     coverage+(warnings.length?'<div class="warning">'+[...new Set(warnings)].map(safe).join(" · ")+'</div>':"")+
     (failures.length?'<div class="warning">'+safe(failures.length)+' games or partial data sources could not be analyzed. '+failures.slice(0,5).map(safe).join(" · ")+'</div>':"")+
     (pendingCareerCount?'<p class="warning">Career data was prioritized for active players. '+pendingCareerCount+
       ' additional player histories can still be checked.</p><button id="scanMoreCareers" class="gold">Scan more player careers ('+pendingCareerCount+' remaining)</button>':"")+
     (all.length?'<div id="pickCardMount"></div>':
-      '<div class="empty">No historical OVER research cards could be calculated from the available season data. Missing historical boxscores or comparable opponents can also cause an empty scan.</div>');
+      '<div class="empty">No picks meet ALL filters: 5/5 current-season OVER, 4/4 similar-defense OVER in the last three seasons, and verified playing time over 50%. Missing source snap data or defensive boxscores do not qualify.</div>');
   drawFilteredPickCards();
 }
 scanBtn.addEventListener("click",async()=>{
@@ -315,7 +316,7 @@ scanBtn.addEventListener("click",async()=>{
   function snapshot(){
     return states.map(state=>{
       const result=combineSeasonBatches(state.responses,{
-        sport,mode,window,careerBatches:state.careerBatches,
+        sport,mode,window,strict:true,careerBatches:state.careerBatches,
         careerEligibleCount:state.candidateCount
       });
       result.careerPlayersRemaining=state.pendingPlayers.length;
@@ -363,7 +364,7 @@ scanBtn.addEventListener("click",async()=>{
         // Prioritize up to four players per team for a single game (two for
         // multi-game scans); the user can explicitly expand coverage.
         const candidates=eligibleCareerPlayers(currentBatch,sport,
-          window===3?(chosen.length>1?2:4):0);
+          window===3?(chosen.length>1?2:4):0,true);
         const state={game,responses,years,careerBatches:[],
           candidateCount:window===3?candidates.total:0,pendingPlayers:window===3?candidates.remaining:[],
           errors};
