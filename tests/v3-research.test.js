@@ -95,7 +95,7 @@ test("historical defender must be position, stat and season normalized",()=>{
   const out=analyzeVerifiedProp({offer,season:2026,games:data.games,
     upcomingDefense:data.upcoming,defensiveProfiles:missing});
   assert.equal(out.similarGames.some(g=>g.season===2025),false);
-  assert.ok(out.limitations.some(x=>/Season-normalized/i.test(x)));
+  assert.ok(out.limitations.some(x=>/Insufficient independently verified position-specific comparable|Missing verified position\/stat pregame defense evidence/i.test(x)));
 });
 test("sport/role/market separation does not reuse NFL features as NBA features",()=>{
   const data=dataset();
