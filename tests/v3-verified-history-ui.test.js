@@ -27,7 +27,7 @@ test("verified receiving-yards games expose the actual yards for EACH verified m
   assert.match(html,/3 verified games/);
   for(const [opponent,actual] of [["Chicago Bears",73],["Arizona Cardinals",32],["Seattle Seahawks",49.5]]){
     assert.match(html,new RegExp(opponent));
-    assert.match(html,new RegExp('class="verified-actual-number">'+actual.replace?.(".","\\.") ?? String(actual)));
+    assert.ok(html.includes('<strong class="verified-actual-number">'+String(actual)+'</strong>'));
   }
   assert.match(html,/<strong class="verified-actual-number">73<\/strong>\s*<small class="verified-actual-unit">Receiving yards<\/small>/);
   assert.match(html,/vs current line 49.5/);
