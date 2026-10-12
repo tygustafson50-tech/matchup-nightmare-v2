@@ -5,6 +5,7 @@
 import {CONFIG,priorGames,extractBoxscore,buildPositionProfile,
   rosterPositionIndex,attachRosterPositions,matchupRole} from "./auto-scan.js";
 import {parseApiResponse} from "./api-client.js";
+import {parseNflSnapCsv,attachNflSnapEvidence} from "./nfl-snaps.js";
 
 const GOOD_ID=/^\d{1,15}$/;
 const MAX_HISTORY=14,DEFENSE_CANDIDATES=14,PROFILE_GAMES=2;
@@ -55,7 +56,16 @@ export function createEspnSourceClient({request=globalThis.fetch,concurrency=3,
     }
     return memo.get(key);
   };
-  return {source,stats:()=>({completed,active,unique:memo.size})};
+  const nflSnapSeason=season=>{
+    const key="nfl-snaps-"+String(season);
+    if(!memo.has(key))memo.set(key,limit(async()=>{
+      const response=await request("/api/snaps?season="+encodeURIComponent(season));
+      if(!response.ok)throw Error("NFL snap source unavailable ("+response.status+")");
+      return parseNflSnapCsv(await response.text(),season);
+    }));
+    return memo.get(key);
+  };
+  return {source,nflSnapSeason,stats:()=>({completed,active,unique:memo.size})};
 }
 
 export async function loadSeasonFromEspn({
@@ -162,6 +172,32 @@ export async function loadSeasonFromEspn({
       diagnostics.defenseBoxscores++;
     }else diagnostics.missingDefenseBoxscores++;
   }
+  if(sport==="nfl"&&typeof client.nflSnapSeason==="function"){
+    try{
+      onStage("Verifying "+year+" NFL offensive snap percentages…");
+      const snapIndex=await client.nflSnapSeason(year);
+      const eventMeta=new Map([
+        ...offense,...validDemands.flatMap(d=>d.games)
+      ].map(g=>[String(g.id),g]));
+      let supported=0;
+      for(const [id,raw] of boxscores){
+        const meta=eventMeta.get(id);
+        const week=meta?.week??raw?.header?.competitions?.[0]?.week?.number??
+          raw?.header?.week?.number??null;
+        const enhanced=attachNflSnapEvidence(raw,snapIndex,{week});
+        boxscores.set(id,enhanced);
+        for(const team of Object.values(enhanced._nflSnapShareByPlayerId||{}))
+          supported+=Object.keys(team).length;
+      }
+      diagnostics.nflSnapMatchedAthletes=supported;
+      notes.push("NFL playing-time data: "+supported+
+        " verified player-game snaps matched from nflverse/PFR.");
+    }catch(error){
+      diagnostics.nflSnapSourceUnavailable=true;
+      notes.push("NFL snap-count source unavailable for "+year+": "+
+        errorText(error)+". Missing snap shares are not guessed.");
+    }
+  }
   // Position labels in ESPN event boxscores are often missing.
   // Accept only an actual player/roster position, never infer one from stats.
   const rosterWanted=new Map();
@@ -233,7 +269,7 @@ export async function loadSeasonFromEspn({
         return {id:String(g.id),date:g.date,season:year,
           opponent:g.opponent,opponentId:String(g.opponentId),
           playedTeamId:team.id,playedTeamName:team.name,
-           league:sport==="soccer"?league:null,players};
+           league:sport==="soccer"?league:null,week:g.week??null,players};
       });
   }
   if(diagnostics.missingOffenseBoxscores||diagnostics.missingDefenseBoxscores)
