@@ -109,6 +109,10 @@ test("one 3-season recent+similar OVER model uses real opponent ranks and exact 
 });
 test("NFL UI shows defense ranks and clearly labels season aggregate look-ahead",()=>{
   const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
+  // The production scanner must forward the chosen rank model. Otherwise the
+  // analyzer silently uses the old incompatible defensive cohort algorithm
+  // and displays zero verified NFL similar-defense games.
+  assert.match(app,/matchupModel:input\.matchupModel/);
   assert.match(app,/historicalRank/);
   assert.match(app,/upcomingDefenseRank/);
   assert.match(app,/not necessarily pregame rankings/);
