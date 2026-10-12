@@ -77,7 +77,7 @@ export async function loadCareerFromEspn({
     const enhanced=attachRosterPositions(entry.summary,positions);
     const found=athleteCareerAppearance(enhanced,sport,player.playerId,
       entry.record.id,year,entry.record.date);
-    if(found)appearances.push(found);
+    if(found)appearances.push({...found,league:sport==="soccer"?league:null});
   }
   diagnostics.verifiedAppearances=appearances.length;
   const chosen=appearances.slice(0,MAX_DEFENSIVE_OPPONENTS);
