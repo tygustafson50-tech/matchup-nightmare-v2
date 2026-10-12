@@ -86,7 +86,7 @@ function renderCard(c){
       (Number.isFinite(c.price)?' · '+safe(c.price>0?'+':'')+safe(c.price):'')+
       ' · '+safe(c.book)+'</div>'+
     '<p class="season-evidence">Book quote last updated '+safe(kickoff(c.quotedAt))+
-      ' · Best evidenced quote from '+safe(c.quotesConsidered||1)+' real sportsbook line(s)'+
+      ' · Selected from '+safe(c.quotesConsidered||1)+' real sportsbook line(s)'+
       ' · Three-season window '+safe(c.seasonWindow.join(" / "))+'</p>'+
     '<div class="scan-stats">'+
       '<div><strong>'+safe(hitText(c.recent))+'</strong><small>Last five current-season games</small></div>'+
