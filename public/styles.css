@@ -337,3 +337,66 @@
  .verified-game-history .game-log-header{font-size:9px}
  .verified-game-history .game-log-status{font-size:9px}
 }
+
+/* Verified ESPN athlete profile and injury signal, shared across all sports. */
+.scan-card .scan-top{align-items:flex-start;gap:12px;flex-wrap:wrap}
+.scan-card .scan-identity{gap:13px;align-items:flex-start;flex:1 1 280px;min-width:0}
+.player-portrait{
+  width:76px;height:84px;flex:none;position:relative;
+  display:grid;place-items:center;
+  background:radial-gradient(ellipse at 65% 16%,#635431,#26221d 67%);
+  border:1px solid #897346;border-radius:12px;overflow:hidden;
+}
+.player-portrait .player-initial{
+  width:100%;height:100%;background:transparent;border:0;
+  border-radius:0;position:absolute;inset:0;font-size:23px;color:#f3d18a;
+}
+.player-portrait .player-image{
+  position:absolute;width:100%;height:100%;inset:0;
+  object-fit:contain;object-position:center bottom;
+  background:linear-gradient(155deg,#453721,#14161a);
+  border-radius:0;z-index:1;
+}
+.player-identity-info{min-width:0;flex:1}
+.player-name-row{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.player-name-row .player-name{
+  font-size:16px;line-height:1.35;color:#fff0ca;letter-spacing:-.1px;
+}
+.health-badge{
+  font-size:10px;line-height:1.2;padding:5px 8px;border-radius:6px;
+  font-weight:800;display:inline-block;white-space:normal;
+  border:1px solid #57524b;background:#292a2b;color:#cbc8bf;
+}
+.health-out{background:#452320;border-color:#c16c63;color:#ffd0cb}
+.health-questionable{background:#493618;border-color:#b58a38;color:#ffe0a2}
+.health-reported{background:#402c1e;border-color:#986c46;color:#f6d3a9}
+.health-not-listed{background:#202e27;border-color:#517866;color:#b7d8c2}
+.health-unknown{background:#28282c;border-color:#5a5963;color:#c8c6cf}
+.matchup-logo-row{
+  display:flex;align-items:center;gap:8px;margin:9px 0 5px;
+}
+.matchup-team-name{font-size:12px;line-height:1.4;color:#d6d0c3;overflow-wrap:anywhere}
+.matchup-team-name .versus{color:#bfaa7b;font-size:10px}
+.team-logo-slot{
+  height:30px;width:30px;border-radius:7px;flex:none;
+  display:grid;place-items:center;position:relative;
+  border:1px solid #4d483e;background:#22211f;overflow:hidden;
+}
+.team-logo-slot img{
+  position:absolute;inset:1px;width:calc(100% - 2px);
+  height:calc(100% - 2px);object-fit:contain;
+}
+.brand-logo-fallback{color:#ccb886;font-size:9px;font-weight:800}
+.player-identity-info .player-meta{
+  font-size:10px;color:#9f9da1;display:block;margin:6px 0;
+  line-height:1.5;
+}
+.injury-provenance{font-size:10px;line-height:1.4;color:#c8b69a;display:block}
+.injury-detail{display:block;color:#d8c1a1;margin-top:3px;overflow-wrap:anywhere}
+@media(max-width:540px){
+  .player-portrait{width:66px;height:74px}
+  .player-name-row .player-name{font-size:15px}
+  .matchup-team-name{font-size:11px}
+  .scan-card .scan-top{align-items:flex-start}
+  .scan-card .scan-identity{flex-basis:100%}
+}

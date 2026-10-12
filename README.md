@@ -78,3 +78,11 @@ ran out. The cache lives in that browser/device, not your PropLine account.
 Private browsing, clearing website data, browser storage restrictions, or
 changing devices can make it unavailable. This does not bypass API quotas
 or guarantee an unchanged sportsbook line.
+
+## Player photos, team logos, and injury designations
+
+Every verified player-prop card now draws its player headshot and medical/availability designation from the **exact ESPN athlete verified on that game's participating rosters**. It also displays **both team logos** from the authoritative ESPN game schedule record, without matching players to photos by ambiguous names. Only HTTPS ESPN CDN image URLs are rendered. When a photo or logo cannot be retrieved, a readable player/team initials placeholder remains in its place.
+
+Where ESPN lists an injury, the card displays the reported **Questionable, Doubtful, Out, Injured reserve, Day-to-day / game-time decision, Probable, or Injury reported** designation and available injury details. A roster with an explicitly empty injury list shows **No injury listed**, not "Healthy". Missing status data shows **Status not confirmed**. The last ESPN roster check time is displayed on new scans. **ESPN roster injuries are not a guaranteed up-to-the-minute game-day inactive report**; verify official injury reports and lineups before relying on availability.
+
+The last-scan quota fallback stores the photos/logos and designation with the original scanned cards but labels saved injury data **Saved: … / not rechecked**. No additional PropLine requests are made to obtain these images or roster statuses. The source/line, one-stat-per-player rule, and three-season matching logic are unchanged.

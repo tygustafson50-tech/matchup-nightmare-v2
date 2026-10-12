@@ -6,6 +6,7 @@
  */
 import {positionGroup,supportsMarket} from "./research-v3.js";
 import {parseFootballDefenseRanks} from "./football-defense-ranks.js";
+import {extractRosterVisuals} from "./player-profile-v3.js";
 const safeNum=n=>{
   if(typeof n==="number")return Number.isFinite(n)?n:null;
   if(typeof n!=="string"||!n.trim())return null;
@@ -214,7 +215,8 @@ function flattenRoster(payload){
     const athlete=entry.athlete||entry.player||entry;
     if(idOk(athlete.id)&&nameOf(athlete))
       out.push({id:String(athlete.id),name:nameOf(athlete),
-        position:codeOf(athlete.position)||codeOf(entry.position)});
+        position:codeOf(athlete.position)||codeOf(entry.position),
+        visuals:extractRosterVisuals(athlete)});
     for(const k of ["athletes","players","roster","entries","items","groups"]){
       if(Array.isArray(entry[k]))for(const child of entry[k])visit(child,depth+1);
     }
