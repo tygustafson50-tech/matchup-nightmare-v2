@@ -24,7 +24,7 @@ test("V3 never imports or invokes legacy model, historical alt-line maker or man
   assert.match(app,/\/api\/lines/);
   assert.match(app,/loadVerifiedEvidence/);
   assert.match(app,/analyzeVerifiedProp/);
-  assert.match(app,/No verified PropLine lines/);
+  assert.match(app,/No verified props for this sport and date/);
   assert.match(app,/old quotes were cleared/);
 });
 test("all sport-specific positions and markets are kept separate",()=>{
