@@ -21,7 +21,8 @@ export function eligibleCareerPlayers(currentBatch,sport,maxPerTeam=6,strict=fal
         if(!/^\d{2,15}$/.test(id))continue;
         const valid=markets.filter(([stat,,min])=>
           matchupRole(sport,athlete.position,stat) &&
-          Number.isFinite(athlete.stats?.[stat])&&athlete.stats[stat]>=0);
+          Number.isFinite(athlete.stats?.[stat])&&
+          athlete.stats[stat]>=(strict?0:min));
         if(!valid.length)continue;
         const existing=players.get(id)||{playerId:id,teamId:String(team.id),
           name:athlete.name||"Player",appearances:0,observations:[],markets:new Set(),
