@@ -152,9 +152,10 @@ async function loadGames(){
 }
 function fixtureMatches(offer,game){
   const a=normalize(game.away.name),h=normalize(game.home.name);
-  return offer.gameId===String(game.id) ||
-    (normalize(offer.team)===a&&normalize(offer.opponent)===h)||
-    (normalize(offer.team)===h&&normalize(offer.opponent)===a);
+  const sameEvent=offer.gameId && String(offer.gameId)===String(game.id);
+  const matchedNames=normalize(offer.fixture?.home)===h &&
+    normalize(offer.fixture?.away)===a;
+  return Boolean(sameEvent||matchedNames);
 }
 async function scan(){
   const chosen=games.filter(g=>selected.has(String(g.id)));
@@ -164,7 +165,7 @@ async function scan(){
   button.disabled=true;button.textContent="Scanning verified evidence…";
   clearResults();status("Requesting real sportsbook OVER lines from PropLine…");
   try{
-    const response=await fetch("/api/lines?"+new URLSearchParams({sport:currentSport,date:day}),
+    const response=await fetch("/api/lines?"+new URLSearchParams({sport:currentSport,date:day,league}),
       {headers:{Accept:"application/json"},cache:"no-store"});
     const feed=await response.json();
     if(own!==scanId)return;
@@ -182,9 +183,9 @@ async function scan(){
       if(matching.length===1)chosenPairs.push({offer,game:matching[0]});
       else if(matching.length>1)rejected.push("Ambiguous fixture for "+offer.player);
     }
-    watchedQuotes={sport:currentSport,date:day,
+    watchedQuotes={sport:currentSport,date:day,league,
       offers:new Map(chosenPairs.map(({offer})=>[offer.id,
-        {line:offer.line,status:offer.status,variant:offer.variant}]))};
+        {line:offer.line,status:offer.status,variant:offer.variant,price:offer.price}]))};
     const preface='<p class="season-evidence">PropLine lines last verified: '+
       safe(feed.sourceFetchedAt)+" · "+chosenPairs.length+
       ' active sportsbook OVER lines for selected games · Changes: '+
@@ -212,8 +213,11 @@ async function scan(){
           client,offer,game,league,
           onStage:stage=>{if(own===scanId)status(stage);}
         });
-        const card=analyzeVerifiedProp({offer:{...offer,
-          league:currentSport==="soccer"?league:null},
+        const confirmedOffer={...offer,position:input.player.position,
+          team:input.team.name,opponent:input.enemy.name,
+          espnPlayerId:input.player.id,
+          league:currentSport==="soccer"?league:null};
+        const card=analyzeVerifiedProp({offer:confirmedOffer,
           season:input.season,games:input.games,
           upcomingDefense:input.upcomingDefense,
           defensiveProfiles:input.defensiveProfiles});
@@ -261,7 +265,7 @@ setInterval(async()=>{
   watchBusy=true;
   try{
     const response=await fetch("/api/lines?"+new URLSearchParams({
-      sport:snapshot.sport,date:snapshot.date
+      sport:snapshot.sport,date:snapshot.date,league:snapshot.league
     }),{cache:"no-store"});
     const feed=await response.json();
     if(snapshot!==watchedQuotes)return;
@@ -273,7 +277,7 @@ setInterval(async()=>{
     for(const [id,old] of snapshot.offers){
       const current=latest.get(id);
       if(!current||current.line!==old.line||
-        current.variant!==old.variant||current.status!=="active"){
+        current.variant!==old.variant||current.price!==old.price||current.status!=="active"){
         clearResults();
         el("scanOutput").innerHTML='<div class="warning">PropLine projection moved, was suspended, or was removed. Old cards have been cleared. Scan again for current verified lines.</div>';
         status("PropLine board changed — rescan required.");
