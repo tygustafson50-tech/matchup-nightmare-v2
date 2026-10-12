@@ -72,9 +72,13 @@ const str=x=>typeof x==="string"?x.trim():"";
 const validDate=d=>/^20\d\d-\d\d-\d\d$/.test(d)&&
   !Number.isNaN(Date.parse(d+"T12:00:00Z")) &&
   new Date(d+"T12:00:00Z").toISOString().slice(0,10)===d;
-const dateCentral=iso=>new Intl.DateTimeFormat("en-CA",{
-  timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"
-}).format(new Date(iso));
+const dateCentral=iso=>{
+  const parts=new Intl.DateTimeFormat("en-US",{
+    timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"
+  }).formatToParts(new Date(iso));
+  const get=type=>parts.find(p=>p.type===type)?.value||"";
+  return get("year")+"-"+get("month")+"-"+get("day");
+};
 const timeOk=(value,now)=>typeof value==="string"&&Number.isFinite(Date.parse(value))&&
   Date.parse(value)<=now+120000&&now-Date.parse(value)<=30*60*1000;
 const linesFrom=(event,{sport,date,now}={})=>{
