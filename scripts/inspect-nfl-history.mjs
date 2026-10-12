@@ -64,3 +64,49 @@ for(const [player,id,team,stat] of [["Matthew Stafford","12483","14","passingYar
   statFields:athlete?Object.keys(athlete.stats):[]
  }));
 }
+
+const memo=new Map();
+const client={call:async params=>{
+ const key=JSON.stringify(params);
+ if(!memo.has(key))memo.set(key,(async()=>{
+  let url=esBase;
+  if(params.kind==="roster"||params.kind==="schedule"||params.kind==="teamstats")
+    url+="teams/"+params.teamId+"/"+(params.kind==="teamstats"?"statistics":params.kind)+"?season="+params.season;
+  else if(params.kind==="summary")url+="summary?event="+params.gameId;
+  else if(params.kind==="gamelog")url=base+params.playerId+"/gamelog?season="+params.season;
+  else throw Error("Unknown kind "+params.kind);
+  const response=await fetch(url,{signal:AbortSignal.timeout(18000)});
+  if(!response.ok)throw Error("ESPN "+params.kind+" HTTP "+response.status);
+  return response.json();
+ })());
+ return memo.get(key);
+}};
+for(const [who,playerId,teamId,enemyId,stat] of [
+ ["Matthew Stafford","12483","14","2","passingYards"],
+ ["Josh Allen","3918298","2","14","passingYards"]]){
+ try{
+  const offer={id:"test-"+playerId,source:"PropLine",book:"DraftKings",bookKey:"draftkings",
+    status:"active",sport:"nfl",player:who,espnPlayerId:playerId,position:null,
+    stat,market:"Passing yards",line:199.5,variant:"standard",
+    quotedAt:new Date().toISOString(),gameDateLocal:"2026-10-14",
+    providerEventId:"provider-fixture",team:null,opponent:null};
+  const game={id:"test-fixture",date:"2026-10-14T01:00:00Z",season:2026,
+    home:{id:teamId,name:"Test Home"},away:{id:enemyId,name:"Test Away"}};
+  const e=await loadVerifiedEvidence({client,offer,game,onStage:()=>{}});
+  const enriched={...offer,position:e.player.position,team:e.team.name,
+    opponent:e.enemy.name,espnPlayerId:e.player.id};
+  const c=analyzeVerifiedProp({offer:enriched,season:e.season,games:e.games,
+    upcomingDefense:e.upcomingDefense,defensiveProfiles:e.defensiveProfiles,
+    matchupModel:e.matchupModel});
+  console.log("ENDTOEND",JSON.stringify({
+    who,matchupModel:e.matchupModel,verifiedPlayer:e.player.id,
+    rawHistoryGames:e.games.length,years:e.games.reduce((a,x)=>(a[x.season]=(a[x.season]||0)+1,a),{}),
+    defenseProfiles:e.defensiveProfiles.length,
+    upcomingPassRank:e.upcomingDefense?.passing?.rank,
+    latestGames:c?.recent?.tracked,qualifiedSimilar:c?.similar?.tracked,
+    examples:c?.similarGames?.slice(0,3).map(g=>({year:g.season,date:g.date,
+      opponent:g.opponent,stat:g.actual,rank:g.historicalRank})),
+    notes:e.notes.slice(0,5),limitations:c?.limitations?.slice(0,3)
+  }));
+ }catch(e){console.log("ENDTOEND ERROR",who,String(e.stack||e).slice(0,1500))}
+}
