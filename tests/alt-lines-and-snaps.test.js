@@ -64,7 +64,9 @@ function season(y,{missing=false}={}){
       season:y,opponentId:opp,opponent:"Opponent",
       players:[{id:"81",name:"Receiver",position:"WR",
         playingTime:{snapShare:0.65},stats:{receivingYards:y===2026?2+i:1+i}}]});
-    if(!missing||i!==3)defenseProfiles[opp]={[g]:profile};
+    if(!missing||i!==3)defenseProfiles[opp]={[g]:y===2026?{
+      "receivingYards|WR":{average:190,games:3,metricLabel:"WR yards allowed"}
+    }:profile};
   }
   return {sport:"nfl",selectedSeason:2026,season:y,isCurrentSeason:y===2026,
     game:{id:"123456789",date:"2026-10-11T19:00:00Z",home:teams[0],away:teams[1]},
@@ -80,7 +82,12 @@ test("alt-line scanner shows full 5/5 plus 4/4 at low OVER half-point",()=>{
   assert.equal(p.isFullyQualified,true);
 });
 test("alt-line scanner still includes recent 100% but labels missing fourth as partial",()=>{
-  const r=combineSeasonBatches([season(2026),season(2025,{missing:true}),season(2024)],
+  const older=season(2024);
+  for(const entry of Object.values(older.seasonBatch.defenseProfiles))
+    for(const g of Object.keys(entry))entry[g]={"receivingYards|WR":{
+      average:190,games:3,metricLabel:"WR yards allowed"
+    }};
+  const r=combineSeasonBatches([season(2026),season(2025,{missing:true}),older],
     {sport:"nfl",strict:true,altMode:true});
   const p=r.results.find(p=>p.playerId==="81"&&p.stat==="receivingYards");
   assert.ok(p);
