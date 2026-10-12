@@ -72,6 +72,23 @@ test("free API key uses PropLine v1 authenticated sportsbook odds with exact ALT
   assert.equal(p.team,null);
   assert.doesNotMatch(JSON.stringify(body),/my-propline-secret/);
 });
+test("single-source enforcement excludes every book except DraftKings",async()=>{
+  const draftkings=event();
+  const otherBook=JSON.parse(JSON.stringify(draftkings.bookmakers[0]));
+  otherBook.key="fanduel";otherBook.title="FanDuel";
+  otherBook.markets[0].outcomes[0].point=4.5;
+  const allBooks={...draftkings,bookmakers:[
+    otherBook,draftkings.bookmakers[0],
+    {...otherBook,key:"betmgm",title:"BetMGM"}
+  ]};
+  const {response}=await call({odds:[allBooks]});
+  const body=await response.json();
+  assert.equal(body.status,"connected");
+  assert.equal(body.sportsbook,"DraftKings");
+  assert.equal(body.projections.length,1);
+  assert.ok(body.projections.every(p=>p.bookKey==="draftkings"));
+  assert.equal(body.projections[0].line,0.5);
+});
 test("unsupported and suspended markets do not create lines",()=>{
   const quoted=normalizePropLineOdds([event({suspended:true})],{
     sport:"nfl",date:"2026-10-11",now:Date.now()
