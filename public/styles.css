@@ -238,3 +238,9 @@
   .game-log-hit-rate{align-items:start;flex-direction:column}
   .game-log-hit-rate small{text-align:left}
 }
+
+/* Official PrizePicks link: opens a new tab, does not imply API access. */
+.scanner-actions a.external-prizepicks{display:inline-flex;align-items:center;justify-content:center;
+  text-decoration:none;border-radius:8px;font:inherit;min-height:46px}
+.scanner-actions a.external-prizepicks:hover{border-color:#d2af5d;color:#f7d77a}
+.site-link-note{margin:7px 0 0}

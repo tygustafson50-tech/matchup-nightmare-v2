@@ -86,3 +86,10 @@ test("ESPN client shares identical event requests and reports provider errors",a
   assert.deepEqual(a,b);
   assert.equal(calls,1);
 });
+
+test("official PrizePicks shortcut opens externally without implying live projections",()=>{
+  assert.match(html,/href="https:\/\/www\.prizepicks\.com\/"/);
+  assert.match(html,/target="_blank"/);
+  assert.match(html,/rel="noopener noreferrer"/);
+  assert.match(html,/This link does not sync or import projections/);
+});
