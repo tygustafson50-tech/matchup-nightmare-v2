@@ -5,6 +5,8 @@
  */
 import {analyzeVerifiedProp,rankEvidence} from "/lib/research-v3.js";
 import {makeEvidenceClient,loadVerifiedEvidence} from "/lib/evidence-client-v3.js";
+import {groupOffersByPlayerStat,selectBestOverCard,dedupeVerifiedCards}
+  from "/lib/one-line-per-stat.js";
 const SPORTS={
   nfl:"🏈 NFL",nba:"🏀 NBA",mlb:"⚾ MLB",
   ncaaf:"🏈 College Football",ncaab:"🏀 College Basketball",
@@ -84,6 +86,7 @@ function renderCard(c){
       (Number.isFinite(c.price)?' · '+safe(c.price>0?'+':'')+safe(c.price):'')+
       ' · '+safe(c.book)+'</div>'+
     '<p class="season-evidence">Book quote last updated '+safe(kickoff(c.quotedAt))+
+      ' · Best evidenced quote from '+safe(c.quotesConsidered||1)+' real sportsbook line(s)'+
       ' · Three-season window '+safe(c.seasonWindow.join(" / "))+'</p>'+
     '<div class="scan-stats">'+
       '<div><strong>'+safe(hitText(c.recent))+'</strong><small>Last five current-season games</small></div>'+
@@ -185,9 +188,9 @@ async function scan(){
       if(matching.length===1)chosenPairs.push({offer,game:matching[0]});
       else if(matching.length>1)rejected.push("Ambiguous fixture for "+offer.player);
     }
-    watchedQuotes={sport:currentSport,date:day,league,
-      offers:new Map(chosenPairs.map(({offer})=>[offer.id,
-        {line:offer.line,status:offer.status,variant:offer.variant,price:offer.price}]))};
+    const grouped=groupOffersByPlayerStat(chosenPairs);
+    // Only the single displayed quote is monitored after ranking; other
+    // sportsbook/ALT options never create duplicate player/stat cards.
     const preface='<p class="season-evidence">PropLine sportsbook odds retrieved: '+
       safe(feed.sourceFetchedAt)+" · "+chosenPairs.length+
       ' active sportsbook OVER lines for selected games · Changes: '+
@@ -207,31 +210,47 @@ async function scan(){
         " · active requests: "+x.active);
     }});
     const results=[],errors=[],counts={completed:0};
-    // Sequential per offer to avoid saturating free hosting while shared
-    // document cache deduplicates schedules and completed event boxes.
-    for(const {offer,game} of chosenPairs){
+    // Fetch one verified history per player/stat/game, regardless of how many
+    // alternative quotes or sportsbooks PropLine returned for that market.
+    for(const group of grouped){
       if(own!==scanId)return;
+      const offer=group.offers.find(x=>x.espnPlayerId)||group.offers[0];
+      const game=group.game;
       try{
+        if(group.identityConflict)throw Error(
+          "Conflicting provider athlete IDs for the same player/stat.");
         const input=await loadVerifiedEvidence({
           client,offer,game,league,
           onStage:stage=>{if(own===scanId)status(stage);}
         });
-        const confirmedOffer={...offer,position:input.player.position,
-          team:input.team.name,opponent:input.enemy.name,
-          espnPlayerId:input.player.id,
-          league:currentSport==="soccer"?league:null};
-        const card=analyzeVerifiedProp({offer:confirmedOffer,
-          season:input.season,games:input.games,
-          upcomingDefense:input.upcomingDefense,
-          defensiveProfiles:input.defensiveProfiles});
-        if(card)results.push(card);
+        const candidates=[];
+        for(const quote of group.offers){
+          if(quote.espnPlayerId&&String(quote.espnPlayerId)!==input.player.id)
+            continue;
+          const confirmedOffer={...quote,position:input.player.position,
+            team:input.team.name,opponent:input.enemy.name,
+            espnPlayerId:input.player.id,
+            league:currentSport==="soccer"?league:null};
+          const card=analyzeVerifiedProp({offer:confirmedOffer,
+            season:input.season,games:input.games,
+            upcomingDefense:input.upcomingDefense,
+            defensiveProfiles:input.defensiveProfiles});
+          if(card)candidates.push(card);
+        }
+        // One winner, with all displayed evidence based on its exact line.
+        const chosen=selectBestOverCard(candidates);
+        if(chosen)results.push({...chosen,quotesConsidered:group.offers.length});
       }catch(e){errors.push(offer.player+" / "+offer.market+": "+e.message);}
       counts.completed++;
-      if(own===scanId)status("Verified offers analyzed: "+counts.completed+
-        "/"+chosenPairs.length);
+      if(own===scanId)status("Unique player/stat markets analyzed: "+
+        counts.completed+"/"+grouped.length);
     }
     if(own!==scanId)return;
-    cards=rankEvidence(results);
+    cards=rankEvidence(dedupeVerifiedCards(results));
+    watchedQuotes=cards.length?{sport:currentSport,date:day,league,
+      offers:new Map(cards.map(c=>[c.id,{
+        line:c.line,status:"active",variant:c.variant,price:c.price
+      }]))}:null;
     el("pickFilters").hidden=!cards.length;
     if(cards.length){
       const uniq=a=>[...new Set(a)].sort();
@@ -240,8 +259,9 @@ async function scan(){
       setOptions("filterPosition",uniq(cards.map(c=>c.position)),"All positions");
     }
     el("scanOutput").innerHTML=preface+
-      '<p class="muted">PropLine sportsbook lines analyzed: '+counts.completed+
-      ' · Evidence cards: '+cards.length+
+      '<p class="muted">Unique player/stat markets analyzed: '+counts.completed+
+      ' · Real sportsbook quotes checked: '+chosenPairs.length+
+      ' · One-line-per-stat cards: '+cards.length+
       ' · OVER recommendations with sufficient evidence: '+
       cards.filter(c=>c.recommendation==="OVER").length+'.</p>'+
       (errors.length?'<details class="warning"><summary>'+errors.length+
