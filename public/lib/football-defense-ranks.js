@@ -35,7 +35,7 @@ export function parseFootballDefenseRanks(payload,{season,teamId}={}){
   // Require BOTH real categories to keep an honest rank comparison,
   // rather than inferring a passing rank from a rushing metric.
   if(!rush||!pass)return null;
-  return {teamId:String(teamId),season:Number(season),rushing:rush,
+  return {verified:true,teamId:String(teamId),season:Number(season),rushing:rush,
     passing:pass,source:"ESPN opponent team statistics",
     scope:"season aggregate (not pregame)"};
 }
