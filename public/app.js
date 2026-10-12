@@ -196,6 +196,7 @@ async function scan(){
     el("scanOutput").innerHTML=preface+
       '<div class="empty">Loading actual athlete boxscores and pregame defensive records…</div>';
     if(!chosenPairs.length){
+      watchedQuotes=null;
       el("scanOutput").innerHTML=preface+
         '<div class="empty">No supported, fresh sportsbook OVER lines match the selected fixtures. Unavailable or suspended lines were excluded.</div>';
       status("Verified board queried; no available matching projections.");
@@ -291,7 +292,7 @@ setInterval(async()=>{
       clearResults();status("PropLine feed verification failed — old quotes were cleared.");
     }
   }finally{watchBusy=false;}
-},120000);
+},600000);
 el("sports").innerHTML=Object.entries(SPORTS)
   .map(([id,label])=>'<button data-s="'+id+'">'+safe(label)+'</button>').join("");
 el("sports").querySelectorAll("button").forEach(btn=>
