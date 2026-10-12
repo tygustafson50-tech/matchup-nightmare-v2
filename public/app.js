@@ -8,6 +8,7 @@ import {makeEvidenceClient,loadVerifiedEvidence} from "/lib/evidence-client-v3.j
 import {groupOffersByPlayerStat,selectBestOverCard,dedupeVerifiedCards}
   from "/lib/one-line-per-stat.js";
 import {saveCompletedScan,readLastScan} from "/lib/last-scan-cache.js";
+import {renderVerifiedHistory} from "/lib/verified-history-ui.js";
 const SPORTS={
   nfl:"🏈 NFL",nba:"🏀 NBA",mlb:"⚾ MLB",
   ncaaf:"🏈 College Football",ncaab:"🏀 College Basketball",
@@ -48,30 +49,11 @@ function filtered(){
   return cards.filter(c=>(m==="all"||c.market===m)&&
     (t==="all"||c.team===t)&&(p==="all"||c.position===p));
 }
-function outcomeCell(g,line){
-  const cls=g.result==="OVER"?"over":g.result==="UNDER"?"below":"push";
-  return '<div class="game-log-row" role="row">'+
-    '<span class="game-log-date" role="cell">'+safe(prettyDate(g.date))+'</span>'+
-    '<strong class="game-log-opponent" role="cell">'+safe(g.opponent)+'</strong>'+
-    '<strong class="game-log-stat" role="cell">'+safe(g.actual)+
-      '<small class="game-log-line">OVER '+safe(line)+'</small></strong>'+
-    '<span class="game-log-status '+cls+'" role="cell">'+safe(g.result)+'</span>'+
-    '</div>';
-}
-function historyBlock(label,games,line,similar=false){
-  return '<details class="game-log-section" '+(similar?'':'open')+'>'+
-    '<summary class="game-log-title"><strong>'+safe(label)+'</strong>'+
-    '<span>'+games.length+' verified games</span></summary>'+
-    '<div class="game-log-table" role="table">'+
-    '<div class="game-log-header" role="row"><span>Date</span><span>Opponent</span>'+
-    '<span>Recorded stat</span><span>Result</span></div>'+
-    games.map(g=>outcomeCell(g,line)+(similar?
-      '<div class="game-log-method">'+
-      (g.rankLane
-        ?'Verified '+safe(g.rankLane)+' defense ranks: historical #'+
-          safe(g.historicalRank)+' vs upcoming #'+safe(g.targetRank)+' · '
-        :'Similarity: '+safe(g.similarity)+'% · ')+
-      safe(g.defenseReason)+'</div>':'')).join("")+'</div></details>';
+// Show the full real per-game stat by default, rather than making the
+// similar-defense evidence invisible inside collapsed <details>.
+function historyBlock(label,games,line,similar=false,market="Recorded stat"){
+  return renderVerifiedHistory({label,games,line,similar,market,
+    formatDate:prettyDate});
 }
 function hitText(x){return x.tracked?x.hits+"/"+x.tracked+
   " — "+x.percent+"%":"Not verified (0 games)";}
@@ -116,8 +98,10 @@ function renderCard(c){
       :rec?"Recommendation: OVER "+safe(c.line)+" "+safe(c.market)+". ":
         "No OVER recommendation. ")+
       safe(c.why)+'</p>'+
-    historyBlock("Recent Games — Current Season",c.recentGames,c.line)+
-    historyBlock("Similar Defenses — Last 3 Seasons",c.similarGames,c.line,true)+
+    historyBlock("Similar Defenses — Last 3 Seasons",c.similarGames,
+      c.line,true,c.market)+
+    historyBlock("Recent Games — Current Season",c.recentGames,
+      c.line,false,c.market)+
     (c.limitations.length?'<p class="sample-warning">'+c.limitations.map(safe).join(" · ")+'</p>':'')+
     '<p class="season-evidence">Injuries, lineup status and future snap/minute shares are not independently confirmed by this provisional ESPN source. Verify current availability before using the research.</p>'+
     '<div class="research-label">Historical percentages are observed results, not probabilities. The current sportsbook quote is compared against prior games; it is not claimed as their historical betting line.</div>'+
