@@ -1,0 +1,61 @@
+name: Production PropLine connection check
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-propline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check deployed production PropLine connection
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const wait=ms=>new Promise(r=>setTimeout(r,ms));
+          const origin="https://matchup-nightmare-v2.pages.dev";
+          const date="2026-10-12";
+          const url=origin+"/api/lines?"+new URLSearchParams({sport:"nfl",date});
+          let connected=false,last="";
+          // Wait for Cloudflare to finish redeploying main after a secret change.
+          await wait(35000);
+          for(let attempt=1;attempt<=7;attempt++){
+            try{
+              const res=await fetch(url,{headers:{"accept":"application/json","cache-control":"no-cache"},
+                signal:AbortSignal.timeout(16000)});
+              const ct=res.headers.get("content-type")||"";
+              if(!ct.includes("application/json")){
+                last="Unexpected content-type: "+ct;
+                console.log("Check "+attempt+": "+last);
+              }else{
+                const body=await res.json();
+                const count=Array.isArray(body.projections)?body.projections.length:0;
+                last="HTTP "+res.status+"; provider_status="+String(body.status||"unknown")+
+                  "; sport="+String(body.sport||"nfl")+
+                  "; verified_over_lines="+count+
+                  "; daily_remaining="+String(body.dailyRequestsRemaining??"unavailable")+
+                  "; note="+String(body.error||body.notes?.[0]||"none").slice(0,180);
+                console.log("Check "+attempt+": "+last);
+                if(res.ok&&body.status==="connected"&&body.source==="PropLine"){
+                  connected=true;
+                  break;
+                }
+                // An API key may be valid but this sport not covered by the tier.
+                if(["sport-unavailable","key-invalid","rate-limited","invalid-request"].includes(body.status))break;
+              }
+            }catch(error){last=String(error.message||error);console.log("Check "+attempt+": "+last);}
+            if(attempt<7)await wait(15000);
+          }
+          await import("node:fs/promises").then(fs=>fs.appendFile(
+            process.env.GITHUB_STEP_SUMMARY,
+            "### Production PropLine endpoint\n"+
+            (connected?"Connected to PropLine.":"Connection not verified.")+
+            "\n\n"+last.replace(/\|/g,"/")+"\n"
+          ));
+          if(!connected){
+            console.error("Production PropLine API connection not verified. Check whether PROPLINE_API_KEY is set as a Production secret, and that Cloudflare has redeployed.");
+            process.exitCode=1;
+          }
+          NODE
