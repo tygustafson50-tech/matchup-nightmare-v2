@@ -5,6 +5,7 @@
  * + pregame defensive features. Every sport uses stat- and position-specific
  * history, normalized against documented SAME-SEASON observed cohorts.
  */
+import {compareFootballDefenseRanks} from "./football-defense-ranks.js";
 export const SPORTS=Object.freeze(["nfl","nba","mlb","ncaaf","ncaab","soccer"]);
 const NUMBER=x=>typeof x==="number"&&Number.isFinite(x);
 const validDate=x=>typeof x==="string"&&Number.isFinite(Date.parse(x));
@@ -160,7 +161,7 @@ function recentWindow(games,season,cutoff){
     Date.parse(g.date)<Date.parse(cutoff)).slice(0,5);
 }
 export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
-  defensiveProfiles,now=new Date().toISOString()}={}){
+  defensiveProfiles,matchupModel=null,now=new Date().toISOString()}={}){
   if(!offer||offer.source!=="PropLine"||offer.status!=="active"||
      !supportsMarket(offer.sport,offer.position,offer.stat)||
      !nonnegative(offer.line)||!validDate(offer.quotedAt)||
@@ -173,17 +174,23 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
     g.stat===offer.stat && g.sport===offer.sport);
   const recent=recentWindow(available,season,offer.gameDateLocal+"T23:59:59Z");
   const profiles=(defensiveProfiles||[]).filter(p=>p?.verified===true);
-  const cohorts=buildDefensiveCohorts(profiles);
+  const useFootballRank=offer.sport==="nfl"&&matchupModel==="nfl-ranks";
+  const cohorts=useFootballRank?{}:buildDefensiveCohorts(profiles);
   const lookup=new Map(profiles.map(p=>[String(p.gameId)+"|"+String(p.teamId),p]));
   const comparable=[];
   const reasons=new Set();
   for(const g of available){
     const historic=lookup.get(String(g.id)+"|"+String(g.opponentId));
-    const test=compareMatch(upcomingDefense,historic,cohorts,
-      offer.sport,role,offer.stat,offer.league||null);
+    const test=useFootballRank
+      ?compareFootballDefenseRanks(upcomingDefense,historic,offer.stat)
+      :compareMatch(upcomingDefense,historic,cohorts,
+        offer.sport,role,offer.stat,offer.league||null);
     if(test.ok)comparable.push({...evidenceRow(g),
       result:resultAtLine(g.actual,offer.line),similarity:test.score,
-      defenseReason:test.context,defenseMetrics:historic.metrics});
+      defenseReason:test.context,defenseMetrics:
+        useFootballRank?historic[test.rankLane]:historic.metrics,
+      ...(useFootballRank?{rankLane:test.rankLane,targetRank:test.targetRank,
+        historicalRank:test.historicalRank,rankDifference:test.rankDifference}:{})});
     else reasons.add(test.reason);
   }
   const last5=recent.map(g=>({...evidenceRow(g),result:resultAtLine(g.actual,offer.line)}));
@@ -200,6 +207,11 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
     date:offer.gameDateLocal,offer,seasonWindow:years,
     recentGames:last5,recent:recentRate,similarGames:comparable,
     similar:matchedRate,threeSeasonSample:matchedRate.tracked,
+    defenseMatchMethod:useFootballRank?"NFL rushing/passing defense rank (±3)":
+      "Season-normalized, position-specific defensive cohorts",
+    upcomingDefenseRank:useFootballRank?upcomingDefense?.[
+      ["rushingYards","rushAttempts","rushingTDs"].includes(offer.stat)
+        ?"rushing":"passing"]?.rank:null,
     evidenceSufficient:enough,recommendation:favorable?"OVER":null,
     confidenceLabel:favorable?"Supporting historical evidence":"Insufficient or mixed historical evidence",
     limitations:[...(recentRate.tracked<5?["Fewer than five verified current-season games."]:[]),
