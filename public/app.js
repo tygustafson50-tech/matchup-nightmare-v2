@@ -204,10 +204,19 @@ function showSavedScan({chosen,day,league,currentSport,reason}){
   status("Using last completed scan (not live) — PropLine quota exhausted.");
 }
 function fixtureMatches(offer,game){
-  const a=normalize(game.away.name),h=normalize(game.home.name);
+  const canonical=x=>String(x||"").normalize("NFKD").toLowerCase()
+    .replace(/[\\u0300-\\u036f]/g,"")
+    .replace(/\\bstate\\b/g,"st")
+    .replace(/\\bfc\\b|\\bcf\\b/g,"")
+    .replace(/[^a-z0-9]/g,"");
+  const equivalent=(x,y)=>{
+    const a=canonical(x),b=canonical(y);
+    return a===b||a.length>=8&&b.length>=8&&
+      (a.endsWith(b)||b.endsWith(a));
+  };
   const sameEvent=offer.gameId && String(offer.gameId)===String(game.id);
-  const matchedNames=normalize(offer.fixture?.home)===h &&
-    normalize(offer.fixture?.away)===a;
+  const matchedNames=equivalent(offer.fixture?.home,game.home?.name)&&
+    equivalent(offer.fixture?.away,game.away?.name);
   return Boolean(sameEvent||matchedNames);
 }
 async function scan(){
@@ -223,8 +232,10 @@ async function scan(){
         reason:"This browser already detected PropLine's free API limit. Showing the last completed scan without another API request. Reload after your limit resets to retry live quotes."});
       return;
     }
-    const response=await fetch("/api/lines?"+new URLSearchParams({sport:currentSport,date:day,league}),
-      {headers:{Accept:"application/json"},cache:"no-store"});
+    const fixtures=chosen.map(g=>({id:g.id,home:g.home.name,away:g.away.name}));
+    const response=await fetch("/api/lines?"+new URLSearchParams({
+      sport:currentSport,date:day,league,fixtures:JSON.stringify(fixtures)
+    }),{headers:{Accept:"application/json"},cache:"no-store"});
     const feed=await response.json();
     if(own!==scanId)return;
     if(response.status===429||feed.status==="rate-limited"){
@@ -255,7 +266,8 @@ async function scan(){
     // alternate points never create additional player/stat cards.
     const preface='<p class="season-evidence">PropLine · DraftKings sportsbook lines retrieved: '+
       safe(feed.sourceFetchedAt)+" · "+chosenPairs.length+
-      ' active DraftKings OVER quotes for selected games · Changes: '+
+      ' active DraftKings OVER quotes for selected games · '+
+      safe(feed.eventsChecked??0)+' event board(s) checked · Changes: '+
       safe(feed.changeTracking==="verified"?feed.changes.length+" tracked":
         "Tracking requires Cloudflare KV")+'</p>';
     el("scanOutput").innerHTML=preface+
@@ -263,7 +275,9 @@ async function scan(){
     if(!chosenPairs.length){
       watchedQuotes=null;
       el("scanOutput").innerHTML=preface+
-        '<div class="empty">No current DraftKings OVER lines match the selected fixtures. Unavailable or suspended lines were excluded.</div>';
+        '<div class="empty">No current DraftKings OVER props match the selected fixtures. '+
+        safe((feed.notes||[]).join(" "))+
+        ' Unavailable or suspended lines are never replaced with fake odds.</div>';
       status("Verified board queried; no available matching projections.");
       return;
     }
@@ -331,6 +345,7 @@ async function scan(){
       return true;
     });
     watchedQuotes=cards.length?{sport:currentSport,date:day,league,
+      fixtures:chosen.map(g=>({id:g.id,home:g.home.name,away:g.away.name})),
       offers:new Map(cards.map(c=>[c.id,{
         line:c.line,status:"active",variant:c.variant,price:c.price
       }]))}:null;
@@ -379,7 +394,8 @@ setInterval(async()=>{
   watchBusy=true;
   try{
     const response=await fetch("/api/lines?"+new URLSearchParams({
-      sport:snapshot.sport,date:snapshot.date,league:snapshot.league
+      sport:snapshot.sport,date:snapshot.date,league:snapshot.league,
+      fixtures:JSON.stringify(snapshot.fixtures)
     }),{cache:"no-store"});
     const feed=await response.json();
     if(snapshot!==watchedQuotes)return;
