@@ -31,7 +31,7 @@ function season(year,{recentMiss=false,slow=false,missingDefense=false}={}){
       playedTeamId:"1",players:[athlete(value,slow?0.42:0.75)]
     });
     if(!missingDefense||i!==0)defenseProfiles[opp]={
-      [id]:{"receivingYards|WR":{average:103,games:5,metricLabel:"WR receiving yards allowed/game"}}
+      [id]:{"receivingYards|WR":{average:year===2026?190:103,games:5,metricLabel:"WR receiving yards allowed/game"}}
     };
   }
   return {sport:"nfl",game:upcoming,season:year,selectedSeason:2026,
