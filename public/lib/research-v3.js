@@ -1,7 +1,7 @@
 /**
  * Matchup Nightmare V3: deterministic, evidence-only research engine.
  * NO invented lines, no projected performances, no forced 100% labels.
- * Input is exclusively verified current PrizePicks offers + recorded statistics
+ * Input is exclusively verified current PropLine sportsbook quotes + recorded statistics
  * + pregame defensive features. Every sport uses stat- and position-specific
  * history, normalized against documented SAME-SEASON observed cohorts.
  */
@@ -161,10 +161,10 @@ function recentWindow(games,season,cutoff){
 }
 export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
   defensiveProfiles,now=new Date().toISOString()}={}){
-  if(!offer||offer.source!=="PrizePicks"||offer.status!=="active"||
+  if(!offer||offer.source!=="PropLine"||offer.status!=="active"||
      !supportsMarket(offer.sport,offer.position,offer.stat)||
      !nonnegative(offer.line)||!validDate(offer.quotedAt)||
-     !validDate(offer.gameDateLocal)||!offer.id||
+     !validDate(offer.gameDateLocal)||!offer.id||!offer.bookKey||
      !validDate(now))return null;
   const years=seasonWindow(season),role=positionGroup(offer.sport,offer.position);
   const available=uniqueGames(games).filter(g=>years.includes(Number(g.season))&&
@@ -194,7 +194,8 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
     matchedRate.hits/matchedRate.tracked>0.5;
   return {id:offer.id,player:offer.player,team:offer.team,
     opponent:offer.opponent,position:offer.position,sport:offer.sport,
-    source:"PrizePicks",variant:offer.variant,line:offer.line,
+    source:"PropLine",book:offer.book,bookKey:offer.bookKey,
+    variant:offer.variant,price:offer.price,line:offer.line,
     market:offer.market,stat:offer.stat,quotedAt:offer.quotedAt,
     date:offer.gameDateLocal,offer,seasonWindow:years,
     recentGames:last5,recent:recentRate,similarGames:comparable,
@@ -204,7 +205,7 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
     limitations:[...(recentRate.tracked<5?["Fewer than five verified current-season games."]:[]),
       ...(matchedRate.tracked<3?["Insufficient independently verified position-specific comparable defenses."]:[]),
       ...[...reasons].slice(0,3)],
-    why:favorable?"Both observed samples exceeded the exact current PrizePicks line in most recorded games. This is historical evidence, not a forecast.":
+    why:favorable?"Both observed samples exceeded the exact current PropLine line in most recorded games. This is historical evidence, not a forecast.":
       "Do not infer an OVER from incomplete or unfavorable historical evidence."};
 }
 export function rankEvidence(cards){

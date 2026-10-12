@@ -1,7 +1,7 @@
 /**
  * MATCHUP NIGHTMARE V3 — no legacy model.
  * The only entry point for automatic recommendations is a freshly verified
- * licensed PrizePicks offer followed by verified game-by-game evidence.
+ * verified PropLine sportsbook quote followed by verified game-by-game evidence.
  */
 import {analyzeVerifiedProp,rankEvidence} from "/lib/research-v3.js";
 import {makeEvidenceClient,loadVerifiedEvidence} from "/lib/evidence-client-v3.js";
@@ -31,7 +31,7 @@ let watchedQuotes=null,watchBusy=false;
 function status(message){el("scanProgress").textContent=message;}
 function clearResults(){
   cards=[];watchedQuotes=null;visibleLimit=24;el("pickFilters").hidden=true;
-  el("scanOutput").innerHTML='<div class="empty">Select games and scan verified PrizePicks projections.</div>';
+  el("scanOutput").innerHTML='<div class="empty">Select games and scan verified PropLine sportsbook OVER lines.</div>';
 }
 function setOptions(id,entries,label){
   const node=el(id),previous=node.value;
@@ -75,13 +75,15 @@ function renderCard(c){
     '<div class="scan-top"><div class="scan-identity">'+
       '<div class="player-initial">'+safe(c.player.split(" ").map(v=>v[0]).slice(0,2).join(""))+'</div>'+
       '<div><strong>'+safe(c.player)+'</strong><small>'+safe(c.team)+' vs '+safe(c.opponent)+'</small>'+
-      '<small>'+safe(c.position)+" · "+safe(c.variant==="alternative"?"ALT PrizePicks":"Standard PrizePicks")+
+      '<small>'+safe(c.position)+" · "+safe(c.book)+" · "+safe(c.variant==="alternative"?"ALT":c.variant==="standard"?"Main":"Quoted")+
       '</small></div></div>'+
       '<span class="trend-badge'+(rec?'':' trend-unverified')+'">'+
         (rec?"OVER supported":"INSUFFICIENT / MIXED EVIDENCE")+'</span></div>'+
-    '<div class="scan-line">VERIFIED PRIZEPICKS '+safe(c.variant==="alternative"?"ALT":"STANDARD")+
-      ' PROJECTION: <strong>'+safe(c.line)+'</strong> '+safe(c.market)+'</div>'+
-    '<p class="season-evidence">Source line verified '+safe(kickoff(c.quotedAt))+
+    '<div class="scan-line">PROPLINE VERIFIED OVER LINE: <strong>'+safe(c.line)+
+      '</strong> '+safe(c.market)+
+      (Number.isFinite(c.price)?' · '+safe(c.price>0?'+':'')+safe(c.price):'')+
+      ' · '+safe(c.book)+'</div>'+
+    '<p class="season-evidence">Book quote last updated '+safe(kickoff(c.quotedAt))+
       ' · Three-season window '+safe(c.seasonWindow.join(" / "))+'</p>'+
     '<div class="scan-stats">'+
       '<div><strong>'+safe(hitText(c.recent))+'</strong><small>Last five current-season games</small></div>'+
@@ -94,7 +96,7 @@ function renderCard(c){
     historyBlock("Similar Defenses — Last 3 Seasons",c.similarGames,c.line,true)+
     (c.limitations.length?'<p class="sample-warning">'+c.limitations.map(safe).join(" · ")+'</p>':'')+
     '<p class="season-evidence">Injuries, lineup status and future snap/minute shares are not independently confirmed by this provisional ESPN source. Verify current availability before using the research.</p>'+
-    '<div class="research-label">Historical percentages are observed results, not probabilities. The current PrizePicks line is used for all games, not claimed as their old betting line.</div>'+
+    '<div class="research-label">Historical percentages are observed results, not probabilities. The current sportsbook quote is compared against prior games; it is not claimed as their historical betting line.</div>'+
     '</article>';
 }
 function renderCards(){
@@ -142,7 +144,7 @@ async function loadGames(){
     if(own!==scanId)return;
     games=data.games;
     el("scheduleStatus").textContent=games.length+" games · "+(data.source||"ESPN");
-    status("Choose up to 16 games. Live PrizePicks lines must be connected before research can run.");
+    status("Choose up to 16 games. PropLine requires a configured API key before scanning real sportsbook lines.");
   }catch(error){
     if(own!==scanId)return;
     el("scheduleStatus").textContent="Schedules unavailable: "+error.message;
@@ -152,9 +154,10 @@ async function loadGames(){
 }
 function fixtureMatches(offer,game){
   const a=normalize(game.away.name),h=normalize(game.home.name);
-  return offer.gameId===String(game.id) ||
-    (normalize(offer.team)===a&&normalize(offer.opponent)===h)||
-    (normalize(offer.team)===h&&normalize(offer.opponent)===a);
+  const sameEvent=offer.gameId && String(offer.gameId)===String(game.id);
+  const matchedNames=normalize(offer.fixture?.home)===h &&
+    normalize(offer.fixture?.away)===a;
+  return Boolean(sameEvent||matchedNames);
 }
 async function scan(){
   const chosen=games.filter(g=>selected.has(String(g.id)));
@@ -162,17 +165,17 @@ async function scan(){
   const own=++scanId,day=el("date").value,league=el("league").value,
     currentSport=sport,button=el("scanSelected");
   button.disabled=true;button.textContent="Scanning verified evidence…";
-  clearResults();status("Connecting to authorized PrizePicks projection feed…");
+  clearResults();status("Requesting real sportsbook OVER lines from PropLine…");
   try{
-    const response=await fetch("/api/lines?"+new URLSearchParams({sport:currentSport,date:day}),
+    const response=await fetch("/api/lines?"+new URLSearchParams({sport:currentSport,date:day,league}),
       {headers:{Accept:"application/json"},cache:"no-store"});
     const feed=await response.json();
     if(own!==scanId)return;
     if(!response.ok||feed.status!=="connected"){
-      el("scanOutput").innerHTML='<div class="warning"><strong>PrizePicks integration unavailable</strong>'+
-        '<p>'+safe(feed.error||"A licensed PrizePicks feed is required. No picks were generated.")+
-        '</p><p>Current projections cannot be verified. Connect the authorized provider in Cloudflare Pages; historical research will not substitute made-up lines.</p></div>';
-      status("No verified PrizePicks lines. Scanner safely stopped.");
+      el("scanOutput").innerHTML='<div class="warning"><strong>PropLine integration not connected</strong>'+
+        '<p>'+safe(feed.error||"A PropLine API key is required. No fabricated lines will be generated.")+
+        '</p><p>Current projections cannot be verified. Get a free key at prop-line.com/pricing, then add PROPLINE_API_KEY to Cloudflare Pages secrets. Historical research never substitutes made-up lines.</p></div>';
+      status("No verified PropLine lines. Scanner safely stopped.");
       return;
     }
     const chosenPairs=[];
@@ -182,19 +185,20 @@ async function scan(){
       if(matching.length===1)chosenPairs.push({offer,game:matching[0]});
       else if(matching.length>1)rejected.push("Ambiguous fixture for "+offer.player);
     }
-    watchedQuotes={sport:currentSport,date:day,
+    watchedQuotes={sport:currentSport,date:day,league,
       offers:new Map(chosenPairs.map(({offer})=>[offer.id,
-        {line:offer.line,status:offer.status,variant:offer.variant}]))};
-    const preface='<p class="season-evidence">PrizePicks lines last verified: '+
+        {line:offer.line,status:offer.status,variant:offer.variant,price:offer.price}]))};
+    const preface='<p class="season-evidence">PropLine sportsbook odds retrieved: '+
       safe(feed.sourceFetchedAt)+" · "+chosenPairs.length+
-      ' active projections for selected games · Changes: '+
+      ' active sportsbook OVER lines for selected games · Changes: '+
       safe(feed.changeTracking==="verified"?feed.changes.length+" tracked":
         "Tracking requires Cloudflare KV")+'</p>';
     el("scanOutput").innerHTML=preface+
       '<div class="empty">Loading actual athlete boxscores and pregame defensive records…</div>';
     if(!chosenPairs.length){
+      watchedQuotes=null;
       el("scanOutput").innerHTML=preface+
-        '<div class="empty">No active, verified PrizePicks props match the selected fixture(s). Suspended, removed, or unavailable lines were excluded.</div>';
+        '<div class="empty">No supported, fresh sportsbook OVER lines match the selected fixtures. Unavailable or suspended lines were excluded.</div>';
       status("Verified board queried; no available matching projections.");
       return;
     }
@@ -212,8 +216,11 @@ async function scan(){
           client,offer,game,league,
           onStage:stage=>{if(own===scanId)status(stage);}
         });
-        const card=analyzeVerifiedProp({offer:{...offer,
-          league:currentSport==="soccer"?league:null},
+        const confirmedOffer={...offer,position:input.player.position,
+          team:input.team.name,opponent:input.enemy.name,
+          espnPlayerId:input.player.id,
+          league:currentSport==="soccer"?league:null};
+        const card=analyzeVerifiedProp({offer:confirmedOffer,
           season:input.season,games:input.games,
           upcomingDefense:input.upcomingDefense,
           defensiveProfiles:input.defensiveProfiles});
@@ -233,7 +240,7 @@ async function scan(){
       setOptions("filterPosition",uniq(cards.map(c=>c.position)),"All positions");
     }
     el("scanOutput").innerHTML=preface+
-      '<p class="muted">Verified PrizePicks offers analyzed: '+counts.completed+
+      '<p class="muted">PropLine sportsbook lines analyzed: '+counts.completed+
       ' · Evidence cards: '+cards.length+
       ' · OVER recommendations with sufficient evidence: '+
       cards.filter(c=>c.recommendation==="OVER").length+'.</p>'+
@@ -241,9 +248,9 @@ async function scan(){
         ' unverified player/market records withheld</summary><p>'+
         errors.slice(0,20).map(safe).join(" · ")+'</p></details>':"")+
       (cards.length?'<div id="pickCardMount"></div>':
-        '<div class="empty">No verifiable player evidence was available for the returned PrizePicks offers. No placeholders were generated.</div>');
+        '<div class="empty">No verifiable historical evidence was available for the returned sportsbook lines. No placeholders were generated.</div>');
     if(cards.length)renderCards();
-    status("Evidence scan finished. Every displayed line came from the verified PrizePicks feed.");
+    status("Evidence scan finished. Every displayed line came from the verified PropLine feed.");
   }catch(e){
     if(own!==scanId)return;
     el("scanOutput").innerHTML='<div class="error">Source validation failed: '+
@@ -261,31 +268,31 @@ setInterval(async()=>{
   watchBusy=true;
   try{
     const response=await fetch("/api/lines?"+new URLSearchParams({
-      sport:snapshot.sport,date:snapshot.date
+      sport:snapshot.sport,date:snapshot.date,league:snapshot.league
     }),{cache:"no-store"});
     const feed=await response.json();
     if(snapshot!==watchedQuotes)return;
     if(!response.ok||feed.status!=="connected"){
-      clearResults();status("PrizePicks quote verification expired or became unavailable. Rescan after reconnecting.");
+      clearResults();status("PropLine quote verification expired or became unavailable. Rescan after reconnecting.");
       return;
     }
     const latest=new Map(feed.projections.map(p=>[p.id,p]));
     for(const [id,old] of snapshot.offers){
       const current=latest.get(id);
       if(!current||current.line!==old.line||
-        current.variant!==old.variant||current.status!=="active"){
+        current.variant!==old.variant||current.price!==old.price||current.status!=="active"){
         clearResults();
-        el("scanOutput").innerHTML='<div class="warning">PrizePicks projection moved, was suspended, or was removed. Old cards have been cleared. Scan again for current verified lines.</div>';
-        status("PrizePicks board changed — rescan required.");
+        el("scanOutput").innerHTML='<div class="warning">PropLine projection moved, was suspended, or was removed. Old cards have been cleared. Scan again for current verified lines.</div>';
+        status("PropLine board changed — rescan required.");
         return;
       }
     }
   }catch{
     if(snapshot===watchedQuotes){
-      clearResults();status("PrizePicks feed verification failed — old quotes were cleared.");
+      clearResults();status("PropLine feed verification failed — old quotes were cleared.");
     }
   }finally{watchBusy=false;}
-},120000);
+},600000);
 el("sports").innerHTML=Object.entries(SPORTS)
   .map(([id,label])=>'<button data-s="'+id+'">'+safe(label)+'</button>').join("");
 el("sports").querySelectorAll("button").forEach(btn=>

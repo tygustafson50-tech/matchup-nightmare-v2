@@ -1,72 +1,38 @@
-# Matchup Nightmare V3
+# Matchup Nightmare — PropLine Edition
 
-**Evidence-first, OVER-only player-prop research.** Preserves the V2 black-and-gold UI, six sport tabs, game selection, player cards, and Cloudflare Pages hosting. The old line generator, manual predictions, snap-based automatic picks, five-plus-four forced-hits filter, and legacy matchup scanner are retired.
+The existing black-and-gold six-sport app now uses **PropLine's documented REST API v1** for live player-prop **OVER** quotes from named sportsbooks. No PrizePicks integration, custom invented lines, or manually derived alternative thresholds are required. Alternative props are displayed only if actually quoted by a source sportsbook.
 
-**Primary evidence flow:** verified, authorized **PrizePicks** projection -> five current-season player games -> up to three seasons of player game results against independently verified **position- and stat-specific comparable defenses** -> accurate history and optional OVER research recommendation.
+## Set up your free PropLine key
 
-## Integration status / important blocker
+1. Get a free API key: https://prop-line.com/pricing (PropLine currently advertises **1,000 API requests/day** on Free).
+2. Open the Cloudflare dashboard for **matchup-nightmare-v2** → **Settings** → **Variables and Secrets** (Cloudflare's menu wording may vary).
+3. Add the secret **PROPLINE_API_KEY** with the value of your actual PropLine API key. Set it for the **Production** environment; add it to Preview only if you intentionally test there.
+4. Redeploy the latest GitHub `main` deployment if the setting does not take effect automatically. Don't commit an API key to GitHub or send it in chat.
+5. Visit https://matchup-nightmare-v2.pages.dev/ and scan a scheduled game with current player-prop markets.
 
-PrizePicks does **not** currently publish an open, licensed public developer API for arbitrary third-party apps. V3 intentionally does NOT scrape unofficial PrizePicks private endpoints or invent alternative lines. There is **no real PrizePicks integration until the owner obtains and configures a licensed/approved provider**. A fully configured adapter is required for any prop card to appear.
+**Without the key**, `/api/lines` responds `503 integration-required`; the UI explains what's needed and displays **no fabricated predictions**. There is no built-in shared or demo API key.
 
-The Cloudflare Pages Function `/api/lines?sport=nfl&date=YYYY-MM-DD` accepts **only** an operator-authorized, explicitly configured HTTPS feed. In Cloudflare Pages, configure:
+## Source details
 
-- Secret `PRIZEPICKS_FEED_ENDPOINT`: HTTPS endpoint of a provider adapter licensed to deliver exactly sourced PrizePicks lines.
-- Secret `PRIZEPICKS_FEED_TOKEN`: credential for that adapter, never exposed to a browser.
-- Variable `PRIZEPICKS_FEED_APPROVED=true`: set only after verifying the feed contract, permitted use, and public display rights.
-- Optional Cloudflare KV binding `PROJECTION_SNAPSHOTS`: tracks changed, added, removed or suspended provider projections between refreshes. Without KV it says **tracking unavailable**.
+The Cloudflare Pages Function `functions/api/lines.js` makes authenticated requests with the header **X-API-Key** to:
 
-**The endpoint alone is not a contract, key, or active integration.** A provider must be contracted and its data shaped into the adapter contract. Do not enter dummy secrets in production to bypass validation. Current state with no feed is expected to show **Integration Required** and no picks.
+- `GET https://api.prop-line.com/v1/sports` to verify supported sport keys.
+- `GET https://api.prop-line.com/v1/sports/{sport_key}/odds?markets=...&includeBookIds=true` to fetch current **bulk** player-prop markets from sportsbook feeds.
 
-### Provider adapter payload (version 1)
+The response is filtered to genuinely quoted **Over** outcomes with numeric points, a documented market key, a fresh `last_update` within 30 minutes, a supported book, and the correct Central-time game date. Source/provider event identity, sportsbook name and odds, exact line, and alternate/main line type are retained. DFS and prediction/exchange pricing is intentionally excluded.
 
-A verified upstream service must return:
+For supported games, existing ESPN public sources are used to confirm the athlete's identity, current team and playing position against **both** official participating rosters before comparing the quote with recorded game data. Missing role, roster, game log or boxscore evidence is excluded or labeled incomplete — not guessed. If the PropLine fixture cannot be uniquely matched to the selected ESPN game, no prop is analyzed.
 
-```json
-{
-  "source": "PrizePicks",
-  "fetchedAt": "2026-10-11T18:40:00Z",
-  "projections": [
-    {
-      "id": "provider-projection-id",
-      "sport": "nfl",
-      "player": "A real licensed PrizePicks player",
-      "team": "Source-verified current team",
-      "opponent": "Source-verified current opponent",
-      "position": "WR",
-      "gameId": "ESPN event ID if mapped",
-      "gameDateLocal": "2026-10-11",
-      "market": "Receiving yards",
-      "stat": "receivingYards",
-      "line": 49.5,
-      "variant": "standard",
-      "status": "active",
-      "quotedAt": "2026-10-11T18:38:00Z",
-      "espnPlayerId": "Verified matching ESPN athlete ID",
-      "espnTeamId": "Verified matching ESPN team ID",
-      "espnOpponentId": "Verified matching opponent ID"
-    }
-  ]
-}
-```
+Recent-game evidence uses the five latest verified current-season player game results. The similar-defense engine scans the current season plus the previous two seasons and uses the same player statistic, position-specific conceded stats and pregame defensive comparison, normalizing against available independently verified season cohorts. Only verifiable similar opponents are included; the number of samples is explicit.
 
-The example is a **schema illustration only, NOT a real player or actual feed response**. `variant` must be `standard` or `alternative`; `status` must be `active`, `suspended`, or `removed`. All three required timestamps and current projection values must come from the licensed source. Invalid or stale source/projection documents (older than 30 minutes) fail closed. Line changes/suspensions are only described as **tracked** when KV has previous verified snapshots.
+**No historical line is claimed to have been offered at the time of a past game.** Those real game results are compared with the exact current sportsbook point. No historical 100% rate is a guarantee of a future result.
 
-## Statistical evidence
+## Source changes and refresh
 
-V3 retrieves game schedules from the public ESPN scoreboard and attempts to reconcile the PrizePicks player against the ESPN team's official roster. It fetches player game-log event references and completed box scores for **the selected sport season plus the previous two seasons**, retaining actual opponent, date, recorded stat and identity. Missing/unsupported box scores never become zeros.
+The app rechecks verified quotes periodically while the board is open, clearing outdated cards if an offer changes or disappears. Optional `PROJECTION_SNAPSHOTS` KV binding supports cross-refresh change tracking; without a KV namespace, historical line-change tracking is labeled unavailable. To avoid burning through the free tier, the endpoint uses one bulk odds call per sport instead of one odds call per game; the UI also shows PropLine's remaining daily request quota when available.
 
-Each past opposing defense is evaluated using **only games completed before** the applicable player matchup. A position-specific average of the selected stat AND relevant usage volume is required (at least three valid pregame box scores). The upcoming defense is measured in the same fashion.
+## Testing
 
-Defensive matching is season-normalized using documented, measured cohorts of at least five distinct opponent teams **within each season and sport/position/stat combination**. The comparison is a standardized two-feature distance, with a transparent threshold 0.80. These are **sampled same-season cohorts, not full league rankings**, because complete licensed league-wide defensive profiles are not connected. Until sample cohorts and exact identity/position/usage can be verified, comparable history is explicitly **insufficient**; it will not be fabricated or replaced with random opponents.
+Run `npm test` in Node 20+ for source-line, coverage, API-secret, date/fixture, recent-game, defensive-history, and UI regressions. GitHub Actions automatically tests pull requests.
 
-Soccer requires the same verified competition. MLB batter comparisons additionally require verified opposing starting-pitcher handedness; without this optional external feed, baseball batters usually lack comparable history. Some ESPN position, usage, and game-log fields are incomplete or unofficial, so many valid PrizePicks offers can appear with recent-game evidence but no confident comparable defense match.
-
-**Current-season recent evidence** = last five verified player games. **Three-season matchup evidence** = every verified actual past game against opponents meeting the sport-specific, season-normalized comparison, not an arbitrary four-game cap. Both independently compare exact recorded outcomes to today's selected **verified** PrizePicks line, never alleged historical betting lines.
-
-A card can say `OVER` only with at least three recent and three comparable verified results AND a historical OVER majority in both independent samples; otherwise it says insufficient/mixed evidence. This is transparent evidence ranking, **not a calibrated predictive probability or guarantee**.
-
-## Verify and deploy
-
-`npm test` runs the new V3 source-integrity, line authentication, cross-sport model and defensive evidence tests. Cloudflare Pages automatically builds `main` after merging a reviewed PR. Verify the deployed `/api/lines` returns `503 integration-required` until genuine authorized credentials have been configured. Confirm the exact source quote timestamp and projection identity from the contracted partner before enabling user-facing recommendations.
-
-No code in V3 claims live PrizePicks availability, 100% success, or a finished licensed data hookup unless each assertion is backed by the source itself.
+**Limitations:** The API key is not configured automatically; Cloudflare secret setup must be completed by the project owner. PropLine sports and books vary by season and league, so some selected games may have no available player props. The independently verified three-season defensive matchups still rely on provisional, incomplete public ESPN box scores — missing samples remain missing. A successful deployment or unit test is not proof of a live integrated scan.

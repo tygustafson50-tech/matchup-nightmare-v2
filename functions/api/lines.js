@@ -1,135 +1,218 @@
 /**
- * Licensed PrizePicks feed boundary. No guessed lines and no access to
- * undocumented/private PrizePicks endpoints. The operator must configure
- * an approved normalization service and explicitly attest permission.
- *
- * Cloudflare Pages secrets:
- *   PRIZEPICKS_FEED_ENDPOINT: HTTPS URL of authorized provider adapter
- *   PRIZEPICKS_FEED_TOKEN: provider credential (never sent to clients)
- *   PRIZEPICKS_FEED_APPROVED: "true" only after contract/permission review
- * Optional binding: PROJECTION_SNAPSHOTS (Cloudflare KV) for changes/removals.
- *
- * Version 1 upstream contract:
- * {source:"PrizePicks", fetchedAt:ISO, projections:[
- *   {id, sport, player, team, opponent, position, gameId, gameDateLocal,
- *    market, stat, line, variant:"standard"|"alternative",
- *    status:"active"|"suspended"|"removed", quotedAt:ISO,
- *    espnPlayerId?, espnTeamId?, espnOpponentId?}
- * ]}
+ * PropLine REST API v1. Source of displayed player prop lines: actual OVER
+ * outcomes quoted by identifiable sportsbooks, never simulated thresholds.
+ * Requires Cloudflare Pages secret PROPLINE_API_KEY.
+ * https://prop-line.com/docs
  */
-const SPORTS=new Set(["nfl","nba","ncaaf","ncaab","mlb","soccer"]);
-const TYPES=new Set(["standard","alternative"]);
-const STAT=/^[A-Za-z][A-Za-z0-9]{1,50}$/;
-const respond=(payload,status=200)=>new Response(JSON.stringify(payload),{
+const CHOICES={
+  nfl:["football_nfl","americanfootball_nfl"],
+  nba:["basketball_nba"],
+  mlb:["baseball_mlb"],
+  ncaaf:["football_ncaaf","americanfootball_ncaaf"],
+  ncaab:["basketball_ncaab","basketball_ncaab_men"],
+  soccer:["soccer_epl"]
+};
+const SOCCER={
+  "eng.1":{keys:["soccer_epl"],name:"Premier League"},
+  "esp.1":{keys:["soccer_spain_la_liga"],name:"La Liga"},
+  "ger.1":{keys:["soccer_germany_bundesliga"],name:"Bundesliga"},
+  "ita.1":{keys:["soccer_italy_serie_a"],name:"Serie A"},
+  "fra.1":{keys:["soccer_france_ligue_one","soccer_france_ligue_1"],name:"Ligue 1"},
+  "usa.1":{keys:["soccer_usa_mls"],name:"MLS"},
+  "uefa.champions":{keys:["soccer_uefa_champs_league"],name:"Champions League"}
+};
+const MARKETS={
+  nfl:["player_pass_yds","player_pass_completions","player_pass_attempts","player_pass_tds",
+    "player_rush_yds","player_rush_attempts","player_rush_tds",
+    "player_receptions","player_reception_yds","player_reception_tds"],
+  ncaaf:["player_pass_yds","player_pass_completions","player_pass_attempts","player_pass_tds",
+    "player_rush_yds","player_rush_attempts","player_rush_tds",
+    "player_receptions","player_reception_yds","player_reception_tds"],
+  nba:["player_points","player_rebounds","player_assists","player_threes",
+    "player_points_rebounds_assists","player_steals","player_blocks"],
+  ncaab:["player_points","player_rebounds","player_assists","player_threes",
+    "player_points_rebounds_assists","player_steals","player_blocks"],
+  mlb:["pitcher_strikeouts","pitcher_outs","batter_hits","batter_home_runs",
+    "batter_total_bases","batter_runs","batter_rbis","batter_walks"],
+  soccer:["player_assists","player_tackles"]
+};
+const MARKET_MAP={
+  player_pass_yds:["passingYards","Passing yards"],
+  player_pass_completions:["passCompletions","Pass completions"],
+  player_pass_attempts:["passAttempts","Pass attempts"],
+  player_pass_tds:["passingTDs","Passing touchdowns"],
+  player_rush_yds:["rushingYards","Rushing yards"],
+  player_rush_attempts:["rushAttempts","Rush attempts"],
+  player_rush_tds:["rushingTDs","Rushing touchdowns"],
+  player_receptions:["receptions","Receptions"],
+  player_reception_yds:["receivingYards","Receiving yards"],
+  player_reception_tds:["receivingTDs","Receiving touchdowns"],
+  player_points:["points","Points"],player_rebounds:["rebounds","Rebounds"],
+  player_assists:["assists","Assists"],player_threes:["threes","3-pointers"],
+  player_points_rebounds_assists:["pra","PRA"],
+  player_steals:["steals","Steals"],player_blocks:["blocks","Blocks"],
+  pitcher_strikeouts:["pitcherKs","Pitcher strikeouts"],
+  pitcher_outs:["pitchingOuts","Pitching outs"],
+  batter_hits:["hits","Hits"],batter_home_runs:["homeRuns","Home runs"],
+  batter_total_bases:["totalBases","Total bases"],
+  batter_runs:["runs","Runs"],batter_rbis:["rbis","RBIs"],
+  batter_walks:["walks","Walks"],
+  player_tackles:["tackles","Tackles"]
+};
+const BOOKS=new Set([
+  "draftkings","fanduel","bovada","betmgm","betrivers","fanatics",
+  "pinnacle","unibet","betonline","lowvig","hardrockbet"
+]);
+// Intentionally omit DFS, exchanges, prediction markets and synthetic pick-'em pricing.
+const reply=(data,status=200)=>new Response(JSON.stringify(data),{
   status,headers:{"content-type":"application/json; charset=utf-8",
     "cache-control":"no-store","x-content-type-options":"nosniff"}
 });
-const string=v=>typeof v==="string"?v.trim():"";
+const str=x=>typeof x==="string"?x.trim():"";
 const validDate=d=>/^20\d\d-\d\d-\d\d$/.test(d)&&
-  Number.isFinite(Date.parse(d+"T12:00:00Z")) &&
+  !Number.isNaN(Date.parse(d+"T12:00:00Z")) &&
   new Date(d+"T12:00:00Z").toISOString().slice(0,10)===d;
-const validInstant=v=>typeof v==="string"&&Number.isFinite(Date.parse(v));
-const iso=v=>new Date(Date.parse(v)).toISOString();
-const MAX_STALE_MS=30*60*1000;
-function sanitize(p,sport,date,at){
-  if(!p||typeof p!=="object"||
-     string(p.sport)!==sport||string(p.gameDateLocal)!==date)return null;
-  const id=string(p.id),player=string(p.player),team=string(p.team),
-    opponent=string(p.opponent),position=string(p.position),
-    gameId=string(p.gameId),market=string(p.market),stat=string(p.stat),
-    variant=string(p.variant),status=string(p.status);
-  if(!id||id.length>110||!player||!team||!opponent||!position||
-    !gameId||!market||!STAT.test(stat)||!TYPES.has(variant)||
-    !["active","suspended","removed"].includes(status)||
-    typeof p.line!=="number"||!Number.isFinite(p.line)||p.line<0||
-    !validInstant(p.quotedAt) || Date.parse(p.quotedAt)>at+120000 ||
-    at-Date.parse(p.quotedAt)>MAX_STALE_MS)return null;
-  return {id,player,team,opponent,position,gameId,gameDateLocal:date,
-    sport,market,stat,line:p.line,variant,status,quotedAt:iso(p.quotedAt),
-    espnPlayerId:string(p.espnPlayerId)||null,
-    espnTeamId:string(p.espnTeamId)||null,
-    espnOpponentId:string(p.espnOpponentId)||null,source:"PrizePicks"};
-}
-function compare(old,now){
-  const before=new Map(old.map(p=>[p.id,p])),after=new Map(now.map(p=>[p.id,p]));
-  const changes=[];
-  for(const p of now){
-    const prev=before.get(p.id);
-    if(!prev)changes.push({id:p.id,kind:"added"});
-    else if(prev.line!==p.line||prev.variant!==p.variant)
-      changes.push({id:p.id,kind:"changed",from:prev.line,to:p.line});
-    else if(prev.status!==p.status)
-      changes.push({id:p.id,kind:p.status==="suspended"?"suspended":"status-changed"});
+const dateCentral=iso=>{
+  const parts=new Intl.DateTimeFormat("en-US",{
+    timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"
+  }).formatToParts(new Date(iso));
+  const get=type=>parts.find(p=>p.type===type)?.value||"";
+  return get("year")+"-"+get("month")+"-"+get("day");
+};
+const timeOk=(value,now)=>typeof value==="string"&&Number.isFinite(Date.parse(value))&&
+  Date.parse(value)<=now+120000&&now-Date.parse(value)<=30*60*1000;
+const linesFrom=(event,{sport,date,now}={})=>{
+  if(!event||!event.id||!Array.isArray(event.bookmakers)||
+    !Number.isFinite(Date.parse(event.commence_time))||
+    dateCentral(event.commence_time)!==date||!str(event.home_team)||!str(event.away_team))
+    return [];
+  const offers=[],seen=new Set();
+  for(const bookmaker of event.bookmakers){
+    if(!BOOKS.has(bookmaker?.key)||bookmaker?.pregame_only===true &&
+      Date.parse(event.commence_time)<=now)continue;
+    for(const market of bookmaker.markets||[]){
+      if(!MARKET_MAP[market?.key]||!MARKETS[sport].includes(market.key)||
+        market.suspended_at||!timeOk(market.last_update,now))continue;
+      for(const outcome of market.outcomes||[]){
+        if(str(outcome.name).toLowerCase()!=="over"||
+          typeof outcome.point!=="number"||!Number.isFinite(outcome.point)||
+          outcome.point<0||!str(outcome.description))continue;
+        const [stat,display]=MARKET_MAP[market.key];
+        const player=str(outcome.description).replace(/\s+\([A-Z]{2,4}\)$/,"").trim();
+        const qualifiedPlayer=String(outcome.player_id||"");
+        const espnPlayerId=/^espn:(\d{1,15})$/.exec(qualifiedPlayer)?.[1]||null;
+        const sourceId=String(outcome.outcome_id||outcome.book_outcome_id||"");
+        const id=[bookmaker.key,event.id,market.key,
+          sourceId||player.toLowerCase().replace(/[^a-z0-9]/g,""),outcome.point].join("|");
+        if(seen.has(id))continue;seen.add(id);
+        const rawType=String(outcome.line_type||market.line_type||"").toLowerCase();
+        const variant=rawType==="main"?"standard":
+          rawType==="alternate"||rawType==="milestone"?"alternative":"unclassified";
+        offers.push({
+          id,source:"PropLine",book:bookmaker.title||bookmaker.key,
+          bookKey:bookmaker.key,player,team:null,opponent:null,position:null,
+          sport,gameId:str(event.espn_event_id)||null,
+          providerEventId:String(event.id),gameDateLocal:date,
+          fixture:{home:event.home_team,away:event.away_team},
+          market:display,stat,line:outcome.point,
+          variant,status:"active",quotedAt:market.last_update,
+          price:Number.isFinite(outcome.price)?outcome.price:null,
+          espnPlayerId,providerPlayerId:qualifiedPlayer||null,
+          espnTeamId:null,espnOpponentId:null
+        });
+      }
+    }
   }
-  for(const p of old)if(!after.has(p.id))
-    changes.push({id:p.id,kind:"removed"});
+  return offers;
+};
+export function normalizePropLineOdds(payload,options){
+  const rows=Array.isArray(payload)?payload:
+    payload?.id&&Array.isArray(payload.bookmakers)?[payload]:null;
+  if(!rows)throw Error("PropLine odds response was not a valid event list.");
+  return rows.flatMap(event=>linesFrom(event,options));
+}
+function compare(previous,current){
+  const a=new Map(previous.map(p=>[p.id,p]));
+  const b=new Map(current.map(p=>[p.id,p]));
+  const changes=[];
+  for(const [id,p] of b){
+    const old=a.get(id);
+    if(!old)changes.push({id,kind:"added"});
+    else if(old.line!==p.line||old.price!==p.price||old.quotedAt!==p.quotedAt)
+      changes.push({id,kind:"updated",line:p.line});
+  }
+  for(const [id] of a)if(!b.has(id))changes.push({id,kind:"removed-or-suspended"});
   return changes;
+}
+async function api(path,key,query=null){
+  const url=new URL("https://api.prop-line.com/v1/"+path);
+  if(query)for(const [k,v] of Object.entries(query))url.searchParams.set(k,String(v));
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),11000);
+  try{
+    const response=await fetch(url,{
+      headers:{"X-API-Key":key,Accept:"application/json"},
+      signal:controller.signal
+    });
+    if(!response.ok){
+      const e=new Error("PropLine responded with HTTP "+response.status);
+      e.status=response.status;e.retryAfter=response.headers.get("Retry-After");
+      throw e;
+    }
+    return {body:await response.json(),quota:response.headers.get("X-Daily-Remaining")};
+  }finally{clearTimeout(timer);}
 }
 export async function onRequestGet({request,env={}}){
   const q=new URL(request.url).searchParams;
-  const sport=string(q.get("sport")),date=string(q.get("date"));
-  if(!SPORTS.has(sport)||!validDate(date))
-    return respond({status:"invalid-request",error:"A valid sport and game date are required."},400);
-  if(env.PRIZEPICKS_FEED_APPROVED!=="true" ||
-     !string(env.PRIZEPICKS_FEED_TOKEN)||!string(env.PRIZEPICKS_FEED_ENDPOINT)){
-    return respond({status:"integration-required",source:"PrizePicks",projections:[],
-      changes:[],error:"Authorized PrizePicks line provider is not connected. Configure an approved data license, provider adapter, and credentials. No estimated lines will be shown."},503);
-  }
-  let endpoint;
+  const sport=str(q.get("sport")),date=str(q.get("date")),league=str(q.get("league"))||"eng.1";
+  if(!CHOICES[sport]||!validDate(date)||
+     sport==="soccer"&&!SOCCER[league])
+    return reply({status:"invalid-request",error:"Valid sport, league and date required."},400);
+  if(!str(env.PROPLINE_API_KEY))
+    return reply({status:"integration-required",source:"PropLine",projections:[],
+      error:"PropLine API key not connected. Get a free key at prop-line.com and add PROPLINE_API_KEY as a Cloudflare Pages secret."},503);
   try{
-    endpoint=new URL(env.PRIZEPICKS_FEED_ENDPOINT);
-    if(endpoint.protocol!=="https:"||!endpoint.hostname||endpoint.username||
-       endpoint.password||endpoint.hostname==="localhost"||
-       endpoint.hostname.endsWith(".internal"))throw Error();
-  }catch{
-    return respond({status:"configuration-error",projections:[],
-      error:"Approved feed endpoint must be a secure HTTPS provider URL."},503);
-  }
-  endpoint.searchParams.set("sport",sport);
-  endpoint.searchParams.set("date",date);
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),10000);
-  try{
-    const response=await fetch(endpoint,{
-      headers:{Authorization:"Bearer "+env.PRIZEPICKS_FEED_TOKEN,
-        Accept:"application/json"},signal:controller.signal
-    });
-    if(!response.ok)return respond({status:"provider-unavailable",projections:[],
-      error:"Authorized PrizePicks feed returned an error; no projections shown."},502);
-    const body=await response.json(),now=Date.now();
-    if(body?.source!=="PrizePicks"||!Array.isArray(body.projections)||
-       !validInstant(body.fetchedAt)||Date.parse(body.fetchedAt)>now+120000||
-       now-Date.parse(body.fetchedAt)>MAX_STALE_MS)
-      return respond({status:"invalid-or-stale-feed",projections:[],
-        error:"Provider data is unverified, stale, or does not match the required projection contract."},502);
-    const validated=body.projections.map(p=>sanitize(p,sport,date,now)).filter(Boolean);
-    if(validated.length!==body.projections.filter(p=>
-      p?.sport===sport&&p?.gameDateLocal===date).length)
-      return respond({status:"invalid-or-stale-feed",projections:[],
-        error:"The feed includes invalid, ambiguous, or expired PrizePicks projections."},502);
-    const ids=new Set();
-    if(validated.some(p=>ids.has(p.id)||!ids.add(p.id)))
-      return respond({status:"invalid-feed",projections:[],
-        error:"Duplicate projection IDs were returned; no lines shown."},502);
+    const discovered=await api("sports",env.PROPLINE_API_KEY);
+    if(!Array.isArray(discovered.body))throw Error("PropLine sports catalog unavailable.");
+    const sportList=discovered.body.filter(x=>str(x.key));
+    const target=sport==="soccer"?SOCCER[league].keys:CHOICES[sport];
+    const exact=sportList.find(x=>target.includes(x.key));
+    const desiredTitle=sport==="soccer"?SOCCER[league].name:null;
+    const byName=desiredTitle?sportList.find(x=>
+      String(x.title||"").toLowerCase()===desiredTitle.toLowerCase()):null;
+    const matched=exact||byName;
+    if(!matched)
+      return reply({status:"sport-unavailable",projections:[],source:"PropLine",
+        error:"PropLine did not list a verified market for this selected sport/league."},424);
+    const now=Date.now();
+    const {body,quota}=await api("sports/"+encodeURIComponent(matched.key)+"/odds",
+      env.PROPLINE_API_KEY,{markets:MARKETS[sport].join(","),includeBookIds:"true"});
+    const projections=normalizePropLineOdds(body,{sport,date,now});
     let changes=[],changeTracking="unavailable";
-    const cache=env.PROJECTION_SNAPSHOTS;
-    if(cache&&typeof cache.get==="function"&&typeof cache.put==="function"){
+    if(env.PROJECTION_SNAPSHOTS&&
+       typeof env.PROJECTION_SNAPSHOTS.get==="function"&&
+       typeof env.PROJECTION_SNAPSHOTS.put==="function"){
       try{
-        const key="prizepicks:v1:"+sport+":"+date;
-        const previous=JSON.parse(await cache.get(key)||"null");
-        if(Array.isArray(previous)){
-          changes=compare(previous,validated);changeTracking="verified";
-        }else changeTracking="baseline-created";
-        await cache.put(key,JSON.stringify(validated),{expirationTtl:86400*4});
+        const key="propline:v1:"+matched.key+":"+date;
+        const prior=JSON.parse(await env.PROJECTION_SNAPSHOTS.get(key)||"null");
+        if(Array.isArray(prior)){changes=compare(prior,projections);changeTracking="verified";}
+        else changeTracking="baseline-created";
+        await env.PROJECTION_SNAPSHOTS.put(key,JSON.stringify(projections),{expirationTtl:345600});
       }catch{changeTracking="unavailable";}
     }
-    return respond({status:"connected",source:"PrizePicks",sport,date,
-      refreshedAt:new Date(now).toISOString(),sourceFetchedAt:iso(body.fetchedAt),
-      changeTracking,changes,
-      projections:validated.filter(p=>p.status==="active"),
-      suspended:validated.filter(p=>p.status!=="active").map(p=>({id:p.id,status:p.status}))});
-  }catch{
-    return respond({status:"provider-unavailable",projections:[],
-      error:"Authorized feed could not be verified or reached. No invented lines have been substituted."},502);
-  }finally{clearTimeout(timer);}
+    return reply({status:"connected",source:"PropLine",sport,sportKey:matched.key,
+      date,sourceFetchedAt:new Date(now).toISOString(),refreshedAt:new Date(now).toISOString(),
+      projections,changes,changeTracking,
+      dailyRequestsRemaining:quota!==null&&Number.isFinite(Number(quota))?Number(quota):null,
+      notes:projections.length?[]:[
+        "No active, fresh, supported sportsbook OVER lines were returned for this date. No substitute lines were generated."
+      ]});
+  }catch(error){
+    const limited=error.status===429,unauthorized=error.status===401||error.status===403;
+    return reply({status:limited?"rate-limited":unauthorized?"key-invalid":"provider-unavailable",
+      source:"PropLine",projections:[],error:limited
+        ?"PropLine quota or burst limit reached; retry after provider reset."
+        :unauthorized?"PropLine rejected the configured API key."
+        :"Could not obtain verified PropLine market data ("+String(error.message).slice(0,140)+")."},
+      limited?429:unauthorized?502:502);
+  }
 }

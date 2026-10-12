@@ -5,7 +5,7 @@ import {analyzeVerifiedProp,buildDefensiveCohorts,hitSummary,
 import {playersFromBoxscore,gamelogEvents,concededAgainstPosition} from "../public/lib/evidence-client-v3.js";
 
 const sourceDate=new Date().toISOString();
-const offer={id:"pp-1",source:"PrizePicks",sport:"nfl",status:"active",
+const offer={id:"pp-1",source:"PropLine",book:"DraftKings",bookKey:"draftkings",sport:"nfl",status:"active",
   player:"Verified Receiver",position:"WR",team:"Buffalo Bills",
   opponent:"Rams",stat:"receivingYards",market:"Receiving yards",
   line:49.5,variant:"standard",quotedAt:sourceDate,gameDateLocal:"2026-10-11",
@@ -40,7 +40,7 @@ test("3 seasons exactly, no extension to a fourth season",()=>{
   assert.equal(positionGroup("nba","PG"),"PG");
   assert.equal(positionGroup("soccer","ST"),"F");
 });
-test("today's exact current PrizePicks line is evaluated independently in each game",()=>{
+test("today's exact current PropLine line is evaluated independently in each game",()=>{
   const data=dataset();
   const old=data.games[0];
   data.games.push({...old,id:"unknown-season",season:2023,date:"2023-08-01T19:00:00Z",
@@ -68,7 +68,7 @@ test("zero, push and under remain true results and not forced 100%",()=>{
   assert.deepEqual(hitSummary([{actual:0},{actual:2.5},{actual:3}],2.5),
     {hits:1,tracked:3,pushes:1,percent:33.3});
 });
-test("no evidence or unsourced/non-PrizePicks offer never creates a recommendation",()=>{
+test("no evidence or unsourced/non-PropLine offer never creates a recommendation",()=>{
   const data=dataset();
   assert.equal(analyzeVerifiedProp({offer:{...offer,source:"Research only"},
     season:2026,games:data.games,upcomingDefense:data.upcoming,
