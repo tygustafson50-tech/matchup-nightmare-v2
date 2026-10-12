@@ -313,7 +313,8 @@ async function scan(){
           const card=analyzeVerifiedProp({offer:confirmedOffer,
             season:input.season,games:input.games,
             upcomingDefense:input.upcomingDefense,
-            defensiveProfiles:input.defensiveProfiles});
+            defensiveProfiles:input.defensiveProfiles,
+            matchupModel:input.matchupModel});
           if(card)candidates.push(card);
         }
         // One winner, with all displayed evidence based on its exact line.
