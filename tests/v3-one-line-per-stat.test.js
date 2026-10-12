@@ -121,3 +121,32 @@ test("all six sports use identical one-card-per-player-stat constraint",()=>{
     assert.equal(arr[0].offers.length,4,sport);
   }
 });
+
+test("one actual selected fixture collapses five Jordan Whittington rushing ALT cards even with inconsistent provider IDs",()=>{
+  const playerId="555555";
+  const five=[0.5,1.5,2.5,3.5,5.5].map((line,i)=>({
+    ...card({id:"whit-"+i,line,espnPlayerId:playerId,name:"Jordan Whittington"}),
+    fixtureId:"401999111",quotesConsidered:1,
+    book:"DraftKings",bookKey:"draftkings",
+    offer:{
+      gameId:i%2?"another-provider-game-id":"401999111",
+      providerEventId:"provider-alt-"+i,
+      espnPlayerId:playerId,source:"PropLine",bookKey:"draftkings"
+    }
+  }));
+  const unique=dedupeVerifiedCards(five);
+  assert.equal(unique.length,1);
+  assert.equal(unique[0].stat,"rushingYards");
+  assert.equal(unique[0].bookKey,"draftkings");
+  assert.equal(unique[0].quotesConsidered,5);
+});
+
+test("one sportsbook still groups standard and alt lines into exactly one market per game",()=>{
+  const offers=[0.5,1.5,2.5,3.5,5.5].map((line,i)=>({
+    offer:quote({id:"draftkings-whittington-"+i,player:"Jordan Whittington",
+      stat:"rushingYards",book:"draftkings",line}),game
+  }));
+  const groups=groupOffersByPlayerStat(offers);
+  assert.equal(groups.length,1);
+  assert.equal(groups[0].offers.length,5);
+});
