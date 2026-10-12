@@ -1,3 +1,5 @@
+import {onRequestGet as getLines} from "./functions/api/lines.js";
+import {onRequestGet as getEspn} from "./functions/api/espn.js";
 import http from "node:http";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
@@ -10,6 +12,13 @@ function send(res,code,data,type="application/json"){res.writeHead(code,{"conten
 http.createServer(async(req,res)=>{try{
 if(req.method!=="GET")return send(res,405,{error:"GET only"});
 const u=new URL(req.url||"/","http://localhost");
+if(u.pathname==="/api/lines"||u.pathname==="/api/espn"){
+  const handler=u.pathname==="/api/lines"?getLines:getEspn;
+  const raw=await handler({request:new Request(u.toString()),env:process.env});
+  res.writeHead(raw.status,Object.fromEntries(raw.headers.entries()));
+  res.end(Buffer.from(await raw.arrayBuffer()));
+  return;
+}
 if(u.pathname==="/api/games"){
  const key=u.searchParams.get("sport")||"nfl",date=u.searchParams.get("date")||new Date().toISOString().slice(0,10);
  if(!Object.hasOwn(sports,key))return send(res,400,{error:"Invalid sport"});
@@ -22,13 +31,13 @@ if(u.pathname==="/api/games"){
  try{r=await fetch(endpoint,{signal:controller.signal});}finally{clearTimeout(timer);}
  if(!r.ok)throw Error("Schedule source returned "+r.status);
  const raw=await r.json();
- const games=(raw.events||[]).map(e=>{const c=e.competitions?.[0]?.competitors||[],away=c.find(x=>x.homeAway==="away"),home=c.find(x=>x.homeAway==="home");if(!away||!home)return null;return{id:String(e.id),date:e.date,status:e.status?.type?.description||"Scheduled",home:{name:home.team?.displayName||"Home",logo:home.team?.logo||""},away:{name:away.team?.displayName||"Away",logo:away.team?.logo||""}};}).filter(Boolean);
+ const games=(raw.events||[]).map(e=>{const c=e.competitions?.[0]?.competitors||[],away=c.find(x=>x.homeAway==="away"),home=c.find(x=>x.homeAway==="home");if(!away||!home)return null;return{id:String(e.id),date:e.date,season:e.season?.year??null,status:e.status?.type?.description||"Scheduled",home:{id:String(home.team?.id||""),name:home.team?.displayName||"Home",logo:home.team?.logo||""},away:{id:String(away.team?.id||""),name:away.team?.displayName||"Away",logo:away.team?.logo||""}};}).filter(Boolean);
  payload={stamp:Date.now(),data:{games,date,sport:key,source:"ESPN public scoreboard (unofficial)",oddsConnected:false}};cache.set(endpoint,payload);
  }
  return send(res,200,payload.data);
 }
 const rel=u.pathname==="/"?"index.html":decodeURIComponent(u.pathname).slice(1);
-const base=rel.startsWith("lib/")?dir:path.join(dir,"public");
+const base=path.join(dir,"public");
 const file=path.resolve(base,rel);
 if(!file.startsWith(base+path.sep))return send(res,403,{error:"Forbidden"});
 const type={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8"}[path.extname(file)]||"text/plain";
