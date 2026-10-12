@@ -89,7 +89,11 @@ export function dedupeVerifiedCards(cards){
     const key=[card.sport,fixture,player,card.stat].join("|");
     const previous=map.get(key);
     const best=selectBestOverCard(previous?[previous,card]:[card]);
-    if(best)map.set(key,best);
+    if(best)map.set(key,{
+      ...best,quotesConsidered:previous
+        ?(previous.quotesConsidered||1)+(card.quotesConsidered||1)
+        :(card.quotesConsidered||1)
+    });
   }
   return [...map.values()];
 }
