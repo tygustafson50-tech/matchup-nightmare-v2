@@ -86,3 +86,48 @@ Every verified player-prop card now draws its player headshot and medical/availa
 Where ESPN lists an injury, the card displays the reported **Questionable, Doubtful, Out, Injured reserve, Day-to-day / game-time decision, Probable, or Injury reported** designation and available injury details. A roster with an explicitly empty injury list shows **No injury listed**, not "Healthy". Missing status data shows **Status not confirmed**. The last ESPN roster check time is displayed on new scans. **ESPN roster injuries are not a guaranteed up-to-the-minute game-day inactive report**; verify official injury reports and lineups before relying on availability.
 
 The last-scan quota fallback stores the photos/logos and designation with the original scanned cards but labels saved injury data **Saved: … / not rechecked**. No additional PropLine requests are made to obtain these images or roster statuses. The source/line, one-stat-per-player rule, and three-season matching logic are unchanged.
+
+## All-sport scan repair (NFL, NBA, MLB, college football/basketball, soccer)
+
+Real player props must be retrieved from PropLine's documented
+`/v1/sports/{sport}/events/{event_id}/odds` endpoint, **not** the
+bulk `/odds` endpoint primarily used for game lines. The scanner first
+discovers the exact sport's upcoming events, intersects that day's events
+with the **up to 16 ESPN fixtures you selected**, and then queries only those
+events for actually offered OVER markets at the one configured sportsbook
+(**DraftKings**). It refuses to fabricate unposted lines, never substitutes
+another book, caps event fetches, and reports events checked and missing
+sources to explain empty scan results. The narrower event requests use more
+than one API call per scan, so the existing free-tier quota and previously
+saved-scan fallback remain important.
+
+ESPN scoreboard discovery includes non-ranked NCAA football (FBS) and
+Division I men's basketball teams. NBA and NCAA basketball roster/box-score
+generic G/F position categories can now be reconciled with verified roles.
+ESPN MLB box score `statistics` categories often omit the category name;
+batting and pitching are resolved from their **actual recorded AB/IP
+columns**. NBA, MLB, and NCAA sports retain existing verified three-season
+position/stat defenses; when a season contains fewer than five distinct
+verified opposing teams, the engine falls back to comparing independently
+observed pregame position-specific allowed and usage **raw rates**. This is
+explicitly identified as a limited verified sample and is never labeled a
+league-wide rank. MLB batter comparisons no longer require guessed opposing
+pitcher handedness.
+
+Soccer's game summary uses `summary.rosters[].roster[].stats` rather than
+`summary.boxscore.players`; the ESPN parser reads actual individual goals,
+assists, shots, shots on target, fouls, tackles, and saves when named values
+exist. MLS follows calendar-year seasons; European league seasons cross
+calendar years. There is no invented performance for players or games whose
+source does not publish a recorded statistic.
+
+**Bookmaker coverage limitation:** PropLine's published DraftKings coverage
+includes MLB, NBA, NFL, NCAA football and some soccer leagues, but does
+**not** list NCAA men's basketball player props under DraftKings. With
+DraftKings enforced as the **only** sportsbook, a college-basketball game may
+be visible on the ESPN calendar while **no DraftKings player line is
+available**. The app must show that lack of real market coverage rather
+than invent a line or imply an API key error. PropLine lists Bovada as
+supporting all 57 sports including NCAA basketball; switching the sole
+sportsbook to Bovada would require an explicit product choice.
+Off-season sports similarly have no new scheduled games/props on some dates.
