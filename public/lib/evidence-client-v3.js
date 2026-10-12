@@ -295,15 +295,17 @@ async function findVerifiedAthlete(client,offer,season,teamId,sport,league){
   });
   return matches.length===1?matches[0]:null;
 }
-function seasonFromEvent(sport,date,explicit){
+function seasonFromEvent(sport,date,explicit,league="eng.1"){
   if(Number.isInteger(Number(explicit))&&Number(explicit)>1900)return Number(explicit);
   const y=Number(String(date).slice(0,4)),m=Number(String(date).slice(5,7));
-  if(["nfl","ncaaf","soccer"].includes(sport))return m<7?y-1:y;
+  // MLS is calendar-year, unlike Aug-May European soccer competitions.
+  if(sport==="soccer")return league==="usa.1"?y:m<7?y-1:y;
+  if(["nfl","ncaaf"].includes(sport))return m<7?y-1:y;
   if(["nba","ncaab"].includes(sport))return m>=7?y+1:y;
   return y;
 }
 export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onStage=()=>{}}){
-  const sport=offer.sport,season=seasonFromEvent(sport,game.date,game.season);
+  const sport=offer.sport,season=seasonFromEvent(sport,game.date,game.season,league);
   // PropLine generally identifies the player without a roster position.
   // Verify the athlete on BOTH participating official ESPN team rosters,
   // requiring exactly one matching identity and usable role.
@@ -356,7 +358,7 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
         String(t.team?.id)!==String(club.team.id));
       const date=box.header?.competitions?.[0]?.date||events[i].date;
       const officialSeason=seasonFromEvent(sport,date,
-        box.header?.events?.[0]?.season?.year??null);
+        box.header?.events?.[0]?.season?.year??null,league);
       if(!rival?.team?.id||!date||Date.parse(date)>=Date.parse(game.date)||
         officialSeason!==year)continue;
       records.push({id:events[i].id,date,season:year,playerId:player.id,
