@@ -226,10 +226,13 @@ async function findVerifiedAthlete(client,offer,season,teamId,sport,league){
   const params={sport,kind:"roster",teamId:String(teamId),season:String(season)};
   if(sport==="soccer")params.league=league;
   const roster=flattenRoster(await client.call(params));
-  const matches=roster.filter(a=>
-    normalize(a.name)===normalize(offer.player) &&
-    (!offer.espnPlayerId||String(offer.espnPlayerId)===a.id) &&
-    positionGroup(sport,a.position)===positionGroup(sport,offer.position));
+  const matches=roster.filter(a=>{
+    const sameIdentity=offer.espnPlayerId?
+      String(offer.espnPlayerId)===a.id:normalize(a.name)===normalize(offer.player);
+    const role=positionGroup(sport,a.position);
+    return sameIdentity && role && (!offer.position ||
+      role===positionGroup(sport,offer.position));
+  });
   return matches.length===1?matches[0]:null;
 }
 function seasonFromEvent(sport,date,explicit){
@@ -241,13 +244,21 @@ function seasonFromEvent(sport,date,explicit){
 }
 export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onStage=()=>{}}){
   const sport=offer.sport,season=seasonFromEvent(sport,game.date,game.season);
-  const team=([game.home,game.away]).find(t=>
-    offer.espnTeamId?String(t.id)===String(offer.espnTeamId):
-      normalize(t.name)===normalize(offer.team));
+  // PropLine generally identifies the player without a roster position.
+  // Verify the athlete on BOTH participating official ESPN team rosters,
+  // requiring exactly one matching identity and usable role.
+  const sides=[game.home,game.away].filter(t=>t?.id &&
+    (!offer.espnTeamId || String(t.id)===String(offer.espnTeamId)));
+  const candidates=await Promise.allSettled(sides.map(async team=>({
+    team,player:await findVerifiedAthlete(client,offer,season,team.id,sport,league)
+  })));
+  const verified=candidates.filter(x=>x.status==="fulfilled"&&x.value.player)
+    .map(x=>x.value);
+  if(verified.length!==1)
+    throw Error("Player identity and position could not be uniquely confirmed on the current fixture's rosters.");
+  const {team,player}=verified[0];
   const enemy=([game.home,game.away]).find(t=>t!==team);
-  if(!team||!enemy)throw Error("PrizePicks team could not be confirmed against ESPN fixture.");
-  const player=await findVerifiedAthlete(client,offer,season,team.id,sport,league);
-  if(!player)throw Error("Player identity and position cannot be verified on the current team roster.");
+  if(!enemy?.id)throw Error("Opposing team ID could not be verified.");
   const base={sport,...(sport==="soccer"?{league}:{})};
   const years=[season,season-1,season-2];
   const records=[],notes=[],summaryCache=new Map(),schedules=new Map();
@@ -323,7 +334,7 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
       metrics:{allowed:measurements.reduce((a,b)=>a+b.allowed,0)/measurements.length,
         volume:measurements.reduce((a,b)=>a+b.volume,0)/measurements.length}});
   }
-  return {player,season,games:records,upcomingDefense:
+  return {player,team,enemy,season,games:records,upcomingDefense:
     profiles.find(p=>p.teamId===String(enemy.id)&&p.gameId===null)||null,
     defensiveProfiles:profiles,notes,source:"ESPN public game summaries (provisional)"};
 }
