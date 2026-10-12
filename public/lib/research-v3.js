@@ -205,7 +205,7 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
     limitations:[...(recentRate.tracked<5?["Fewer than five verified current-season games."]:[]),
       ...(matchedRate.tracked<3?["Insufficient independently verified position-specific comparable defenses."]:[]),
       ...[...reasons].slice(0,3)],
-    why:favorable?"Both observed samples exceeded the exact current PrizePicks line in most recorded games. This is historical evidence, not a forecast.":
+    why:favorable?"Both observed samples exceeded the exact current PropLine line in most recorded games. This is historical evidence, not a forecast.":
       "Do not infer an OVER from incomplete or unfavorable historical evidence."};
 }
 export function rankEvidence(cards){
