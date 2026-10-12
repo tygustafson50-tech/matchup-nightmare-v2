@@ -25,6 +25,25 @@ jobs:
           node --check public/lib/evidence-client-v3.js
           node --check functions/api/lines.js
           node --check server.js
+      - name: Verify real ESPN NFL ranks exist for three seasons
+        if: ${{ github.head_ref == 'feature/nfl-similar-defense-ranks' }}
+        run: |
+          node --input-type=module <<'NODE'
+          for(const year of [2026,2025,2024]){
+            const url="https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/14/statistics?season="+year;
+            const response=await fetch(url,{signal:AbortSignal.timeout(15000)});
+            if(!response.ok)throw new Error("ESPN "+year+" HTTP "+response.status);
+            const json=await response.json();
+            const groups=json.results?.opponent||[];
+            const pass=groups.find(g=>g.name==="passing")?.stats?.find(s=>s.name==="netPassingYards");
+            const rush=groups.find(g=>g.name==="rushing")?.stats?.find(s=>s.name==="rushingYards");
+            const y=typeof json.requestedSeason==="object"?json.requestedSeason.year:json.requestedSeason;
+            console.log(JSON.stringify({year,reportedSeason:y,passRank:pass?.rank,rushRank:rush?.rank,passYpg:pass?.perGameValue,rushYpg:rush?.perGameValue}));
+            if(y!=null&&Number(y)!==year||!Number.isInteger(pass?.rank)||
+              !Number.isInteger(rush?.rank)||pass.rank<1||pass.rank>32||rush.rank<1||rush.rank>32)
+              throw new Error("Missing or invalid source rank for "+year);
+          }
+          NODE
       - name: Run Node tests
         id: suite
         shell: bash
