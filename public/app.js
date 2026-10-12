@@ -9,6 +9,7 @@ import {groupOffersByPlayerStat,selectBestOverCard,dedupeVerifiedCards}
   from "/lib/one-line-per-stat.js";
 import {saveCompletedScan,readLastScan} from "/lib/last-scan-cache.js";
 import {renderVerifiedHistory} from "/lib/verified-history-ui.js";
+import {renderPlayerCardHeader} from "/lib/player-profile-v3.js";
 const SPORTS={
   nfl:"🏈 NFL",nba:"🏀 NBA",mlb:"⚾ MLB",
   ncaaf:"🏈 College Football",ncaab:"🏀 College Basketball",
@@ -62,14 +63,7 @@ function renderCard(c){
   const rec=c.recommendation==="OVER";
   const total=c.similar.tracked;
   return '<article class="scan-card">'+
-    '<div class="scan-top"><div class="scan-identity">'+
-      '<div class="player-initial">'+safe(c.player.split(" ").map(v=>v[0]).slice(0,2).join(""))+'</div>'+
-      '<div><strong>'+safe(c.player)+'</strong><small>'+safe(c.team)+' vs '+safe(c.opponent)+'</small>'+
-      '<small>'+safe(c.position)+" · "+safe(c.book)+" · "+safe(c.variant==="alternative"?"ALT":c.variant==="standard"?"Main":"Quoted")+
-      '</small></div></div>'+
-      '<span class="trend-badge'+((!rec||archived)?' trend-unverified':'')+'">'+
-        (archived?"SAVED SCAN — NOT LIVE":rec?"OVER supported":
-          "INSUFFICIENT / MIXED EVIDENCE")+'</span></div>'+
+    renderPlayerCardHeader(c)+
     '<div class="scan-line">'+(archived?"LAST SAVED DRAFTKINGS OVER LINE: ":
       "PROPLINE VERIFIED OVER LINE: ")+'<strong>'+safe(c.line)+
       '</strong> '+safe(c.market)+
@@ -103,7 +97,7 @@ function renderCard(c){
     historyBlock("Recent Games — Current Season",c.recentGames,
       c.line,false,c.market)+
     (c.limitations.length?'<p class="sample-warning">'+c.limitations.map(safe).join(" · ")+'</p>':'')+
-    '<p class="season-evidence">Injuries, lineup status and future snap/minute shares are not independently confirmed by this provisional ESPN source. Verify current availability before using the research.</p>'+
+    '<p class="season-evidence">Injury designations shown above come from the ESPN roster at scan time, when available. No listed injury is not confirmation of health or game availability. Always recheck official game-day inactive lists, lineups, and late injury updates.</p>'+
     '<div class="research-label">Historical percentages are observed results, not probabilities. The current sportsbook quote is compared against prior games; it is not claimed as their historical betting line.</div>'+
     '</article>';
 }
@@ -117,6 +111,11 @@ function renderCards(){
     ?'<div class="scan-grid">'+shown.map(renderCard).join("")+'</div>'+
       (shown.length<items.length?'<div class="load-picks-row"><button id="loadMorePicks" class="secondary">Show more evidence</button></div>':"")
     :'<div class="empty">No verified props match the chosen filters.</div>';
+  // Failed/missing ESPN images reveal initials instead of a broken icon.
+  if(mount)for(const image of mount.querySelectorAll("img[data-fallback-image]")){
+    image.addEventListener("error",()=>image.remove(),{once:true});
+    if(image.complete&&image.naturalWidth===0)image.remove();
+  }
   const more=el("loadMorePicks");if(more)more.onclick=()=>{visibleLimit+=24;renderCards();};
 }
 function drawGames(){
@@ -304,7 +303,16 @@ async function scan(){
         // One winner, with all displayed evidence based on its exact line.
         const chosen=selectBestOverCard(candidates);
         if(chosen)results.push({...chosen,fixtureId:String(game.id),
-          quotesConsidered:group.offers.length});
+          quotesConsidered:group.offers.length,
+          visuals:{
+            headshotUrl:input.player.visuals?.headshotUrl||null,
+            teamLogo:input.team.logo||null,
+            opponentLogo:input.enemy.logo||null,
+            injury:input.player.visuals?.injury||{
+              label:"Status not confirmed",kind:"unknown",
+              source:"ESPN team roster",checkedAt:null
+            }
+          }});
       }catch(e){errors.push(offer.player+" / "+offer.market+": "+e.message);}
       counts.completed++;
       if(own===scanId)status("Unique player/stat markets analyzed: "+
