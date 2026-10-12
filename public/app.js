@@ -94,7 +94,7 @@ function renderCard(c){
     historyBlock("Similar Defenses — Last 3 Seasons",c.similarGames,c.line,true)+
     (c.limitations.length?'<p class="sample-warning">'+c.limitations.map(safe).join(" · ")+'</p>':'')+
     '<p class="season-evidence">Injuries, lineup status and future snap/minute shares are not independently confirmed by this provisional ESPN source. Verify current availability before using the research.</p>'+
-    '<div class="research-label">Historical percentages are observed results, not probabilities. Today's PrizePicks line is used for all games, not claimed as their old betting line.</div>'+
+    '<div class="research-label">Historical percentages are observed results, not probabilities. The current PrizePicks line is used for all games, not claimed as their old betting line.</div>'+
     '</article>';
 }
 function renderCards(){
