@@ -7,6 +7,7 @@
  * We calculate hit rates only AFTER combining all available seasons.
  */
 import { buildMatchupCards } from "./matchup-trends.js";
+import { playingTimeEligibility } from "./participation.js";
 
 export function seasonsFor(selectedSeason,window=3){
   const season=Number(selectedSeason);
@@ -21,7 +22,7 @@ const validDate = value => {
 const unique = array => [...new Set(array)];
 
 export function combineSeasonBatches(responses,{
-  sport,mode="both",window=3,careerBatches=[],careerEligibleCount=0
+  sport,mode="both",window=3,careerBatches=[],careerEligibleCount=0,strict=false
 }={}){
   if(!Array.isArray(responses)||!responses.length)throw Error("No historical seasons returned.");
   const current=responses.find(r=>r?.isCurrentSeason===true&&r?.seasonBatch);
@@ -163,15 +164,31 @@ export function combineSeasonBatches(responses,{
     warnings.push("Verified former-team records recovered for: "+oldTeamsOnly.join(", ")+".");
   const results=[];
   let currentRosterEvidenceCount=0;
+  let excludedForPlayingTime=0,excludedForTrends=0;
   for(const team of teams){
     const perTeam=collected[team.id];
-    // Only include athletes seen for this team in at least one of the most
-    // recent three current-season matches. This is evidence of recent
-    // affiliation, NOT a verified current game roster or injury status.
+    // Participation is judged only from the most recent five CURRENT-SEASON
+    // games. Verified starters are still subject to the >50% playing-time gate.
     const recentCurrent=(current.seasonBatch.records?.[team.id]||[])
       .filter(r=>validDate(r.date)&&Date.parse(r.date)<Date.parse(game.date))
-      .sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,3);
-    const eligibleIds=new Set(recentCurrent.flatMap(r=>(r.players||[]).map(p=>String(p.id||"")).filter(Boolean)));
+      .sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,5);
+    const currentAthletes=new Map();
+    for(const row of recentCurrent){
+      for(const p of row.players||[]){
+        const id=String(p.id||"");
+        if(!id)continue;
+        if(!currentAthletes.has(id))currentAthletes.set(id,[]);
+        currentAthletes.get(id).push(p);
+      }
+    }
+    const eligibleIds=new Set();
+    const participationByPlayer=new Map();
+    for(const [id,appearances] of currentAthletes){
+      const participation=playingTimeEligibility(appearances,sport);
+      participationByPlayer.set(id,participation);
+      if(!strict||participation.eligible)eligibleIds.add(id);
+      else excludedForPlayingTime++;
+    }
     currentRosterEvidenceCount+=eligibleIds.size;
     if(eligibleIds.size===0){
       warnings.push(team.name+": no recent team appearances available to establish player eligibility.");
@@ -204,7 +221,17 @@ export function combineSeasonBatches(responses,{
     const teamResults=buildMatchupCards(records,team,sourceEvent,profiles,{
       window,league:current.league||null
     });
-    for(const pick of teamResults){
+    const qualified=strict?teamResults.filter(p=>
+      p.recentSample===5 && p.recentHits===5 &&
+      p.similarSample===4 && p.similarHits===4 &&
+      Number.isFinite(p.line) &&
+      participationByPlayer.get(p.playerId)?.eligible===true):teamResults;
+    excludedForTrends+=teamResults.length-qualified.length;
+    for(const pick of qualified){
+      if(strict){
+        pick.isFullyQualified=true;
+        pick.playingTimeEligibility=participationByPlayer.get(pick.playerId);
+      }
       const info=careerByPlayer.get(team.id+":"+pick.playerId);
       pick.careerTeamsIncluded=info?[...info.teams]:[];
       pick.careerSeasonsVerified=info?[...info.loaded].sort((a,b)=>b-a):[];
@@ -212,9 +239,15 @@ export function combineSeasonBatches(responses,{
       pick.careerCoveragePartial=window===3 && (!info || info.errors.length>0 ||
         expected.slice(1).some(y=>!info.loaded.includes(y)));
     }
-    results.push(...teamResults);
+    results.push(...qualified);
   }
 
+  if(strict){
+    warnings.push("Strict filter: require 5/5 current-season OVER and 4/4 comparable-defense OVER at the same threshold, plus verified >50% regular playing time.");
+    if(excludedForPlayingTime)warnings.push(excludedForPlayingTime+" sampled players excluded: >50% playing-time evidence not verified.");
+    if(excludedForTrends)warnings.push(excludedForTrends+" player/market cards excluded for failing the two 100% evidence windows.");
+    if(!results.length)warnings.push("No fully qualified 5/5 + 4/4 picks. Missing snap/minute data or incomplete matchup history cannot be shown as 100%.");
+  }
   const uniqueNotes=unique(warnings);
   if(positionCoverage.missingPositionRows)
     uniqueNotes.push(positionCoverage.missingPositionRows+
@@ -243,6 +276,7 @@ export function combineSeasonBatches(responses,{
     yearsRequested:expected,yearsLoaded:scannedSeasons,yearsMissing:missingSeasons,
     careerPlayersEnriched:careerByPlayer.size,careerEligibleCount,
     rosterEvidencePlayers:currentRosterEvidenceCount,
+    strictMatchupMode:strict,excludedForPlayingTime,excludedForTrends,
     positionCoverage,notes:uniqueNotes,
     provider:"ESPN provisional game logs with independently calculated position/stat defensive comparisons",
     matchupModel:"position-stat-three-season-v3",
