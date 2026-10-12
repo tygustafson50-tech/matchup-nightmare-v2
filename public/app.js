@@ -211,8 +211,16 @@ function fixtureMatches(offer,game){
     .replace(/[^a-z0-9]/g,"");
   const equivalent=(x,y)=>{
     const a=canonical(x),b=canonical(y);
-    return a===b||a.length>=8&&b.length>=8&&
-      (a.endsWith(b)||b.endsWith(a));
+    if(!a||!b)return false;
+    if(a===b||a.length>=8&&b.length>=8&&
+      (a.endsWith(b)||b.endsWith(a)))return true;
+    if(["nfl","nba","mlb"].includes(offer.sport)){
+      const mascot=v=>String(v||"").toLowerCase().trim()
+        .split(/[^a-z0-9]+/).filter(Boolean).at(-1)||"";
+      const m=mascot(x);
+      return m.length>=4&&m===mascot(y);
+    }
+    return false;
   };
   const sameEvent=offer.gameId && String(offer.gameId)===String(game.id);
   const matchedNames=equivalent(offer.fixture?.home,game.home?.name)&&
