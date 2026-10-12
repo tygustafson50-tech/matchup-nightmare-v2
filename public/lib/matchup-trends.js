@@ -45,6 +45,31 @@ export function chooseIndependentLine(recent,minimum,quoted=null){
     quoteTime:null,verified:false
   };
 }
+
+/**
+ * User-selected research ALT line: test the lowest observed outcome in
+ * current-season form and the latest four genuinely similar defenses.
+ * Choose the HIGHEST half-point line cleared by every included recorded
+ * outcome (so 1 reception => OVER 0.5). If a previous game has zero,
+ * no positive OVER line can truthfully make that sample 100%.
+ * This is a historical threshold, not a quoted sportsbook market.
+ */
+export function chooseHistoricalAltLine(recent,similar=[]){
+  const current=Array.isArray(recent)?recent:[];
+  if(!current.length)return null;
+  const values=current.concat(Array.isArray(similar)?similar:[]).map(g=>g.value);
+  if(!values.length||values.some(v=>!finite(v)||v<1))return null;
+  const lowest=Math.min(...values);
+  const line=Math.floor(lowest)-0.5;
+  if(line<0.5)return null;
+  return {
+    line,kind:"research-only-alt",verified:false,quoteTime:null,
+    marketSource:"Research-only ALT OVER "+line+
+      " derived from the lowest verified result in the shown game histories; not an available or quoted sportsbook/PrizePicks market.",
+    minRecorded:lowest
+  };
+}
+
 /**
  * Compare defenses on the same market and *exact* position role.
  * The primary metric is observed pregame stat conceded per game. Optional
@@ -124,7 +149,7 @@ function normalizeProfile(raw){
 }
 
 export function buildMatchupCards(records,team,game,defenseProfiles,{
-  window=3,quotedLines=null,league=null
+  window=3,quotedLines=null,league=null,altMode=false
 }={}){
   if(!CONFIG[game?.sport])return [];
   const season=Number(game.season);
@@ -174,11 +199,6 @@ export function buildMatchupCards(records,team,game,defenseProfiles,{
     const recent=current.slice(0,5); // NEVER borrow a previous season
     const activePosition=current.find(g=>g.positionAtGame)?.positionAtGame||"";
     const role=matchupRole(game.sport,activePosition,entry.stat);
-    const threshold=chooseIndependentLine(recent,entry.minimum,
-      pickThresholdQuotes(quotedLines,entry.playerId,entry.stat));
-    if(!threshold||!finite(threshold.line))continue;
-    if(recent.every(g=>g.value<entry.minimum)&&!threshold.verified)continue;
-    const line=threshold.line,recentHits=recent.filter(g=>g.value>line).length;
     const targetKey=role?entry.stat+"|"+role.role:null;
     const target=normalizeProfile(targetKey
       ?defenseProfiles?.[team.targetOpponentId]?.target?.[targetKey]:null);
@@ -207,6 +227,17 @@ export function buildMatchupCards(records,team,game,defenseProfiles,{
       });
     }
     const similar=eligible.slice(0,4);
+    // Evaluate all known comparable outcomes before deriving an alt line.
+    // Zero in a comparable matchup means this market cannot be presented as
+    // a complete 100%-historical OVER; a recent-only alt remains possible.
+    let threshold=altMode
+      ?chooseHistoricalAltLine(recent,similar)
+      :chooseIndependentLine(recent,entry.minimum,
+        pickThresholdQuotes(quotedLines,entry.playerId,entry.stat));
+    if(altMode&&!threshold)threshold=chooseHistoricalAltLine(recent);
+    if(!threshold||!finite(threshold.line))continue;
+    const line=threshold.line;
+    const recentHits=recent.filter(g=>g.value>line).length;
     const similarHits=similar.filter(g=>g.value>line).length;
     const similarSample=similar.length;
     const recentSample=recent.length;
@@ -239,6 +270,7 @@ export function buildMatchupCards(records,team,game,defenseProfiles,{
       opponentId:team.targetOpponentId,market:entry.market,stat:entry.stat,
       line,marketSource:threshold.marketSource,
       lineType:threshold.kind,lineVerified:threshold.verified,
+      derivedAlt:altMode,minimumRecorded:threshold.minRecorded??null,
       lineQuotedAt:threshold.quoteTime,sourceMarketLine:threshold.verified,
       recentSeason:season,history:recent,recentHits,recentSample,recentPct,
       similarGames:similar,similarHits,similarSample,similarPct,similarTarget:4,

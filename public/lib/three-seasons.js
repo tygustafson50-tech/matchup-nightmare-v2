@@ -22,7 +22,7 @@ const validDate = value => {
 const unique = array => [...new Set(array)];
 
 export function combineSeasonBatches(responses,{
-  sport,mode="both",window=3,careerBatches=[],careerEligibleCount=0,strict=false
+  sport,mode="both",window=3,careerBatches=[],careerEligibleCount=0,strict=false,altMode=false
 }={}){
   if(!Array.isArray(responses)||!responses.length)throw Error("No historical seasons returned.");
   const current=responses.find(r=>r?.isCurrentSeason===true&&r?.seasonBatch);
@@ -97,8 +97,8 @@ export function combineSeasonBatches(responses,{
     if(d.offenseSchedules<2)warnings.push(year+": one or more team schedules unavailable.");
     if(d.missingOffenseBoxscores||d.missingDefenseBoxscores)
       warnings.push(year+": some historical player/defense boxscores were unavailable.");
-    if(d.upstreamRequests>=46)
-      warnings.push(year+": source request cap reached; historical coverage is partial.");
+    // Browser mode proxies each ESPN source through a separate Pages request.
+    // Total scanned documents are not a per-worker 46-request cap.
   }
   if(missingBoxscores)warnings.push("Missing source boxscores were excluded, never changed to zero.");
 
@@ -184,7 +184,8 @@ export function combineSeasonBatches(responses,{
     const eligibleIds=new Set();
     const participationByPlayer=new Map();
     for(const [id,appearances] of currentAthletes){
-      const participation=playingTimeEligibility(appearances,sport);
+      const participation=playingTimeEligibility(appearances,sport,
+        {minimumGames:altMode?1:3});
       participationByPlayer.set(id,participation);
       if(!strict||participation.eligible)eligibleIds.add(id);
       else excludedForPlayingTime++;
@@ -219,17 +220,24 @@ export function combineSeasonBatches(responses,{
     // SAME independently derived current-season research threshold.
     // Never calculate the line from the lowest comparable opponent result.
     const teamResults=buildMatchupCards(records,team,sourceEvent,profiles,{
-      window,league:current.league||null
+      window,league:current.league||null,altMode
     });
     const qualified=strict?teamResults.filter(p=>
-      p.recentSample===5 && p.recentHits===5 &&
-      p.similarSample===4 && p.similarHits===4 &&
+      (altMode ? (
+        p.recentSample>=1 && p.recentHits===p.recentSample
+      ) : (
+        p.recentSample===5 && p.recentHits===5 &&
+        p.similarSample===4 && p.similarHits===4
+      )) &&
       Number.isFinite(p.line) &&
       participationByPlayer.get(p.playerId)?.eligible===true):teamResults;
     excludedForTrends+=teamResults.length-qualified.length;
     for(const pick of qualified){
       if(strict){
-        pick.isFullyQualified=true;
+        pick.isFullyQualified=
+          pick.recentSample===5&&pick.recentHits===5&&
+          pick.similarSample===4&&pick.similarHits===4;
+        pick.isPartialMatchup=!pick.isFullyQualified;
         pick.playingTimeEligibility=participationByPlayer.get(pick.playerId);
       }
       const info=careerByPlayer.get(team.id+":"+pick.playerId);
@@ -243,10 +251,16 @@ export function combineSeasonBatches(responses,{
   }
 
   if(strict){
-    warnings.push("Strict filter: require 5/5 current-season OVER and 4/4 comparable-defense OVER at the same threshold, plus verified >50% regular playing time.");
-    if(excludedForPlayingTime)warnings.push(excludedForPlayingTime+" sampled players excluded: >50% playing-time evidence not verified.");
-    if(excludedForTrends)warnings.push(excludedForTrends+" player/market cards excluded for failing the two 100% evidence windows.");
-    if(!results.length)warnings.push("No fully qualified 5/5 + 4/4 picks. Missing snap/minute data or incomplete matchup history cannot be shown as 100%.");
+    warnings.push(altMode
+      ?"ALT-line mode: choose the highest 0.5-step OVER research threshold supported by actual player results; show verified full and partial history separately. Require verified >=50% playing time."
+      :"Strict filter: require 5/5 current-season OVER and 4/4 comparable-defense OVER at the same threshold, plus verified >50% regular playing time.");
+    if(excludedForPlayingTime)warnings.push(excludedForPlayingTime+" sampled players excluded: >=50% playing-time evidence not verified.");
+    if(excludedForTrends)warnings.push(excludedForTrends+(altMode
+      ?" player/market cards excluded: no supported recent-game OVER line or incomplete playing time."
+      :" player/market cards excluded for failing the two 100% evidence windows."));
+    if(!results.length)warnings.push(altMode
+      ?"No supported ALT OVER lines for snap-qualified players in the available recorded game data."
+      :"No fully qualified 5/5 + 4/4 picks. Missing snap/minute data or incomplete matchup history cannot be shown as 100%.");
   }
   const uniqueNotes=unique(warnings);
   if(positionCoverage.missingPositionRows)
@@ -276,7 +290,7 @@ export function combineSeasonBatches(responses,{
     yearsRequested:expected,yearsLoaded:scannedSeasons,yearsMissing:missingSeasons,
     careerPlayersEnriched:careerByPlayer.size,careerEligibleCount,
     rosterEvidencePlayers:currentRosterEvidenceCount,
-    strictMatchupMode:strict,excludedForPlayingTime,excludedForTrends,
+    strictMatchupMode:strict,altMode,excludedForPlayingTime,excludedForTrends,
     positionCoverage,notes:uniqueNotes,
     provider:"ESPN provisional game logs with independently calculated position/stat defensive comparisons",
     matchupModel:"position-stat-three-season-v3",

@@ -271,6 +271,12 @@ function summaryPositionIndex(summary){
 export function attachRosterPositions(summary,rosterIndices={}){
   if(!summary||typeof summary!=="object")return summary;
   const hints=summaryPositionIndex(summary);
+  // Keep independently verified nflverse player-position hints when roster
+  // indexes are attached later. Do not throw away the previous evidence.
+  for(const [teamId,players] of Object.entries(summary._verifiedPositionIndex||{})){
+    for(const [athleteId,role] of Object.entries(players||{}))
+      if(role)recordHint(hints,teamId,athleteId,role);
+  }
   for(const [teamId,players] of Object.entries(rosterIndices||{})){
     for(const [athleteId,role] of Object.entries(players||{})){
       if(role)recordHint(hints,teamId,athleteId,role);
@@ -305,16 +311,23 @@ export function extractBoxscore(summary,sport,teamId){
           positionCode(athlete.positionAbbreviation)||positionCode(row.positionAbbreviation);
         const position=direct||hints[String(teamId)]?.[id]||"";
         const playingTime=extractPlayingTime(row,athlete,group,map,sport,team);
+        if(sport==="nfl"){
+          const verified=summary?._nflSnapShareByPlayerId?.[String(teamId)]?.[id];
+          if(verified&&Number.isFinite(verified.share)&&verified.share>=0&&verified.share<=1){
+            playingTime.snapShare=verified.share;
+            playingTime.source=verified.source;
+          }
+        }
         const prev=result.get(id)||{
           id,name,headshot:athlete.headshot?.href||null,position,
           positionSource:direct?"boxscore":position?"verified-roster":"unavailable",
-          stats:{},playingTime:{starter:null,minutes:null,snapShare:null,pitchingOuts:null,role:null}
+          stats:{},playingTime:{starter:null,minutes:null,snapShare:null,pitchingOuts:null,role:null,source:null}
         };
         if(!prev.position&&position){
           prev.position=position;
           prev.positionSource=direct?"boxscore":"verified-roster";
         }
-        for(const k of ["starter","minutes","snapShare","pitchingOuts","role"]){
+        for(const k of ["starter","minutes","snapShare","pitchingOuts","role","source"]){
           if(playingTime[k]!==null&&playingTime[k]!==undefined)
             prev.playingTime[k]=playingTime[k];
         }
@@ -342,6 +355,7 @@ export function priorGames(schedule,teamId,beforeDate,limit=7){
     if(!opp?.team?.id&&!opp?.id)return [];
     return [{
       id:String(e.id),date:e.date,season:e.season?.year??null,
+       week:e.week?.number??e.competitions?.[0]?.week?.number??null,
       opponentId:String(opp.team?.id||opp.id),
       opponent:opp.team?.displayName||opp.team?.name||"Opponent",
       teams
