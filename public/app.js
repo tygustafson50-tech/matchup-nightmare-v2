@@ -116,7 +116,8 @@ function renderCard(c){
 function renderCards(){
   const items=filtered(),shown=items.slice(0,visibleLimit);
   el("pickResultCount").textContent=shown.length+" shown · "+items.length+
-    " matching · "+cards.length+" verified player-prop cards";
+    " matching · "+cards.length+
+    (cards.some(c=>c.cachedAt)?" saved research cards (NOT LIVE)":" verified player-prop cards");
   const mount=el("pickCardMount");
   if(mount)mount.innerHTML=shown.length
     ?'<div class="scan-grid">'+shown.map(renderCard).join("")+'</div>'+
@@ -224,6 +225,11 @@ async function scan(){
   button.disabled=true;button.textContent="Scanning verified evidence…";
   clearResults();status("Requesting DraftKings OVER lines through PropLine…");
   try{
+    if(quotaPaused){
+      showSavedScan({chosen,day,league,currentSport,
+        reason:"This browser already detected PropLine's free API limit. Showing the last completed scan without another API request. Reload after your limit resets to retry live quotes."});
+      return;
+    }
     const response=await fetch("/api/lines?"+new URLSearchParams({sport:currentSport,date:day,league}),
       {headers:{Accept:"application/json"},cache:"no-store"});
     const feed=await response.json();
