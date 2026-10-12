@@ -34,7 +34,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          tail -n 150 test-output.log > failed-tests.txt
+          grep -A 28 '^not ok' test-output.log | head -n 210 > failed-tests.txt || true
+          tail -n 16 test-output.log >> failed-tests.txt
           gh pr comment "$PR_NUMBER" --body-file failed-tests.txt
       - name: Enforce successful tests
         if: ${{ steps.suite.outputs.exit_code != '0' }}
