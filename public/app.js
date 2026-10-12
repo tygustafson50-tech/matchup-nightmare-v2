@@ -252,10 +252,20 @@ async function scan(){
       return;
     }
     if(!response.ok||feed.status!=="connected"){
-      el("scanOutput").innerHTML='<div class="warning"><strong>PropLine integration not connected</strong>'+
-        '<p>'+safe(feed.error||"A PropLine API key is required. No fabricated lines will be generated.")+
-        '</p><p>Current projections cannot be verified. Get a free key at prop-line.com/pricing, then add PROPLINE_API_KEY to Cloudflare Pages secrets. Historical research never substitutes made-up lines.</p></div>';
-      status("No verified PropLine lines. Scanner safely stopped.");
+      const keyMissing=feed.status==="integration-required";
+      const sportMissing=feed.status==="sport-unavailable";
+      const issue=keyMissing?"PropLine API key not connected":
+        sportMissing?"Selected sport has no verified PropLine market":
+        "Sportsbook data temporarily unavailable";
+      el("scanOutput").innerHTML='<div class="warning"><strong>'+
+        safe(issue)+'</strong><p>'+
+        safe(feed.error||"The selected event's real sportsbook prop feed is unavailable.")+
+        '</p><p>'+(keyMissing?
+          "Add PROPLINE_API_KEY in Cloudflare Pages production secrets.":
+          sportMissing?"This can be a sportsbook or league coverage limit, not a missing API key.":
+          "No substitute odds will be generated. Retry when the source becomes available.")+
+        '</p></div>';
+      status("No verified props for this sport and date. Scanner safely stopped.");
       return;
     }
     quotaPaused=Number(feed.dailyRequestsRemaining)===0 &&
