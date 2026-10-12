@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {makeEvidenceClient,completedTeamGames,playersFromBoxscore,
-  concededAgainstPosition} from "../public/lib/evidence-client-v3.js";
+  concededAgainstPosition,loadVerifiedEvidence} from "../public/lib/evidence-client-v3.js";
 import {supportsMarket,positionGroup,resultAtLine} from "../public/lib/research-v3.js";
 
 const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
@@ -143,4 +143,60 @@ test("real NBA generic G/F boxscore roles match verified PG or SG defensive samp
   const points=playersFromBoxscore(summary,"nba","1");
   assert.equal(points.find(x=>x.id==="11").stats.assists,7);
   assert.equal(points.find(x=>x.id==="12").stats.rebounds,7);
+});
+
+test("ESPN soccer roster records contain verifiable per-athlete goals, assists and shots",()=>{
+  const soccer={rosters:[
+    {team:{id:"1"},roster:[{athlete:{id:"11",displayName:"Test Attacker"},
+      position:{abbreviation:"F"},stats:[
+        {name:"totalGoals",value:1},{name:"goalAssists",value:2},
+        {name:"totalShots",value:5},{name:"shotsOnTarget",value:3},
+        {name:"foulsCommitted",value:1},{name:"totalTackles",value:2}]}]},
+    {team:{id:"2"},roster:[{athlete:{id:"22",displayName:"Defending Attacker"},
+      position:{abbreviation:"F"},stats:[
+        {name:"goalAssists",value:0},{name:"totalShots",value:4}]}]}
+  ]};
+  const player=playersFromBoxscore(soccer,"soccer","1")[0];
+  assert.equal(player.stats.goals,1);
+  assert.equal(player.stats.assists,2);
+  assert.equal(player.stats.shots,5);
+  assert.equal(player.stats.shotsOnTarget,3);
+  assert.equal(player.stats.tackles,2);
+  assert.equal(player.stats.fouls,1);
+  assert.equal(concededAgainstPosition(soccer,{sport:"soccer",
+    defenseId:"1",role:"F",stat:"assists"}).allowed,0);
+  assert.equal(concededAgainstPosition(soccer,{sport:"soccer",
+    defenseId:"1",role:"F",stat:"assists"}).volume,4);
+});
+
+test("MLS March matches stay within the calendar year's verified three-season sample",async()=>{
+  const offer={source:"PropLine",sport:"soccer",player:"Test Attacker",
+    stat:"assists",position:"F",book:"DraftKings"};
+  const game={id:"99999",date:"2026-10-15T23:00:00Z",season:2026,
+    home:{id:"1",name:"Toronto FC"},away:{id:"2",name:"New York City FC"}};
+  const athlete={id:"11",displayName:"Test Attacker",
+    position:{abbreviation:"F"},injuries:[]};
+  const match={rosters:[
+    {team:{id:"1",name:"Toronto FC"},roster:[{athlete,
+      position:{abbreviation:"F"},stats:[
+        {name:"goalAssists",value:2},{name:"totalShots",value:3}]}]},
+    {team:{id:"3",name:"Other Team"},roster:[{athlete:{id:"33",displayName:"Opponent"},
+      position:{abbreviation:"F"},stats:[
+        {name:"goalAssists",value:0},{name:"totalShots",value:2}]}]}
+    ],header:{competitions:[{date:"2026-03-21T21:00:00Z"}]}};
+  const mock={call:async p=>{
+    if(p.kind==="roster")return {athletes:p.teamId==="1"?[athlete]:[]};
+    if(p.kind==="gamelog")return {events:p.season==="2026"?
+      {"12345":{id:"12345",gameDate:"2026-03-21T21:00:00Z"}}:{}};
+    if(p.kind==="summary")return match;
+    if(p.kind==="schedule")return {events:[]};
+    throw Error("unrecognized ESPN source "+p.kind);
+  }};
+  const out=await loadVerifiedEvidence({client:mock,offer,game,league:"usa.1"});
+  assert.equal(out.season,2026);
+  assert.equal(out.player.id,"11");
+  assert.equal(out.games.length,1);
+  assert.equal(out.games[0].season,2026);
+  assert.equal(out.games[0].actual,2);
+  assert.equal(out.games[0].opponent,"Other Team");
 });
