@@ -60,6 +60,7 @@ function statsFrom(group,row,sport){
     if(cat.includes("bat")){
       put("hits",at("H"));put("runs",at("R"));put("rbis",at("RBI"));
       put("homeRuns",at("HR"));put("walks",at("BB"));put("atBats",at("AB"));
+      put("battingStrikeouts",at("SO","K"));
       const h=at("H"),d=at("2B"),t=at("3B"),hr=at("HR");
       if([h,d,t,hr].every(Number.isFinite)&&h>=d+t+hr)
         put("totalBases",h+d+2*t+3*hr);
@@ -145,14 +146,16 @@ function playingClub(summary,id){
 }
 function volumeStat(sport,role,stat){
   if(["nfl","ncaaf"].includes(sport)){
-    if(role==="QB")return "passAttempts";
+    if(role==="QB")return ["rushingYards","rushAttempts","rushingTDs"].includes(stat)
+      ?"rushAttempts":"passAttempts";
     if(["RB","WR","TE"].includes(role))
       return ["receptions","receivingYards","targets","receivingTDs"].includes(stat)
         ?"targets":"rushAttempts";
   }
   if(["nba","ncaab"].includes(sport))return "fieldGoalAttempts";
-  if(sport==="mlb")return role==="P"?"atBats":"atBats";
-  if(sport==="soccer")return "shots";
+  if(sport==="mlb")return role==="P"&&stat==="pitcherKs"?"atBats":
+    role==="BATTER"?"atBats":null;
+  if(sport==="soccer")return role==="GK"?null:"shots";
   return null;
 }
 export function concededAgainstPosition(summary,{sport,defenseId,role,stat}){
@@ -163,15 +166,18 @@ export function concededAgainstPosition(summary,{sport,defenseId,role,stat}){
   const lineup=playersFromBoxscore(summary,sport,other.team.id);
   const volume=volumeStat(sport,role,stat);
   if(!volume)return null;
-  const relevant=lineup.filter(x=>positionGroup(sport,x.position)===role);
+  const unitRole=sport==="mlb"&&role==="P"?"BATTER":role;
+  const observedStat=sport==="mlb"&&role==="P"&&stat==="pitcherKs"
+    ?"battingStrikeouts":stat;
+  const relevant=lineup.filter(x=>positionGroup(sport,x.position)===unitRole);
   if(!relevant.length)return null;
   // Unknown positive contributors can understate the full position group.
   // Prefer missing to a falsely low defensive allowance.
   if(lineup.some(x=>!positionGroup(sport,x.position)&&
-       (x.stats[stat]||0)>0))return null;
-  if(!relevant.every(x=>Number.isFinite(x.stats[stat])&&
+       (x.stats[observedStat]||0)>0))return null;
+  if(!relevant.every(x=>Number.isFinite(x.stats[observedStat])&&
        Number.isFinite(x.stats[volume])))return null;
-  return {allowed:relevant.reduce((sum,x)=>sum+x.stats[stat],0),
+  return {allowed:relevant.reduce((sum,x)=>sum+x.stats[observedStat],0),
     volume:relevant.reduce((sum,x)=>sum+x.stats[volume],0)};
 }
 export function makeEvidenceClient({fetcher=globalThis.fetch,concurrency=6,onProgress=()=>{}}={}){
@@ -276,7 +282,10 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
       const rival=(box.boxscore?.players||[])
         .find(t=>String(t.team?.id)!==String(club.team.id));
       const date=box.header?.competitions?.[0]?.date||events[i].date;
-      if(!rival?.team?.id||!date||Date.parse(date)>=Date.parse(game.date))continue;
+      const officialSeason=seasonFromEvent(sport,date,
+        box.header?.events?.[0]?.season?.year??null);
+      if(!rival?.team?.id||!date||Date.parse(date)>=Date.parse(game.date)||
+        officialSeason!==year)continue;
       records.push({id:events[i].id,date,season:year,playerId:player.id,
         stat:offer.stat,sport,team:club.team?.displayName||club.team?.name||"",
         opponent:rival.team?.displayName||rival.team?.name||"Opponent",
