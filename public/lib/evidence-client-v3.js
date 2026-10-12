@@ -350,8 +350,10 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
       const values=playersFromBoxscore(box,sport,club.team.id)
         .filter(a=>a.id===player.id);
       if(values.length!==1||!Number.isFinite(values[0].stats[offer.stat]))continue;
-      const rival=(box.boxscore?.players||[])
-        .find(t=>String(t.team?.id)!==String(club.team.id));
+      const opponents=sport==="soccer"&&Array.isArray(box.rosters)
+        ?box.rosters:box.boxscore?.players||[];
+      const rival=opponents.find(t=>
+        String(t.team?.id)!==String(club.team.id));
       const date=box.header?.competitions?.[0]?.date||events[i].date;
       const officialSeason=seasonFromEvent(sport,date,
         box.header?.events?.[0]?.season?.year??null);
