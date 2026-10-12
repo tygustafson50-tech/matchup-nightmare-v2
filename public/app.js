@@ -1,406 +1,305 @@
-import {analyze,parseLogs} from "/lib/engine.js";
-import {renderGameHistory} from "/lib/game-history.js";
-import {combineSeasonBatches,seasonsFor} from "/lib/three-seasons.js";
-import {eligibleCareerPlayers} from "/lib/career-candidates.js";
-import {FIXED_SCAN,INITIAL_FILTERS,getPickOptions,filterPickCards} from "/lib/pick-filters.js";
-import {parseApiResponse} from "/lib/api-client.js";
-import {createEspnSourceClient,loadSeasonFromEspn} from "/lib/season-source.js";
-import {loadCareerFromEspn} from "/lib/career-source.js";
-const sports={
-nfl:{label:"🏈 NFL",markets:["Passing yards","Passing attempts","Completions","Rushing yards","Rushing attempts","Receptions","Receiving yards","Targets"]},
-nba:{label:"🏀 NBA",markets:["Points","Rebounds","Assists","3-pointers","PRA","Steals","Blocks"]},
-mlb:{label:"⚾ MLB",markets:["Hits","Total bases","Home runs","RBIs","Runs","Pitcher strikeouts","Pitching outs"]},
-ncaaf:{label:"🏈 College Football",markets:["Passing yards","Completions","Passing attempts","Rushing yards","Receptions","Receiving yards"]},
-ncaab:{label:"🏀 College Basketball",markets:["Points","Rebounds","Assists","3-pointers","PRA"]},
-soccer:{label:"⚽ Men's Soccer",markets:["Shots","Shots on target","Goals","Assists","Saves","Tackles","Passes"]}};
-const leagues={"eng.1":"Premier League","esp.1":"La Liga","ger.1":"Bundesliga","ita.1":"Serie A","fra.1":"Ligue 1","usa.1":"MLS","uefa.champions":"Champions League"};
-const el=id=>document.getElementById(id),safe=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let current="nfl",games=[],selected=new Set();
-const PAGE_SIZE=24;
-let allPickCards=[],visiblePickLimit=PAGE_SIZE;
-function central(iso){try{return new Intl.DateTimeFormat("en-US",{timeZone:"America/Chicago",month:"short",day:"numeric",hour:"numeric",minute:"2-digit",timeZoneName:"short"}).format(new Date(iso));}catch{return "Time unavailable";}}
-function chooseSport(s){current=s;selected.clear();el("sports").querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.s===s));el("market").innerHTML=sports[s].markets.map(m=>'<option>'+safe(m)+'</option>').join("");el("leagueWrap").hidden=s!=="soccer";loadGames();}
-function drawGames(){el("count").textContent=selected.size+" / 16 games selected";el("games").innerHTML=games.length?games.map(g=>'<button class="game '+(selected.has(g.id)?"active":"")+'" data-id="'+safe(g.id)+'" aria-pressed="'+selected.has(g.id)+'">'+(g.away.logo?'<img alt="" src="'+safe(g.away.logo)+'">':"")+'<div>'+safe(g.away.name)+' @ '+safe(g.home.name)+'<small>'+central(g.date)+' · '+safe(g.status)+'</small></div>'+(g.home.logo?'<img alt="" src="'+safe(g.home.logo)+'">':"")+'<b>'+(selected.has(g.id)?"✓":"+")+'</b></button>').join(""):'<div class="empty">No games returned. Try another date.</div>';
-el("games").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{if(selected.has(b.dataset.id))selected.delete(b.dataset.id);else if(selected.size<16)selected.add(b.dataset.id);else return alert("Maximum 16 games");drawGames();}));}
-async function loadGames(){clearAutomaticResearch();resetPickFilterInputs();games=[];selected.clear();el("games").innerHTML="";el("scheduleStatus").textContent="Loading real schedules…";let url="/api/games?sport="+current+"&date="+encodeURIComponent(el("date").value);if(current==="soccer")url+="&league="+encodeURIComponent(el("league").value);
-try{const r=await fetch(url,{headers:{Accept:"application/json"}}),data=await parseApiResponse(r,"/api/games");games=data.games||[];el("scheduleStatus").textContent=games.length+" scheduled games · "+data.source;drawGames();}catch(e){el("scheduleStatus").textContent="Schedule unavailable: "+e.message;drawGames();}}
-function metric(name,r){return '<div class="metric"><strong>'+(r.percentage===null?"—":r.percentage+"%")+'</strong><small>'+name+' · '+r.hits+'/'+r.total+' OVER · '+r.pushes+' pushes</small></div>';}
-el("sports").innerHTML=Object.entries(sports).map(([id,x])=>'<button data-s="'+id+'">'+x.label+'</button>').join("");
-el("sports").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>chooseSport(b.dataset.s)));
-el("league").innerHTML=Object.entries(leagues).map(([id,x])=>'<option value="'+id+'">'+x+'</option>').join("");
-el("date").value=new Date().toLocaleDateString("en-CA",{timeZone:"America/Chicago"});el("date").addEventListener("change",loadGames);el("league").addEventListener("change",loadGames);el("refresh").addEventListener("click",loadGames);
-el("scan").addEventListener("click",()=>{
-el("manualResults").hidden=false;
-try{const name=el("player").value.trim(),market=el("market").value,raw=el("line").value;
-if(!name)throw Error("Enter a player.");if(raw.trim()==="")throw Error("Enter an OVER line.");
-const line=Number(raw);if(!Number.isFinite(line)||line<0)throw Error("Line must be nonnegative.");
-const {games:logs,bad}=parseLogs(el("logs").value);if(!logs.length)throw Error("Enter at least one valid historical game log.");
-const defense=el("defense").value.trim()?Number(el("defense").value):NaN;if(Number.isFinite(defense)&&defense<=0)throw Error("Position-specific allowed rate must be positive.");
-const result=analyze(logs,line,defense);if(el("perfect").checked&&!result.historical100){el("output").innerHTML='<div class="empty">No 100% comparable trend with a minimum of three valid comparable games.</div>';return;}
-const max=Math.max(1,line*1.2,...result.recent.map(g=>g.value));
-el("output").innerHTML='<h2>'+safe(name)+' — OVER '+line+' '+safe(market)+'</h2><p class="muted">User-entered statistics only. Games selected: '+selected.size+'. Selecting games does not automatically populate players or verified markets.</p>'+
-(bad.length?'<p class="error">Invalid input lines ignored: '+bad.join(", ")+'</p>':"")+
-'<div class="metrics">'+metric("Last 5",result.last5)+metric("Last 10",result.last10)+metric("All supplied",result.season)+metric("Similar scoring defense",result.similar)+'</div>'+
-'<h3>Recent games</h3><div class="chart">'+result.recent.slice().reverse().map(g=>'<div class="bar '+(g.value>line?"hit":"")+'" style="height:'+Math.max(3,100*g.value/max)+'%" title="'+safe(g.date+" "+g.opponent+" "+g.value)+'"></div>').join("")+'</div>'+
-renderGameHistory(result.recent,line,market,{heading:"Recent game history",limit:15})+
-'<h3>Similar positional defenses</h3><p class="muted">Compares manually entered allowed values for the SAME market and player position, within 20%. Data is unverified.</p>'+
-renderGameHistory(result.similarGames,line,market,{heading:"Similar positional defenses (manual)",limit:8})+
-'<div class="warning">Historical hit rates do not guarantee wins. No live sportsbook lines, verified player logs, injuries, or calibrated prediction model are connected.</div>';
-}catch(e){el("output").innerHTML='<p class="error">'+safe(e.message)+'</p>';}
-});
-chooseSport("nfl");
-
-
-/* Automatic fixed-rule scan. Optional manual research is below the pick results. */
-const scanBtn=el("scanSelected");
-const scanProgress=el("scanProgress");
-/* The same three result filters work across all six sports. No API calls. */
-for(const id of ["filterMarket","filterTeam","filterPosition"]){
-  el(id).addEventListener("change",()=>{
-    visiblePickLimit=PAGE_SIZE;
-    drawFilteredPickCards();
-  });
+/**
+ * MATCHUP NIGHTMARE V3 — no legacy model.
+ * The only entry point for automatic recommendations is a freshly verified
+ * licensed PrizePicks offer followed by verified game-by-game evidence.
+ */
+import {analyzeVerifiedProp,rankEvidence} from "/lib/research-v3.js";
+import {makeEvidenceClient,loadVerifiedEvidence} from "/lib/evidence-client-v3.js";
+const SPORTS={
+  nfl:"🏈 NFL",nba:"🏀 NBA",mlb:"⚾ MLB",
+  ncaaf:"🏈 College Football",ncaab:"🏀 College Basketball",
+  soccer:"⚽ Men's Soccer"
+};
+const LEAGUES={"eng.1":"Premier League","esp.1":"La Liga",
+  "ger.1":"Bundesliga","ita.1":"Serie A","fra.1":"Ligue 1",
+  "usa.1":"MLS","uefa.champions":"Champions League"};
+const el=id=>document.getElementById(id);
+const safe=v=>String(v??"").replace(/[&<>"']/g,c=>({
+  "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+}[c]));
+const prettyDate=s=>{try{return new Intl.DateTimeFormat("en-US",{
+  dateStyle:"medium",timeZone:"America/Chicago"}).format(new Date(s));}
+  catch{return String(s||"Unknown date");}};
+const kickoff=s=>{try{return new Intl.DateTimeFormat("en-US",{
+  timeZone:"America/Chicago",month:"short",day:"numeric",hour:"numeric",
+  minute:"2-digit",timeZoneName:"short"}).format(new Date(s));}
+  catch{return "Kickoff unavailable";}};
+const normalize=s=>String(s||"").normalize("NFKD")
+  .replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+let sport="nfl",games=[],selected=new Set(),cards=[],scanId=0,visibleLimit=24;
+let watchedQuotes=null,watchBusy=false;
+function status(message){el("scanProgress").textContent=message;}
+function clearResults(){
+  cards=[];watchedQuotes=null;visibleLimit=24;el("pickFilters").hidden=true;
+  el("scanOutput").innerHTML='<div class="empty">Select games and scan verified PrizePicks projections.</div>';
 }
-el("autoResults").addEventListener("click",event=>{
-  if(event.target.closest("#loadMorePicks")){
-    visiblePickLimit+=PAGE_SIZE;
-    drawFilteredPickCards();
-  }
-});
-
-function clearAutomaticResearch(){
-  allPickCards=[];
-  visiblePickLimit=PAGE_SIZE;
-  el("pickFilters").hidden=true;
-  el("scanOutput").innerHTML='<div class="empty">Select your games and click Scan Selected Games.</div>';
+function setOptions(id,entries,label){
+  const node=el(id),previous=node.value;
+  node.innerHTML='<option value="all">'+safe(label)+'</option>'+
+    entries.map(v=>'<option value="'+safe(v)+'">'+safe(v)+'</option>').join("");
+  node.value=entries.includes(previous)?previous:"all";
 }
-/** Reset only the browsing controls; the fixed scanner model never changes. */
-function resetPickFilterInputs(){
-  visiblePickLimit=PAGE_SIZE;
-  for(const id of ["filterMarket","filterTeam","filterPosition"])
-    el(id).value="all";
+function filtered(){
+  const m=el("filterMarket").value,t=el("filterTeam").value,
+    p=el("filterPosition").value;
+  return cards.filter(c=>(m==="all"||c.market===m)&&
+    (t==="all"||c.team===t)&&(p==="all"||c.position===p));
 }
-function collectPickFilters(){
-  return {
-    market:el("filterMarket").value,
-    team:el("filterTeam").value,
-    position:el("filterPosition").value
-  };
+function outcomeCell(g,line){
+  const cls=g.result==="OVER"?"over":g.result==="UNDER"?"below":"push";
+  return '<div class="game-log-row" role="row">'+
+    '<span class="game-log-date" role="cell">'+safe(prettyDate(g.date))+'</span>'+
+    '<strong class="game-log-opponent" role="cell">'+safe(g.opponent)+'</strong>'+
+    '<strong class="game-log-stat" role="cell">'+safe(g.actual)+
+      '<small class="game-log-line">OVER '+safe(line)+'</small></strong>'+
+    '<span class="game-log-status '+cls+'" role="cell">'+safe(g.result)+'</span>'+
+    '</div>';
 }
-function setPickSelectOptions(id,allLabel,entries){
-  const select=el(id),old=select.value||"all";
-  const options=entries.map(entry=>typeof entry==="string"
-    ?{value:entry,label:entry}:entry);
-  select.innerHTML='<option value="all">'+safe(allLabel)+'</option>'+
-    options.map(entry=>'<option value="'+safe(entry.value)+'">'+safe(entry.label)+'</option>').join("");
-  select.value=options.some(entry=>entry.value===old)?old:"all";
+function historyBlock(label,games,line,similar=false){
+  return '<details class="game-log-section" '+(similar?'':'open')+'>'+
+    '<summary class="game-log-title"><strong>'+safe(label)+'</strong>'+
+    '<span>'+games.length+' verified games</span></summary>'+
+    '<div class="game-log-table" role="table">'+
+    '<div class="game-log-header" role="row"><span>Date</span><span>Opponent</span>'+
+    '<span>Recorded stat</span><span>Result</span></div>'+
+    games.map(g=>outcomeCell(g,line)+(similar?
+      '<div class="game-log-method">Similarity: '+safe(g.similarity)+"% · "+
+      safe(g.defenseReason)+'</div>':'')).join("")+'</div></details>';
 }
-function refreshPickFilterChoices(picks){
-  const options=getPickOptions(picks);
-  setPickSelectOptions("filterMarket","All stats",options.markets);
-  setPickSelectOptions("filterTeam","All teams",options.teams);
-  setPickSelectOptions("filterPosition","All positions",options.positions);
-  el("pickFilters").hidden=picks.length===0;
-}
-function drawFilteredPickCards(){
-  const mount=el("pickCardMount");
-  if(!mount)return;
-  const matched=filterPickCards(allPickCards,collectPickFilters());
-  const visible=matched.slice(0,visiblePickLimit);
-  const count=el("pickResultCount");
-  count.textContent=visible.length+" shown · "+matched.length+" matching · "+
-    allPickCards.length+" total scan cards";
-  mount.innerHTML=matched.length
-    ?'<div class="scan-grid">'+visible.map(renderPickCard).join("")+'</div>'+
-      (visible.length<matched.length
-        ?'<div class="load-picks-row"><button type="button" id="loadMorePicks" class="secondary">'+
-          'Show '+Math.min(PAGE_SIZE,matched.length-visible.length)+' more picks'+
-          ' ('+(matched.length-visible.length)+' remaining)</button></div>':"")
-    :'<div class="empty filtered-empty">No picks match this combination. Choose All stats, All teams, or All positions to broaden the results.</div>';
-}
-function renderPickCard(p){
-  const ratio=(hits,sample)=>sample>0
-    ?hits+"/"+sample+" · "+Math.round(hits/sample*100)+"%"
-    :"Not verified";
-  const hasSimilar=p.similarSample>0;
-  const similarLabel=hasSimilar?ratio(p.similarHits,p.similarSample):"No verified matches";
-  const recentLabel=ratio(p.recentHits,p.recentSample);
-  const image=p.headshot
-    ?'<img class="player-image" src="'+safe(p.headshot)+'" alt="" loading="lazy" onerror="this.hidden=true">'
-    :'<div class="player-initial">'+safe(String(p.player).split(" ").map(x=>x[0]).slice(0,2).join(""))+'</div>';
-  const recent=renderGameHistory(p.history,p.line,p.market,{
-    heading:"Recent 5 Games — Current Season Only",
-    limit:5,showYear:true,showLine:true,
-    hitRate:{hits:p.recentHits,sample:p.recentSample}
-  });
-  const compared=(p.similarGames||[]).slice(0,4);
-  const history=compared.length?renderGameHistory(compared,p.line,p.market,{
-    heading:"Last 4 Matchups vs Similar Defenses — 3-Season Career",
-    limit:4,showYear:true,showLine:true,
-    showOpponentDefense:true,showComparableReason:true,showCareerTeam:true,
-    countLabel:compared.length+" of 4 genuinely comparable",
-    hitRate:{hits:p.similarHits,sample:p.similarSample}
-  }):'<div class="similar-empty"><strong>No verified similar-defense trend</strong>'+
-    '<span>0 of 4 comparable historical games available</span>'+
-    '<p>'+safe(p.reason||"Verified defensive matchup data is unavailable.")+'</p></div>';
-  const defense=Number.isFinite(p.targetDefense)
-    ?p.targetDefense.toFixed(1):"Not verified";
-  const defenseMetric=p.matchupMetric||"Position and stat-specific defense";
-  const targetCount=p.targetDefenseGames>0?" · "+p.targetDefenseGames+" pregame records":"";
-  const playerYears=(p.matchedSeasons||[]).join(", ")||"No verified comparable seasons";
-  const careerLoaded=(p.careerSeasonsVerified||[]).join(", ")||"No separate athlete career logs";
-  const knownTeam=p.careerTeamsIncluded?.length
-    ?p.careerTeamsIncluded.length+" verified prior franchise(s)"
-    :"No former team verified";
-  const pctBadge=p.derivedAlt
-    ?(p.isFullyQualified?"100% RECENT + MATCHUP"
-      :p.similarSample===4&&p.similarHits<p.similarSample?"100% RECENT · MATCHUP NOT 100%"
-      :p.similarSample>0?"100% RECENT · PARTIAL MATCHUP":"100% RECENT · MATCHUP UNVERIFIED")
-    :(hasSimilar?Math.round(p.similarHits/p.similarSample*100)+"% MATCHUP":"RECENT FORM ONLY");
-  const badge=p.derivedAlt?(p.isFullyQualified?similarLabel:"Not fully verified")
-    :(hasSimilar?similarLabel:recentLabel);
-  const lineType=p.lineVerified
-    ?"VERIFIED "+String(p.lineType||"SPORTSBOOK")+" OVER"
-    :(p.derivedAlt?"RESEARCH ALT OVER":"RESEARCH-ONLY OVER");
-  const scope=p.lineVerified
-    ?"Quoted line: "+(p.marketSource||"verified price source")
-    :(p.derivedAlt
-      ?"This ALT threshold is derived from recorded game results. It is NOT a verified available PrizePicks/sportsbook line or payout offer."
-      :"The research line is based on the player\'s current-season form. It is NOT a current PrizePicks/sportsbook line or payout offer.");
+function hitText(x){return x.tracked?x.hits+"/"+x.tracked+
+  " — "+x.percent+"%":"Not verified (0 games)";}
+function renderCard(c){
+  const rec=c.recommendation==="OVER";
+  const total=c.similar.tracked;
   return '<article class="scan-card">'+
-    '<div class="scan-top"><div class="scan-identity">'+image+
-      '<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+
-      ' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+
-      '</small><small>'+safe(p.position||"Position not verified")+'</small></div></div>'+
-      '<span class="trend-badge'+((p.derivedAlt?!p.isFullyQualified:!hasSimilar)?' trend-unverified':'')+'">'+safe(pctBadge)+
-      ' · '+safe(badge)+(p.coveragePartial?' · PARTIAL DATA':'')+'</span></div>'+
-    '<div class="scan-line">'+safe(lineType)+' <strong>'+safe(p.line)+'</strong> '+safe(p.market)+'</div>'+
-    (p.playingTimeEligibility?.eligible?'<p class="season-evidence">Playing time: '+safe(p.playingTimeEligibility.metric)+' · '+safe(Math.round(p.playingTimeEligibility.averageShare*100))+'% across '+safe(p.playingTimeEligibility.samples)+' verified games</p>':'')+
+    '<div class="scan-top"><div class="scan-identity">'+
+      '<div class="player-initial">'+safe(c.player.split(" ").map(v=>v[0]).slice(0,2).join(""))+'</div>'+
+      '<div><strong>'+safe(c.player)+'</strong><small>'+safe(c.team)+' vs '+safe(c.opponent)+'</small>'+
+      '<small>'+safe(c.position)+" · "+safe(c.variant==="alternative"?"ALT PrizePicks":"Standard PrizePicks")+
+      '</small></div></div>'+
+      '<span class="trend-badge'+(rec?'':' trend-unverified')+'">'+
+        (rec?"OVER supported":"INSUFFICIENT / MIXED EVIDENCE")+'</span></div>'+
+    '<div class="scan-line">VERIFIED PRIZEPICKS '+safe(c.variant==="alternative"?"ALT":"STANDARD")+
+      ' PROJECTION: <strong>'+safe(c.line)+'</strong> '+safe(c.market)+'</div>'+
+    '<p class="season-evidence">Source line verified '+safe(kickoff(c.quotedAt))+
+      ' · Three-season window '+safe(c.seasonWindow.join(" / "))+'</p>'+
     '<div class="scan-stats">'+
-      '<div><strong>'+safe(recentLabel)+'</strong><small>Current-season recent trend</small></div>'+
-      '<div><strong>'+safe(similarLabel)+'</strong><small>Three-season matchup trend</small></div>'+
-      '<div><strong>'+safe(defense)+'</strong><small>'+safe(defenseMetric)+safe(targetCount)+'</small></div>'+
+      '<div><strong>'+safe(hitText(c.recent))+'</strong><small>Last five current-season games</small></div>'+
+      '<div><strong>'+safe(hitText(c.similar))+'</strong><small>Similar defenses — three seasons</small></div>'+
+      '<div><strong>'+safe(total)+'</strong><small>Verified qualifying historical matchups</small></div>'+
     '</div>'+
-    '<p class="muted matchup-rationale">'+safe(p.reason)+'</p>'+
-    '<p class="season-evidence">Recent games: '+safe(p.recentSeason)+
-      ' season only · Similar-defense seasons verified: '+safe(playerYears)+
-      ' · Separate career lookups: '+safe(careerLoaded)+' · '+safe(knownTeam)+'</p>'+
-    recent+
-    '<div class="similar-history'+(!hasSimilar?' similar-history-missing':'')+'">'+history+
-      (hasSimilar?'<p class="game-log-method">Only exact player-position and stat-specific defenses within 25% of the upcoming opponent qualify. Each row explains its measured concession rate and evidence.</p>':'')+
-    '</div>'+
-    (p.sampleWarning?'<p class="sample-warning">'+safe(p.sampleWarning)+'</p>':'')+
-    '<div class="research-label">'+safe(scope)+'</div>'+
-    '<details><summary>How were these trends calculated?</summary>'+
-      '<p class="muted">Recent form: '+safe(recentLabel)+' from recorded games in the selected season. '+
-      'Matchup history: '+safe(similarLabel)+' from the last four verifiable defenses with comparable position/stat concessions over up to three seasons. '+
-      (p.derivedAlt
-        ?'The research ALT threshold is the highest half-point OVER line below the lowest observed result in the selected games. '
-        :'The threshold is not calculated from the minimum result of the matching historical games. ')+
-      'Availability, injuries, projected minutes, and role changes are not independently verified. A 100% past hit rate is not a future win probability.</p>'+
-    '</details></article>';
+    '<p class="muted matchup-rationale">'+(rec?"Recommendation: OVER "+safe(c.line)+" "+safe(c.market)+". ":"No OVER recommendation. ")+
+      safe(c.why)+'</p>'+
+    historyBlock("Recent Games — Current Season",c.recentGames,c.line)+
+    historyBlock("Similar Defenses — Last 3 Seasons",c.similarGames,c.line,true)+
+    (c.limitations.length?'<p class="sample-warning">'+c.limitations.map(safe).join(" · ")+'</p>':'')+
+    '<p class="season-evidence">Injuries, lineup status and future snap/minute shares are not independently confirmed by this provisional ESPN source. Verify current availability before using the research.</p>'+
+    '<div class="research-label">Historical percentages are observed results, not probabilities. The current PrizePicks line is used for all games, not claimed as their old betting line.</div>'+
+    '</article>';
 }
-function renderAutomaticResults(items,failures,completed){
-  if(!items.length){
-    allPickCards=[];
-    el("pickFilters").hidden=true;
-    const unavailable=failures.length>0;
-    el("scanOutput").innerHTML=unavailable
-      ?'<div class="empty"><strong>Scan unavailable — no picks were calculated.</strong><p class="muted">Cloudflare did not return the historical statistics required for this game. This is an API/deployment problem, not a zero-hit matchup.</p></div>'+
-        failures.map(e=>'<p class="error">'+safe(e)+'</p>').join("")
-      :'<div class="empty">No ALT OVER research lines had sufficient evidence for players at 50%+ playing time. Missing snap counts or zero-stat games cannot count as 100% OVER evidence.</div>';
-    return;
-  }
-  const all=items.flatMap(x=>(x.results||[]).map(p=>({...p,sourceGame:x.game,provider:x.provider})));
-  allPickCards=all;
-  refreshPickFilterChoices(all);
-
-  const pendingCareerCount=items.reduce((n,x)=>n+(x.careerPlayersRemaining||0),0);
-  const coverage=items.map(x=>{
-    const requested=(x.yearsRequested||[]).join(", ");
-    const loaded=(x.yearsLoaded||[]).join(", ");
-    const label=(x.game?.away?.name||"Away")+" @ "+(x.game?.home?.name||"Home");
-    const coverage=x.positionCoverage||{};
-    const verified=coverage.resolvedPositionRows||0;
-    const unknown=coverage.missingPositionRows||0;
-    const roster=coverage.rostersWithPositions||0;
-    const evidence=verified||unknown||roster
-      ?'<span class="coverage-detail"> · Player positions verified: '+safe(verified)+
-        ' · Missing: '+safe(unknown)+' · Roster lookups successful: '+safe(roster)+'</span>'
-      :"";
-    return '<p class="season-evidence">'+safe(label)+' · Searched seasons: '+
-      safe(requested)+' · Usable seasons: '+safe(loaded||"None")+evidence+'</p>';
-  }).join("");
-  const warnings=items.flatMap(x=>x.notes||[]).filter(n=>/unavailable|missing|partial|incomplete|not loaded|roster|scheme|source request cap|current-season|limited lookback|same-team|lacked verified positions|position lookup|strict|excluded|50%|no fully qualified|ALT-line mode|NFL playing-time data|snap-count source/i.test(n));
-  const fullyQualified=all.filter(p=>p.isFullyQualified).length;
-  el("scanOutput").innerHTML='<p class="muted">Scanned '+completed+' selected matchup(s). Found '+all.length+' research ALT OVER thresholds for players with verified 50%+ playing time ('+fullyQualified+' with full 5/5 recent AND 4/4 similar-defense evidence). Incomplete matchup histories are labeled. These are not live PrizePicks lines, quoted odds, or guaranteed outcomes.</p>'+
-    coverage+(warnings.length?'<div class="warning">'+[...new Set(warnings)].map(safe).join(" · ")+'</div>':"")+
-    (failures.length?'<div class="warning">'+safe(failures.length)+' games or partial data sources could not be analyzed. '+failures.slice(0,5).map(safe).join(" · ")+'</div>':"")+
-    (pendingCareerCount?'<p class="warning">Career data was prioritized for active players. '+pendingCareerCount+
-      ' additional player histories can still be checked.</p><button id="scanMoreCareers" class="gold">Scan more player careers ('+pendingCareerCount+' remaining)</button>':"")+
-    (all.length?'<div id="pickCardMount"></div>':
-      '<div class="empty">No ALT OVER thresholds supported by recorded games and verified 50%+ playing time. Missing snap counts and zero-stat games cannot be treated as guaranteed OVER hits.</div>');
-  drawFilteredPickCards();
+function renderCards(){
+  const items=filtered(),shown=items.slice(0,visibleLimit);
+  el("pickResultCount").textContent=shown.length+" shown · "+items.length+
+    " matching · "+cards.length+" verified player-prop cards";
+  const mount=el("pickCardMount");
+  if(mount)mount.innerHTML=shown.length
+    ?'<div class="scan-grid">'+shown.map(renderCard).join("")+'</div>'+
+      (shown.length<items.length?'<div class="load-picks-row"><button id="loadMorePicks" class="secondary">Show more evidence</button></div>':"")
+    :'<div class="empty">No verified props match the chosen filters.</div>';
+  const more=el("loadMorePicks");if(more)more.onclick=()=>{visibleLimit+=24;renderCards();};
 }
-scanBtn.addEventListener("click",async()=>{
-  const chosen=games.filter(g=>selected.has(g.id));
-  if(!chosen.length){
-    scanProgress.textContent="Select at least one matchup first.";
-    clearAutomaticResearch();
-    el("scanOutput").innerHTML='<div class="empty">Select one or more games, then press Scan Selected Games.</div>';
-    return;
-  }
-  const sport=current,date=el("date").value,league=el("league").value;
-  const mode=FIXED_SCAN.mode,window=FIXED_SCAN.window; // Always both trends, three seasons, OVER-only.
-  resetPickFilterInputs();
-  clearAutomaticResearch();
-  const failures=[],states=[];
-  let completed=0,cursor=0,seasonBatchesDone=0,careerBatchesDone=0;
-  scanBtn.disabled=true;scanBtn.textContent="Scanning matchups…";
-  el("scanOutput").innerHTML='<div class="empty">Scanning current-season games and historical position-specific defenses. Prior-team career lookups use verified athlete game logs when available.</div>';
-  scanProgress.textContent="Loading current-season stats…";
-  const rightPage=()=>sport===current&&date===el("date").value&&
-    (sport!=="soccer"||league===el("league").value);
-
-  // Heavy historical parsing now runs on this computer. Each Cloudflare
-  // invocation streams ONE validated ESPN document and stays CPU-light.
-  const sourceClient=createEspnSourceClient({
-    concurrency:3,onProgress:({completed,active})=>{
-      if(rightPage())scanProgress.textContent=
-        "Verifying ESPN documents: "+completed+" received"+
-        (active?" · "+active+" loading":"")+
-        " · Selected games: "+completedGames+"/"+chosen.length;
-    }
+function drawGames(){
+  el("count").textContent=selected.size+" / 16 games selected";
+  el("games").innerHTML=games.length?games.map(g=>
+    '<button class="game '+(selected.has(String(g.id))?"active":"")+
+    '" data-id="'+safe(g.id)+'" aria-pressed="'+selected.has(String(g.id))+'">'+
+    (g.away?.logo?'<img alt="" src="'+safe(g.away.logo)+'">':"")+
+    '<div>'+safe(g.away?.name)+" @ "+safe(g.home?.name)+
+    '<small>'+safe(kickoff(g.date))+" · "+safe(g.status)+'</small></div>'+
+    (g.home?.logo?'<img alt="" src="'+safe(g.home.logo)+'">':"")+
+    '<b>'+(selected.has(String(g.id))?"✓":"+")+'</b></button>').join("")
+    :'<div class="empty">No scheduled games returned. Try another date.</div>';
+  el("games").querySelectorAll("button").forEach(btn=>{
+    btn.onclick=()=>{
+      const id=btn.dataset.id;
+      if(selected.has(id))selected.delete(id);
+      else if(selected.size<16)selected.add(id);
+      else{status("Choose up to 16 games.");return;}
+      drawGames();
+    };
   });
-  let completedGames=0;
-  async function requestSeason(game,season){
-    seasonBatchesDone++;
-    try{
-      return await loadSeasonFromEspn({
-        sport,league,game,season,client:sourceClient,
-        onStage:message=>{
-          if(rightPage())scanProgress.textContent=message+
-            " · "+completedGames+"/"+chosen.length+" selected games";
-        }
-      });
-    }catch(error){
-      throw Error("ESPN "+season+" season: "+
-        String(error?.message||error).slice(0,300));
-    }
-  }
-  async function requestCareer(state,player,season){
-    const game=state.game;
-    const knownIds=state.responses
-      .filter(x=>Number(x.season)===Number(season))
-      .flatMap(x=>(x.seasonBatch?.records?.[player.teamId]||[])
-        .filter(g=>(g.players||[]).some(p=>String(p.id)===String(player.playerId)))
-        .map(g=>String(g.id))).filter(id=>/^\d{5,15}$/.test(id)).slice(0,30);
-    try{
-      const data=await loadCareerFromEspn({
-        client:sourceClient,sport,league,game,player,season,knownIds
-      });
-      if(!data.careerBatch)
-        throw Error("No verified historical athlete source batch.");
-      return {...data,forTeamId:player.teamId};
-    }finally{
-      careerBatchesDone++;
-      scanProgress.textContent="Career lookups attempted: "+careerBatchesDone+
-        " · Source documents: "+sourceClient.stats().completed+
-        " · Games: "+completed+"/"+chosen.length;
-    }
-  }
-  async function careerPool(state,players,seasons){
-    const tasks=players.flatMap(player=>seasons.map(year=>({player,year})));
-    const output=[],errors=[];
-    let next=0;
-    await Promise.all(Array.from({length:Math.min(2,tasks.length)},async()=>{
-      while(next<tasks.length && rightPage()){
-        const job=tasks[next++];
-        try{output.push(await requestCareer(state,job.player,job.year));}
-        catch(error){errors.push(job.player.name+" · "+job.year+": "+String(error.message).slice(0,110));}
-      }
-    }));
-    return {output,errors};
-  }
-  function snapshot(){
-    return states.map(state=>{
-      const result=combineSeasonBatches(state.responses,{
-        sport,mode,window,strict:true,altMode:true,careerBatches:state.careerBatches,
-        careerEligibleCount:state.candidateCount
-      });
-      result.careerPlayersRemaining=state.pendingPlayers.length;
-      if(state.errors.length)result.notes.push(...state.errors.slice(0,6).map(e=>"Career source incomplete: "+e));
-      return result;
-    });
-  }
-  async function render(){
-    if(!rightPage())return;
-    let displayed=[];
-    try{displayed=snapshot();}
-    catch(error){failures.push(String(error.message));}
-    renderAutomaticResults(displayed,failures,completed);
-    const more=document.getElementById("scanMoreCareers");
-    if(more){
-      more.addEventListener("click",async()=>{
-        if(!rightPage())return;
-        more.disabled=true;more.textContent="Scanning more athlete careers…";
-        const pending=states.filter(st=>st.pendingPlayers.length>0);
-        for(const st of pending){
-          // Follow-up work is explicit: request up to eight further career
-          // players per selected game, two seasons each.
-          const next=st.pendingPlayers.splice(0,8);
-          const lookedUp=await careerPool(st,next,st.years);
-          st.careerBatches.push(...lookedUp.output);
-          st.errors.push(...lookedUp.errors);
-        }
-        await render();
-      });
-    }
-  }
-  async function worker(){
-    while(cursor<chosen.length && rightPage()){
-      const game=chosen[cursor++];
-      const title=game.away.name+" @ "+game.home.name;
-      try{
-        const currentBatch=await requestSeason(game,"current");
-        const years=seasonsFor(currentBatch.selectedSeason,window);
-        const responses=[currentBatch],errors=[];
-        for(const year of years.slice(1)){
-          try{responses.push(await requestSeason(game,year));}
-          catch(error){errors.push(year+": "+String(error.message).slice(0,100));}
-        }
-        // Only recent CURRENT-season players are candidates for this game.
-        // Prioritize up to four players per team for a single game (two for
-        // multi-game scans); the user can explicitly expand coverage.
-        const candidates=eligibleCareerPlayers(currentBatch,sport,
-          window===3?(chosen.length>1?2:4):0,true);
-        const state={game,responses,years,careerBatches:[],
-          candidateCount:window===3?candidates.total:0,pendingPlayers:window===3?candidates.remaining:[],
-          errors};
-        states.push(state);
-        if(window===3&&candidates.prioritized.length){
-          scanProgress.textContent="Checking previous-team career history for "+title+"…";
-          const careers=await careerPool(state,candidates.prioritized,years);
-          state.careerBatches.push(...careers.output);
-          state.errors.push(...careers.errors);
-        }
-      }catch(error){
-        failures.push(title+": "+String(error.message).slice(0,150));
-      }finally{
-        completed++;
-        completedGames=completed;
-        scanProgress.textContent="Selected games analyzed: "+completed+"/"+chosen.length+
-          " · Cross-team career lookups completed: "+careerBatchesDone;
-      }
-    }
-  }
+}
+async function loadGames(){
+  const own=++scanId;
+  selected.clear();games=[];clearResults();status("Loading verified schedules…");
+  el("scheduleStatus").textContent="Loading schedules…";
+  const date=el("date").value,league=el("league").value;
+  const params=new URLSearchParams({sport,date,...(sport==="soccer"?{league}:{})});
   try{
-    await Promise.all(Array.from({length:Math.min(2,chosen.length)},()=>worker()));
-    await render();
-    scanProgress.textContent="Scan complete: "+completed+" games · "+
-      (window===3?"Three-season positional-defense career research":"Current-season research")+
-      " · "+careerBatchesDone+" individual historical lookups.";
-  }finally{
-    scanBtn.disabled=false;scanBtn.textContent="⚡ Scan Selected Games";
+    const response=await fetch("/api/games?"+params);
+    const data=await response.json();
+    if(!response.ok||!Array.isArray(data.games))throw Error(data.error||"Schedule unavailable");
+    if(own!==scanId)return;
+    games=data.games;
+    el("scheduleStatus").textContent=games.length+" games · "+(data.source||"ESPN");
+    status("Choose up to 16 games. Live PrizePicks lines must be connected before research can run.");
+  }catch(error){
+    if(own!==scanId)return;
+    el("scheduleStatus").textContent="Schedules unavailable: "+error.message;
+    status("No game schedule evidence available.");
   }
-});
+  drawGames();
+}
+function fixtureMatches(offer,game){
+  const a=normalize(game.away.name),h=normalize(game.home.name);
+  return offer.gameId===String(game.id) ||
+    (normalize(offer.team)===a&&normalize(offer.opponent)===h)||
+    (normalize(offer.team)===h&&normalize(offer.opponent)===a);
+}
+async function scan(){
+  const chosen=games.filter(g=>selected.has(String(g.id)));
+  if(!chosen.length){status("Select at least one game.");return;}
+  const own=++scanId,day=el("date").value,league=el("league").value,
+    currentSport=sport,button=el("scanSelected");
+  button.disabled=true;button.textContent="Scanning verified evidence…";
+  clearResults();status("Connecting to authorized PrizePicks projection feed…");
+  try{
+    const response=await fetch("/api/lines?"+new URLSearchParams({sport:currentSport,date:day}),
+      {headers:{Accept:"application/json"},cache:"no-store"});
+    const feed=await response.json();
+    if(own!==scanId)return;
+    if(!response.ok||feed.status!=="connected"){
+      el("scanOutput").innerHTML='<div class="warning"><strong>PrizePicks integration unavailable</strong>'+
+        '<p>'+safe(feed.error||"A licensed PrizePicks feed is required. No picks were generated.")+
+        '</p><p>Current projections cannot be verified. Connect the authorized provider in Cloudflare Pages; historical research will not substitute made-up lines.</p></div>';
+      status("No verified PrizePicks lines. Scanner safely stopped.");
+      return;
+    }
+    const chosenPairs=[];
+    const rejected=[];
+    for(const offer of feed.projections||[]){
+      const matching=chosen.filter(game=>fixtureMatches(offer,game));
+      if(matching.length===1)chosenPairs.push({offer,game:matching[0]});
+      else if(matching.length>1)rejected.push("Ambiguous fixture for "+offer.player);
+    }
+    watchedQuotes={sport:currentSport,date:day,
+      offers:new Map(chosenPairs.map(({offer})=>[offer.id,
+        {line:offer.line,status:offer.status,variant:offer.variant}]))};
+    const preface='<p class="season-evidence">PrizePicks lines last verified: '+
+      safe(feed.sourceFetchedAt)+" · "+chosenPairs.length+
+      ' active projections for selected games · Changes: '+
+      safe(feed.changeTracking==="verified"?feed.changes.length+" tracked":
+        "Tracking requires Cloudflare KV")+'</p>';
+    el("scanOutput").innerHTML=preface+
+      '<div class="empty">Loading actual athlete boxscores and pregame defensive records…</div>';
+    if(!chosenPairs.length){
+      el("scanOutput").innerHTML=preface+
+        '<div class="empty">No active, verified PrizePicks props match the selected fixture(s). Suspended, removed, or unavailable lines were excluded.</div>';
+      status("Verified board queried; no available matching projections.");
+      return;
+    }
+    const client=makeEvidenceClient({concurrency:6,onProgress:x=>{
+      if(own===scanId)status("Verified ESPN documents: "+x.completed+
+        " · active requests: "+x.active);
+    }});
+    const results=[],errors=[],counts={completed:0};
+    // Sequential per offer to avoid saturating free hosting while shared
+    // document cache deduplicates schedules and completed event boxes.
+    for(const {offer,game} of chosenPairs){
+      if(own!==scanId)return;
+      try{
+        const input=await loadVerifiedEvidence({
+          client,offer,game,league,
+          onStage:stage=>{if(own===scanId)status(stage);}
+        });
+        const card=analyzeVerifiedProp({offer:{...offer,
+          league:currentSport==="soccer"?league:null},
+          season:input.season,games:input.games,
+          upcomingDefense:input.upcomingDefense,
+          defensiveProfiles:input.defensiveProfiles});
+        if(card)results.push(card);
+      }catch(e){errors.push(offer.player+" / "+offer.market+": "+e.message);}
+      counts.completed++;
+      if(own===scanId)status("Verified offers analyzed: "+counts.completed+
+        "/"+chosenPairs.length);
+    }
+    if(own!==scanId)return;
+    cards=rankEvidence(results);
+    el("pickFilters").hidden=!cards.length;
+    if(cards.length){
+      const uniq=a=>[...new Set(a)].sort();
+      setOptions("filterMarket",uniq(cards.map(c=>c.market)),"All stats");
+      setOptions("filterTeam",uniq(cards.map(c=>c.team)),"All teams");
+      setOptions("filterPosition",uniq(cards.map(c=>c.position)),"All positions");
+    }
+    el("scanOutput").innerHTML=preface+
+      '<p class="muted">Verified PrizePicks offers analyzed: '+counts.completed+
+      ' · Evidence cards: '+cards.length+
+      ' · OVER recommendations with sufficient evidence: '+
+      cards.filter(c=>c.recommendation==="OVER").length+'.</p>'+
+      (errors.length?'<details class="warning"><summary>'+errors.length+
+        ' unverified player/market records withheld</summary><p>'+
+        errors.slice(0,20).map(safe).join(" · ")+'</p></details>':"")+
+      (cards.length?'<div id="pickCardMount"></div>':
+        '<div class="empty">No verifiable player evidence was available for the returned PrizePicks offers. No placeholders were generated.</div>');
+    if(cards.length)renderCards();
+    status("Evidence scan finished. Every displayed line came from the verified PrizePicks feed.");
+  }catch(e){
+    if(own!==scanId)return;
+    el("scanOutput").innerHTML='<div class="error">Source validation failed: '+
+      safe(e.message)+". No unsourced projections displayed.</div>";
+    status("Research unavailable; source validation failed.");
+  }finally{
+    if(own===scanId){button.disabled=false;button.textContent="⚡ Scan Selected Games";}
+  }
+}
+// Poll only while a verified board is open. If the provider removes/suspends or
+// changes a quote, discard old evidence and force a new source-verified scan.
+setInterval(async()=>{
+  const snapshot=watchedQuotes;
+  if(!snapshot||watchBusy||document.visibilityState==="hidden")return;
+  watchBusy=true;
+  try{
+    const response=await fetch("/api/lines?"+new URLSearchParams({
+      sport:snapshot.sport,date:snapshot.date
+    }),{cache:"no-store"});
+    const feed=await response.json();
+    if(snapshot!==watchedQuotes)return;
+    if(!response.ok||feed.status!=="connected"){
+      clearResults();status("PrizePicks quote verification expired or became unavailable. Rescan after reconnecting.");
+      return;
+    }
+    const latest=new Map(feed.projections.map(p=>[p.id,p]));
+    for(const [id,old] of snapshot.offers){
+      const current=latest.get(id);
+      if(!current||current.line!==old.line||
+        current.variant!==old.variant||current.status!=="active"){
+        clearResults();
+        el("scanOutput").innerHTML='<div class="warning">PrizePicks projection moved, was suspended, or was removed. Old cards have been cleared. Scan again for current verified lines.</div>';
+        status("PrizePicks board changed — rescan required.");
+        return;
+      }
+    }
+  }catch{
+    if(snapshot===watchedQuotes){
+      clearResults();status("PrizePicks feed verification failed — old quotes were cleared.");
+    }
+  }finally{watchBusy=false;}
+},120000);
+el("sports").innerHTML=Object.entries(SPORTS)
+  .map(([id,label])=>'<button data-s="'+id+'">'+safe(label)+'</button>').join("");
+el("sports").querySelectorAll("button").forEach(btn=>
+  btn.addEventListener("click",()=>{
+    sport=btn.dataset.s;
+    el("sports").querySelectorAll("button").forEach(b=>b.classList.toggle("active",b===btn));
+    el("leagueWrap").hidden=sport!=="soccer";loadGames();
+  }));
+el("league").innerHTML=Object.entries(LEAGUES)
+  .map(([id,name])=>'<option value="'+id+'">'+safe(name)+'</option>').join("");
+el("date").value=new Date().toLocaleDateString("en-CA",{timeZone:"America/Chicago"});
+el("date").onchange=loadGames;el("league").onchange=loadGames;
+el("refresh").onclick=loadGames;el("scanSelected").onclick=scan;
+for(const id of ["filterMarket","filterTeam","filterPosition"])el(id).onchange=()=>{
+  visibleLimit=24;renderCards();
+};
+el("sports").querySelector('[data-s="nfl"]').click();

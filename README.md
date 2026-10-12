@@ -1,164 +1,72 @@
-# Matchup Nightmare V2
+# Matchup Nightmare V3
 
-A **six-sport, OVER-only matchup research website** built in a private GitHub repository and automatically deployed to Cloudflare Pages.
+**Evidence-first, OVER-only player-prop research.** Preserves the V2 black-and-gold UI, six sport tabs, game selection, player cards, and Cloudflare Pages hosting. The old line generator, manual predictions, snap-based automatic picks, five-plus-four forced-hits filter, and legacy matchup scanner are retired.
 
-Sports: NFL, NBA, MLB, men's college football, men's college basketball, and men's soccer (EPL, La Liga, Bundesliga, Serie A, Ligue 1, MLS, Champions League).
+**Primary evidence flow:** verified, authorized **PrizePicks** projection -> five current-season player games -> up to three seasons of player game results against independently verified **position- and stat-specific comparable defenses** -> accurate history and optional OVER research recommendation.
 
-Website: https://matchup-nightmare-v2.pages.dev
+## Integration status / important blocker
 
-## Active automatic scanning mode (low ALT lines)
+PrizePicks does **not** currently publish an open, licensed public developer API for arbitrary third-party apps. V3 intentionally does NOT scrape unofficial PrizePicks private endpoints or invent alternative lines. There is **no real PrizePicks integration until the owner obtains and configures a licensed/approved provider**. A fully configured adapter is required for any prop card to appear.
 
-Automatic scans now find **historical OVER alt-line thresholds** for players with
-verified at-least-50% regular participation, instead of demanding that a
-current-season median-derived line clear every recorded sample.
+The Cloudflare Pages Function `/api/lines?sport=nfl&date=YYYY-MM-DD` accepts **only** an operator-authorized, explicitly configured HTTPS feed. In Cloudflare Pages, configure:
 
-- For each player/stat, compare the last five recorded current-season games
-  and up to four actual position/stat-comparable matchups in the last three
-  seasons. Choose the **highest half-point line below the lowest positive
-  recorded result** in the available evidence (for instance, all games with
-  1+ reception support a research threshold of **OVER 0.5 receptions**).
-- A card is labeled **fully verified 100% history** only when it genuinely
-  contains 5/5 current-season OVER and 4/4 comparable-defense OVER results.
-  When similar-defense records are missing or a verified zero prevents 4/4,
-  the card is visibly labeled **partial** or **recent-form-only** rather than
-  manufacturing a 100% history.
-- A stat with a verified zero in the last five records cannot produce an
-  honestly 100%-hitting positive OVER threshold; those markets may be absent.
-- NFL participation is supplemented by **nflverse/PFR offensive snap count
-  percentages** keyed to the exact season, team, opponent, player name, and
-  game week. Only verified shares at **50% or more** count, with ambiguity
-  excluded. For the other sports, available official minutes/starting
-  evidence is used with sport-specific rules.
-- These are **research-only historical ALT thresholds**, not necessarily lines
-  offered by PrizePicks/DraftKings or any sportsbook. A historical 100% is not
-  the probability of the prop hitting next game.
+- Secret `PRIZEPICKS_FEED_ENDPOINT`: HTTPS endpoint of a provider adapter licensed to deliver exactly sourced PrizePicks lines.
+- Secret `PRIZEPICKS_FEED_TOKEN`: credential for that adapter, never exposed to a browser.
+- Variable `PRIZEPICKS_FEED_APPROVED=true`: set only after verifying the feed contract, permitted use, and public display rights.
+- Optional Cloudflare KV binding `PROJECTION_SNAPSHOTS`: tracks changed, added, removed or suspended provider projections between refreshes. Without KV it says **tracking unavailable**.
 
+**The endpoint alone is not a contract, key, or active integration.** A provider must be contracted and its data shaped into the adapter contract. Do not enter dummy secrets in production to bypass validation. Current state with no feed is expected to show **Integration Required** and no picks.
 
-## Live workflow
+### Provider adapter payload (version 1)
 
-1. Select a sport, date, and up to 16 games.
-2. Click **Scan Selected Games**.
-3. The backend retrieves completed game history and player box scores from provisional ESPN public endpoints where available.
-4. View historical OVER research thresholds. **Similar-defense** and **recent-form** samples are distinct.
-5. On each player card see the **Last 5 Games** and **Last 4 Matchups vs Similar Positional Defenses** with date, opponent, exact recorded stat, and OVER/BELOW/PUSH result.
+A verified upstream service must return:
 
-All reported game statistics must come from actual parsed data. A missing stat is **not** zero.
-
-## Position-specific defensive matching
-
-We have replaced the old whole-team points-allowed proxy in automatic scans with an actual **stat- and position-group-specific defensive profile**.
-
-- **NFL / College Football:** passing yards to QBs, receiving yards and receptions allowed to WRs/TEs/RBs separately, rushing stats allowed to RBs vs QBs.
-- **NBA / College Basketball:** points/rebounds/assists/etc. conceded to **PG, SG, SF, PF or C separately** when those exact positions are supplied; generic G/F positions remain honestly labeled generic. These are group allowances, not a specific one-on-one defender.
-- **Men's Soccer:** shots/shots on target/goals/etc. conceded to forwards, midfielders, defenders, or goalkeepers, only if positional statistics are available.
-- **MLB:** an actual pitching-staff performance against batters or opposing batting-lineup strikeout tendency; baseball does not have a literal defender guarding a batter by position. Do not label it as such.
-
-The backend looks at each defense's completed **pregame** opponent box scores and sums the selected market stat by role; it averages over **at least two** usable games. Comparable defenses must have the **same role and stat**, with an allowance within **25%** of the upcoming opponent's average. The most recent **up to four** qualifying historical opponent matchups are displayed; with fewer qualifying records, the actual count is shown instead of inventing games.
-
-For budget control, each selected team's latest five completed games are sampled per season, and position profiles are attempted for a bounded subset of recent opposing defenses. Thus the comparison is a **limited historical search**, not a complete career-wide survey. If the provider lacks player position, a relevant stat, or enough pregame games, comparable position matchups are unavailable and **never silently replaced with whole-team scoring averages**.
-
-Each similarity row also shows the **historical opponent's stat allowed to that position per game** and its sample size. These are group averages, not predictions or proof of direct one-on-one assignments.
-
-## Verified matchup trend system (V3)
-
-**The line is now independent of the historical matchup results.** The old algorithm deliberately took the minimum matching historical player result and selected a half-step below it, mechanically producing a 100% past hit rate. That method is no longer used on automatic pick cards.
-
-Until an authorized line feed is connected, the automatic scan uses a clearly labeled **research-only OVER threshold derived from the current-season recent-game median**. It then tests that **same, independently selected line** against both game samples. It does not claim that the threshold can actually be selected on PrizePicks or a sportsbook. Only a verified source and quote timestamp may identify a future real market line.
-
-Each athlete/stat combination generates **one two-part card**, not duplicate 100%-only recent and similar cards:
-
-- **Last 5 Recent Games:** only the selected season; date, opponent, actual stat, line, OVER/BELOW/PUSH result, and real hit fraction/percentage.
-- **Last 4 Similar-Defense Matchups:** take the four most recent truly comparable career matchups over the selected season and two previous seasons, including verified former-team games. Each row shows date, opponent, actual stat, line result, measured pregame concession average to the player's actual position, the defensive sample size, and the percentage difference explaining why the defense qualifies.
-- **No forced four results:** if only one, two, or three authentic comparable opponents are verified, show that exact count and a sample warning. Missing defensive averages, changing playing positions, missing historical boxscores, and incompatible verified context cause a matchup to be excluded, never replaced with a loosely related game.
-- **Not guaranteed:** 4/4 is a recorded 100% historical hit rate, not a forecast probability. A 2/4 is 50%; both should be shown honestly.
-
-The primary verified comparison is **the same stat allowed to the same player position per completed defensive game**, using pregame samples of at least two actual games and a 25% similarity tolerance. When authoritative pace, defensive efficiency, or lineup/pitcher metrics become available they can further restrict comparison; absent context is explicitly unavailable, never synthesized. Defensive rankings only appear if provided by a verified feed.
-
-**Baseball exception:** pitcher strikeout research compares verified opposing lineup strikeout tendency. Hitter vs starter matchups require actual opposing starter handedness; pitching-staff totals alone must **not** masquerade as a comparable starting-pitcher profile. Current ESPN data do not reliably provide pitch mix, starter handedness, lineup position, or projected workload. MLB hitter similar-pitcher history may therefore be unavailable even if the hitter's recent games exist. Pitching-outs recent stats can be parsed from verified innings pitched; pitcher-workload similarity is not fabricated from opponent pitchers' outs.
-
-**Soccer:** shots, shots on target, goals, assists, tackles, fouls and goalkeeper saves are supported when reported in boxscores. Verified differing leagues disqualify false same-context comparisons; absent tactical/league-strength context is disclosed.
-
-**Health and availability:** injuries, starters, projected minutes/playing time, lineups, trades, and game-day role changes are not independently verified by this free ESPN-only integration. A current team appearance is evidence of recent participation, not a guarantee the athlete is active tonight.
-
-## Provider and hosting limitations
-
-- Current ESPN API endpoints are public, unofficial, undocumented, and sometimes lack game logs, roster positions, or college/soccer player-level data. A failed or empty scan means insufficient data, **not** that no bets can win.
-- Cloudflare Workers Free currently limits external subrequests per invocation. The scanning endpoint caps itself at 46 and can return incomplete positional comparisons if that budget is reached. No paid subscription is needed for the current starter.
-- Injury context, coverage schemes, direct defender assignments, league-strength adjustments, pregame lineup forecasts, sportsbook data, full backtesting and calibrated probabilities are **not yet implemented**.
-- Current source code is private on GitHub, but the Cloudflare website is publicly reachable unless you separately configure access controls.
-
-## Hosting from GitHub
-
-Connect the private repository to **Cloudflare Pages**, preset **None**, production branch **main**, build command **exit 0**, output directory **public**. Cloudflare Pages deploys commits automatically. No Node installation is required just to use the hosted website.
-
-For local testing with Node.js 20+, run:
-
-```sh
-npm test
-npm start
+```json
+{
+  "source": "PrizePicks",
+  "fetchedAt": "2026-10-11T18:40:00Z",
+  "projections": [
+    {
+      "id": "provider-projection-id",
+      "sport": "nfl",
+      "player": "A real licensed PrizePicks player",
+      "team": "Source-verified current team",
+      "opponent": "Source-verified current opponent",
+      "position": "WR",
+      "gameId": "ESPN event ID if mapped",
+      "gameDateLocal": "2026-10-11",
+      "market": "Receiving yards",
+      "stat": "receivingYards",
+      "line": 49.5,
+      "variant": "standard",
+      "status": "active",
+      "quotedAt": "2026-10-11T18:38:00Z",
+      "espnPlayerId": "Verified matching ESPN athlete ID",
+      "espnTeamId": "Verified matching ESPN team ID",
+      "espnOpponentId": "Verified matching opponent ID"
+    }
+  ]
+}
 ```
 
-The website is served on http://localhost:3000 locally.
+The example is a **schema illustration only, NOT a real player or actual feed response**. `variant` must be `standard` or `alternative`; `status` must be `active`, `suspended`, or `removed`. All three required timestamps and current projection values must come from the licensed source. Invalid or stale source/projection documents (older than 30 minutes) fail closed. Line changes/suspensions are only described as **tracked** when KV has previous verified snapshots.
 
-## Key files
+## Statistical evidence
 
-- `functions/api/games.js` — upcoming schedules.
-- `functions/api/scan.js` — selects completed histories; computes position-specific defense profiles under free-tier limits.
-- `lib/auto-scan.js` — player stats, position mapping, defensive group aggregation, comparable-opponent filtering.
-- `public/app.js` and `public/lib/game-history.js` — sport navigation, scan flow and visible history tables.
-- `tests/auto-scan.test.js`, `tests/game-history.test.js` — calculations and UI regression checks.
+V3 retrieves game schedules from the public ESPN scoreboard and attempts to reconcile the PrizePicks player against the ESPN team's official roster. It fetches player game-log event references and completed box scores for **the selected sport season plus the previous two seasons**, retaining actual opponent, date, recorded stat and identity. Missing/unsupported box scores never become zeros.
 
-Data coverage remains provisional until verified in production for each sport. Accuracy takes priority over showing a pick on every page.
+Each past opposing defense is evaluated using **only games completed before** the applicable player matchup. A position-specific average of the selected stat AND relevant usage volume is required (at least three valid pregame box scores). The upcoming defense is measured in the same fashion.
 
+Defensive matching is season-normalized using documented, measured cohorts of at least five distinct opponent teams **within each season and sport/position/stat combination**. The comparison is a standardized two-feature distance, with a transparent threshold 0.80. These are **sampled same-season cohorts, not full league rankings**, because complete licensed league-wide defensive profiles are not connected. Until sample cohorts and exact identity/position/usage can be verified, comparable history is explicitly **insufficient**; it will not be fabricated or replaced with random opponents.
 
-## Three-season similar-defense scan (V2.3)
+Soccer requires the same verified competition. MLB batter comparisons additionally require verified opposing starting-pitcher handedness; without this optional external feed, baseball batters usually lack comparable history. Some ESPN position, usage, and game-log fields are incomplete or unofficial, so many valid PrizePicks offers can appear with recent-game evidence but no confident comparable defense match.
 
-The scanner **always** examines three seasons for similar-defense history: the selected matchup's official league season and the **two preceding league seasons**. For an NFL 2026 matchup, those seasons are **2026, 2025, and 2024**. There is no user-facing scan-mode or history-window setting; both recent-form and similar-defense OVER research run every time.
+**Current-season recent evidence** = last five verified player games. **Three-season matchup evidence** = every verified actual past game against opponents meeting the sport-specific, season-normalized comparison, not an arbitrary four-game cap. Both independently compare exact recorded outcomes to today's selected **verified** PrizePicks line, never alleged historical betting lines.
 
-The browser fetches each season as a **separate bounded Cloudflare Pages Function request**. It then recomputes **one combined player/market trend** across the available games, rather than taking the intersection or union of per-season "100%" cards. The current opponent's defense-vs-position stat is evaluated with **current-season pregame data**; historical opponent profiles use records that existed **before each historical game**.
+A card can say `OVER` only with at least three recent and three comparable verified results AND a historical OVER majority in both independent samples; otherwise it says insufficient/mixed evidence. This is transparent evidence ranking, **not a calibrated predictive probability or guarantee**.
 
-The scanner now **strictly separates** the two research windows: **Recent Games** uses up to five appearances from the player's **selected/current season only** (never earlier seasons), even if only one or two games have been played. **Last Four vs Similar Positional Defenses** can use up to four qualifying matchups from the selected season and previous two seasons, regardless of franchise, whenever verified athlete-specific history is available. The date column includes the YEAR in the multi-season comparison. Each card displays the season range requested, which seasons actually returned usable game history, and which seasons contributed to the qualifying sample.
+## Verify and deploy
 
-**Actual coverage constraints:** This free-tier implementation initially retrieves **up to five previous completed games per selected team per season**. It then uses athlete-specific ESPN career game logs to discover additional appearances for prioritized current players, **including their former franchises**. Career lookups search the current season plus the previous two; already verified team games are skipped to save calls. For each athlete and season, up to eight additional game summaries and six corresponding defensive opponent profiles are examined. The initial scan prioritizes up to four qualifying players per team for one selected matchup (two per team in multi-game scans); **Scan more player careers** expands coverage for other eligible athletes. This is a bounded partial career search, **not a guaranteed full three-season career archive**. Only athletes in a current-team game log can be initially selected, and missing source coverage is never treated as zero.
+`npm test` runs the new V3 source-integrity, line authentication, cross-sport model and defensive evidence tests. Cloudflare Pages automatically builds `main` after merging a reviewed PR. Verify the deployed `/api/lines` returns `503 integration-required` until genuine authorized credentials have been configured. Confirm the exact source quote timestamp and projection identity from the contracted partner before enabling user-facing recommendations.
 
-The backend limits requests to 46 external calls per season batch to remain below Cloudflare's free-worker external subrequest limit (subject to network redirects and platform policy). Three seasons therefore take longer than one. If a provider feed is missing or rate-limited, the app shows **partial coverage**, not a fabricated successful scan.
-
-The end of a three-season window is the SELECTED game's kickoff time, not today's date; no results of future games are allowed to influence research on earlier fixtures. Basketball and football season-year labels are handled according to league metadata when available.
-
-A 4/4 historical trend is never a 100% forecast. PrizePicks sportsbook lines and odds remain unconnected. The ESPN athlete gamelog endpoints are unofficial and cannot be assumed available for every college or soccer athlete.
-
-### Data provenance of the two windows
-
-- **Current-season Recent Games**: merges verified boxscore appearances on the selected team with successfully fetched earlier-team appearances from **the same current season**. No older season is allowed to contribute to the recent sample or a recent-only 100% trend.
-- **Three-season Similar-Defense Career Matchups**: uses real athlete game IDs across teams to locate older boxscore statistics and their opponents' **pregame, position-specific stat-allowed profiles**. It picks the four most recent qualifying matchups within a ±25% comparable defensive range, where data is available.
-- A comparable historical matchup is selected based on the **defensive profile before the old game**, and the upcoming defensive baseline is from pregame current-season history. Players whose historical recorded position differs from their current one are excluded from that role's comparable sample.
-- Career history queries are bounded for free hosting; users may expand to additional players. Displayed player cards identify season coverage and any verified old teams. Missing seasons and missing player records remain explicitly incomplete.
-
-A 4/4 historical trend is not a 100% predicted probability, and calculated research thresholds are not live PrizePicks or sportsbook lines.
-
-
-## Position metadata recovery and empty-matchup clarity
-
-Some ESPN game-summary player-stat rows **do not include a position**. This previously caused the dashboard to show **Unknown position** and **0 of 4** for positional-defense history, even when game stats were present. The scanner now reads an explicitly labeled position from the boxscore, in-event roster, or a bounded, season-requested ESPN team roster lookup. It resolves by athlete ID and does not infer a WR from receiving yards or a guard from points. Historical career lookups also attempt old-team roster position recovery.
-
-The selected-game scan reserves some of Cloudflare's free external-request allowance for these lookups and samples up to three historical opponent defenses per team per season, combining qualifying records over three seasons to find up to four comparable matchups. Missing positions, unverifiable player roles, incomplete defensive game profiles, and request-budget limitations are reported as gaps rather than invented stats.
-
-**Result cards:** a recent-games research result with no eligible similar defenses displays a compact, specific unavailable message instead of a large repeated empty table. It must not be read as a verified defensive trend. Scan summaries surface how many player positions were resolved, how many remained missing, and how many roster lookups succeeded.
-
-Source data is still an unofficial, variable-coverage ESPN integration, and these changes are **not** a guarantee that every game/sport will have four comparable position-specific matches. Real PrizePicks lines remain unconnected.
-
-
-## One-click scanner and pick-card finder
-
-The scanner settings panel has been removed. For every supported sport, scanning always runs the same research plan:
-
-- OVER-only historical research thresholds (not real sportsbook quotes)
-- Last five recorded games **in the selected/current season only**
-- Last four comparable positional-defense matchups searched from the player's **current plus two previous seasons**, including verified former-team games where available
-- A single OVER research card per player/stat, showing both **RECENT** and **SIMILAR DEFENSE** hit rates together
-
-The six sports share **exactly three dropdown filters** above the pick cards: **Stats**, **Team**, and **Position**. These filter only the cards already returned by the automatic scan; no extra ESPN API calls or new scans are needed. Choices are based on actual returned results for that sport. Search, game, trend, evidence, and custom sorting controls have been removed; the app keeps its normal ordering of similar-defense trends before recent-game trends.
-
-Filtering happens **before** paging, so a card beyond the former 100-card limit remains discoverable through Stats, Team, or Position. Show up to 24 cards initially, with **Show more picks** for the remainder. Set each dropdown to **All stats**, **All teams**, or **All positions** to clear it. A new sport/date or fresh scan resets the dropdowns. Optional manual research remains collapsed below the automated results.
-
-These are research-navigation filters, not a ranking by expected win probability, offered sportsbook price, or guaranteed betting outcomes.
+No code in V3 claims live PrizePicks availability, 100% success, or a finished licensed data hookup unless each assertion is backed by the source itself.

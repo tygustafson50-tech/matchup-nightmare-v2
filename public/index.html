@@ -1,10 +1,10 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Matchup Nightmare V2</title><link rel="stylesheet" href="/styles.css"></head><body>
-<header><div class="brand"><span>MN</span><div>MATCHUP NIGHTMARE<small>V2 / OVER-ONLY RESEARCH</small></div></div><aside>DATA-AWARE · NO FAKE PICKS</aside></header>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Matchup Nightmare V3</title><link rel="stylesheet" href="/styles.css"></head><body>
+<header><div class="brand"><span>MN</span><div>MATCHUP NIGHTMARE<small>V3 / VERIFIED PRIZEPICKS RESEARCH</small></div></div><aside>DATA-AWARE · NO FAKE PICKS</aside></header>
 <main>
-<p class="eyebrow">SIX-SPORT MATCHUP RESEARCH</p><h1>Scan the matchup<span>.</span></h1><p class="muted">Recent game trends, real schedules when reachable, and clear comparable-opponent history.</p>
+<p class="eyebrow">EVIDENCE-FIRST PLAYER PROP RESEARCH</p><h1>Scan the matchup<span>.</span></h1><p class="muted">Real, authorized PrizePicks lines · Last five current-season games · Three-season similar-defense evidence.</p>
 <nav id="sports"></nav>
 <section class="panel game-selection"><h2>01 / Select games</h2><div class="cols"><label>Game date<input id="date" type="date"></label><label id="leagueWrap" hidden>Soccer league<select id="league"></select></label></div>
-<p class="muted" id="scheduleStatus">Loading schedules…</p><p class="muted" id="count">0 / 16 games selected</p><div id="games" class="games"></div><div class="scanner-actions"><button id="scanSelected" class="gold">⚡ Scan Selected Games</button><button id="refresh" class="secondary">Refresh schedule</button></div><p class="muted" id="scanProgress" aria-live="polite">Select a game, then scan for verified OVER research trends across two independent history windows.</p></section><p class="scan-rule-mini"><strong>One-click scan:</strong> OVERS ONLY · Last 5 games from the current season · Last 4 similar defenses from the past 3 career seasons · historical research thresholds, not live PrizePicks lines.</p>
+<p class="muted" id="scheduleStatus">Loading schedules…</p><p class="muted" id="count">0 / 16 games selected</p><div id="games" class="games"></div><div class="scanner-actions"><button id="scanSelected" class="gold">⚡ Scan Selected Games</button><button id="refresh" class="secondary">Refresh schedule</button></div><p class="muted" id="scanProgress" aria-live="polite">Select a game, then scan verified PrizePicks offers and position-specific historical evidence.</p></section><p class="scan-rule-mini"><strong>One-click scan:</strong> AUTHORIZED PRIZEPICKS LINES ONLY · Last 5 games · All verifiable similar defenses from the last 3 seasons · NO synthetic projections.</p>
 
 <section class="panel results" id="autoResults">
   <div class="results-heading">
@@ -29,16 +29,5 @@
   </div>
   <div id="scanOutput" class="scan-output"><div class="empty">Select up to 16 games, then click Scan Selected Games.</div></div>
 </section>
-<section class="panel optional-research"><details class="manual-research"><summary>Advanced · manual player research</summary>
-<p class="muted">You can still enter your own sourced historical game logs. This is separate from the automatic game scanner.</p>
-<div class="cols"><label>Player<input id="player" placeholder="Player name"></label><label>Market<select id="market"></select></label></div>
-<div class="cols"><label>OVER line<input id="line" type="number" step=".5" min="0" placeholder="49.5"></label><label>Opponent: same stat allowed to this position per game (optional)<input id="defense" type="number" min=".1" step=".1" placeholder="For basic matchup comparison"></label></div>
-<label>Historical games: date, opponent, player stat, same stat allowed to position before that game
-<textarea id="logs" rows="6" placeholder="YYYY-MM-DD,Opponent,Statistic,OpponentDefense"></textarea></label>
-<label class="check"><input id="perfect" type="checkbox"> 100% historical comparable trend filter (at least 3 games)</label>
-<button id="scan" class="gold">Analyze OVER →</button>
-<p class="muted">Manual comparison uses position-specific stat allowed that you provide. These numbers are unverified and historical percentages are not predictions.</p></details></section>
-
-<section class="panel results" id="manualResults" hidden><h2>Manual research results</h2><div id="output" class="empty">Enter a player, market, OVER line, and sourced historical games to analyze.</div></section>
-<footer>Research only. Automated boxscore research uses provisional public data when reachable. No connected PrizePicks odds or real-money wagering. 100% historical trends are not guarantees.</footer></main>
+<footer>Research only. PrizePicks integration requires licensed credentials; no data is fabricated if absent. Historical hit rates do not predict future results.</footer></main>
 <script type="module" src="/app.js"></script></body></html>
