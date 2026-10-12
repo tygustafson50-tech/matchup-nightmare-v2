@@ -33,7 +33,13 @@ function statsFrom(group,row,sport){
   }return null;};
   const out={};
   const put=(key,value)=>{if(value!==null&&value>=0)out[key]=value;};
-  const cat=String(group.name||group.displayName||"").toLowerCase();
+  let cat=String(group.name||group.displayName||"").toLowerCase();
+  if(sport==="mlb"&&!cat){
+    // ESPN MLB summary box-score category often omits group.name. The
+    // mutually distinct IP and AB column sets are authoritative evidence.
+    cat=map.IP!==undefined?"pitching":
+      map.AB!==undefined||map["H-AB"]!==undefined?"batting":"";
+  }
   if(["nfl","ncaaf"].includes(sport)){
     if(cat.includes("passing")){
       put("passingYards",at("YDS"));put("passingTDs",at("TD","TDS"));
@@ -171,7 +177,17 @@ export function concededAgainstPosition(summary,{sport,defenseId,role,stat}){
   const unitRole=sport==="mlb"&&role==="P"?"BATTER":role;
   const observedStat=sport==="mlb"&&role==="P"&&stat==="pitcherKs"
     ?"battingStrikeouts":stat;
-  const relevant=lineup.filter(x=>positionGroup(sport,x.position)===unitRole);
+  // NBA and college boxscores usually label players simply G or F, even
+  // when a team roster identifies PG/SG/SF/PF. Match recorded position
+  // *families* without guessing a more specific player role.
+  const comparableBasketRole=r=>["PG","SG","G"].includes(r)?"G":
+    ["SF","PF","F"].includes(r)?"F":r;
+  const relevant=lineup.filter(x=>{
+    const observed=positionGroup(sport,x.position);
+    return ["nba","ncaab"].includes(sport)
+      ?comparableBasketRole(observed)===comparableBasketRole(unitRole)
+      :observed===unitRole;
+  });
   if(!relevant.length)return null;
   // Unknown positive contributors can understate the full position group.
   // Prefer missing to a falsely low defensive allowance.
