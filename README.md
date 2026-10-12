@@ -6,6 +6,34 @@ Sports: NFL, NBA, MLB, men's college football, men's college basketball, and men
 
 Website: https://matchup-nightmare-v2.pages.dev
 
+## Active automatic scanning mode (low ALT lines)
+
+Automatic scans now find **historical OVER alt-line thresholds** for players with
+verified at-least-50% regular participation, instead of demanding that a
+current-season median-derived line clear every recorded sample.
+
+- For each player/stat, compare the last five recorded current-season games
+  and up to four actual position/stat-comparable matchups in the last three
+  seasons. Choose the **highest half-point line below the lowest positive
+  recorded result** in the available evidence (for instance, all games with
+  1+ reception support a research threshold of **OVER 0.5 receptions**).
+- A card is labeled **fully verified 100% history** only when it genuinely
+  contains 5/5 current-season OVER and 4/4 comparable-defense OVER results.
+  When similar-defense records are missing or a verified zero prevents 4/4,
+  the card is visibly labeled **partial** or **recent-form-only** rather than
+  manufacturing a 100% history.
+- A stat with a verified zero in the last five records cannot produce an
+  honestly 100%-hitting positive OVER threshold; those markets may be absent.
+- NFL participation is supplemented by **nflverse/PFR offensive snap count
+  percentages** keyed to the exact season, team, opponent, player name, and
+  game week. Only verified shares at **50% or more** count, with ambiguity
+  excluded. For the other sports, available official minutes/starting
+  evidence is used with sport-specific rules.
+- These are **research-only historical ALT thresholds**, not necessarily lines
+  offered by PrizePicks/DraftKings or any sportsbook. A historical 100% is not
+  the probability of the prop hitting next game.
+
+
 ## Live workflow
 
 1. Select a sport, date, and up to 16 games.
