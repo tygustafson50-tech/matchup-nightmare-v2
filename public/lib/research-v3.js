@@ -21,14 +21,17 @@ export function positionGroup(sport,position){
     if(["TE","TIGHTEND"].includes(p))return "TE";
   }
   if(BASKETBALL.has(sport)){
-    // Official ESPN college box scores often use G/F rather than PG/SG or
-    // SF/PF. Grouping similar roles allows independently verified college
-    // players to be matched without guessing their specific position.
-    if(["PG","SG","G","POINTGUARD","SHOOTINGGUARD","GUARD",
-      "COMBOGUARD","GF","FG"].includes(p))return "G";
-    if(["SF","PF","F","SMALLFORWARD","POWERFORWARD","FORWARD",
-      "FORWARDCENTER","FC"].includes(p))return "F";
-    if(["C","CENTER"].includes(p))return "C";
+    // Preserve NBA's five verified position groups. NCAA team feeds often
+    // only specify generic Guard or Forward: use the real G/F grouping.
+    const specific={PG:"PG",SG:"SG",SF:"SF",PF:"PF",C:"C",
+      POINTGUARD:"PG",SHOOTINGGUARD:"SG",SMALLFORWARD:"SF",
+      POWERFORWARD:"PF",CENTER:"C"};
+    const resolved=specific[p]||(
+      ["G","GUARD","COMBOGUARD","GF","FG"].includes(p)?"G":
+      ["F","FORWARD","FC","FORWARDCENTER"].includes(p)?"F":null);
+    if(sport==="nba")return resolved;
+    return ["PG","SG","G"].includes(resolved)?"G":
+      ["SF","PF","F"].includes(resolved)?"F":resolved;
   }
   if(sport==="mlb"){
     if(["P","SP","RP","CP","STARTINGPITCHER","PITCHER"].includes(p))return "P";
