@@ -152,22 +152,27 @@ function renderPickCard(p){
   const knownTeam=p.careerTeamsIncluded?.length
     ?p.careerTeamsIncluded.length+" verified prior franchise(s)"
     :"No former team verified";
-  const pctBadge=p.isFullyQualified?"100% RECENT + MATCHUP"
-    :p.similarSample===4&&p.similarHits<p.similarSample?"100% RECENT · MATCHUP NOT 100%"
-    :p.similarSample>0?"100% RECENT · PARTIAL MATCHUP":"100% RECENT · MATCHUP UNVERIFIED";
-  const badge=p.isFullyQualified?similarLabel:"Not fully verified";
+  const pctBadge=p.derivedAlt
+    ?(p.isFullyQualified?"100% RECENT + MATCHUP"
+      :p.similarSample===4&&p.similarHits<p.similarSample?"100% RECENT · MATCHUP NOT 100%"
+      :p.similarSample>0?"100% RECENT · PARTIAL MATCHUP":"100% RECENT · MATCHUP UNVERIFIED")
+    :(hasSimilar?Math.round(p.similarHits/p.similarSample*100)+"% MATCHUP":"RECENT FORM ONLY");
+  const badge=p.derivedAlt?(p.isFullyQualified?similarLabel:"Not fully verified")
+    :(hasSimilar?similarLabel:recentLabel);
   const lineType=p.lineVerified
     ?"VERIFIED "+String(p.lineType||"SPORTSBOOK")+" OVER"
-    :"RESEARCH ALT OVER";
+    :(p.derivedAlt?"RESEARCH ALT OVER":"RESEARCH-ONLY OVER");
   const scope=p.lineVerified
     ?"Quoted line: "+(p.marketSource||"verified price source")
-    :"This ALT threshold is derived from recorded game results. It is NOT a verified available PrizePicks/sportsbook line or payout offer.";
+    :(p.derivedAlt
+      ?"This ALT threshold is derived from recorded game results. It is NOT a verified available PrizePicks/sportsbook line or payout offer."
+      :"The research line is based on the player\'s current-season form. It is NOT a current PrizePicks/sportsbook line or payout offer.");
   return '<article class="scan-card">'+
     '<div class="scan-top"><div class="scan-identity">'+image+
       '<div><strong>'+safe(p.player)+'</strong><small>'+safe(p.teamName)+
       ' · '+safe(p.sourceGame?.away?.name)+' @ '+safe(p.sourceGame?.home?.name)+
       '</small><small>'+safe(p.position||"Position not verified")+'</small></div></div>'+
-      '<span class="trend-badge'+(!p.isFullyQualified?' trend-unverified':'')+'">'+safe(pctBadge)+
+      '<span class="trend-badge'+((p.derivedAlt?!p.isFullyQualified:!hasSimilar)?' trend-unverified':'')+'">'+safe(pctBadge)+
       ' · '+safe(badge)+(p.coveragePartial?' · PARTIAL DATA':'')+'</span></div>'+
     '<div class="scan-line">'+safe(lineType)+' <strong>'+safe(p.line)+'</strong> '+safe(p.market)+'</div>'+
     (p.playingTimeEligibility?.eligible?'<p class="season-evidence">Playing time: '+safe(p.playingTimeEligibility.metric)+' · '+safe(Math.round(p.playingTimeEligibility.averageShare*100))+'% across '+safe(p.playingTimeEligibility.samples)+' verified games</p>':'')+
@@ -189,7 +194,9 @@ function renderPickCard(p){
     '<details><summary>How were these trends calculated?</summary>'+
       '<p class="muted">Recent form: '+safe(recentLabel)+' from recorded games in the selected season. '+
       'Matchup history: '+safe(similarLabel)+' from the last four verifiable defenses with comparable position/stat concessions over up to three seasons. '+
-      'The research ALT threshold is the highest half-point OVER line below the lowest observed result in the selected games. '+
+      (p.derivedAlt
+        ?'The research ALT threshold is the highest half-point OVER line below the lowest observed result in the selected games. '
+        :'The threshold is not calculated from the minimum result of the matching historical games. ')+
       'Availability, injuries, projected minutes, and role changes are not independently verified. A 100% past hit rate is not a future win probability.</p>'+
     '</details></article>';
 }
