@@ -1,6 +1,6 @@
 # Matchup Nightmare — PropLine Edition
 
-The existing black-and-gold six-sport app now uses **PropLine's documented REST API v1** for live player-prop **OVER** quotes from named sportsbooks. No PrizePicks integration, custom invented lines, or manually derived alternative thresholds are required. Alternative props are displayed only if actually quoted by a source sportsbook.
+The existing black-and-gold six-sport app now uses **PropLine's documented REST API v1** for live player-prop **OVER** quotes from **DraftKings only**. No PrizePicks integration, custom invented lines, or manually derived alternative thresholds are required. Alternative DraftKings lines are considered only when actually quoted; exactly **one** evidence-selected OVER line is displayed per verified player/stat/game, even when multiple actual alt points are available.
 
 ## Set up your free PropLine key
 
@@ -36,3 +36,7 @@ The app rechecks verified quotes periodically while the board is open, clearing 
 Run `npm test` in Node 20+ for source-line, coverage, API-secret, date/fixture, recent-game, defensive-history, and UI regressions. GitHub Actions automatically tests pull requests.
 
 **Limitations:** The API key is not configured automatically; Cloudflare secret setup must be completed by the project owner. PropLine sports and books vary by season and league, so some selected games may have no available player props. The independently verified three-season defensive matchups still rely on provisional, incomplete public ESPN box scores — missing samples remain missing. A successful deployment or unit test is not proof of a live integrated scan.
+
+## One sportsbook, one card per player/stat
+
+PropLine remains the API provider, but only actual **DraftKings** OVER quotes are used. Other bookmakers are ignored, even when their markets are available. Main and alternative DraftKings lines for the same athlete, game, and exact statistic are evaluated against the same verified historical results; only one strongest-evidenced quote is displayed. The chosen quote still has its real sportsbook line and price. A second canonical fixture/ESPN athlete-ID check prevents alternate markets with different source event IDs from producing duplicates. Missing DraftKings prices must remain missing; no substitute or invented line from another book is allowed.

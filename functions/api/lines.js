@@ -59,10 +59,9 @@ const MARKET_MAP={
   batter_walks:["walks","Walks"],
   player_tackles:["tackles","Tackles"]
 };
-const BOOKS=new Set([
-  "draftkings","fanduel","bovada","betmgm","betrivers","fanatics",
-  "pinnacle","unibet","betonline","lowvig","hardrockbet"
-]);
+// Single designated sportsbook for every sport and market. PropLine remains
+// the data provider; ONLY real DraftKings quotes may enter our scanner.
+const BOOKS=new Set(["draftkings"]);
 // Intentionally omit DFS, exchanges, prediction markets and synthetic pick-'em pricing.
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{
   status,headers:{"content-type":"application/json; charset=utf-8",
@@ -199,12 +198,12 @@ export async function onRequestGet({request,env={}}){
         await env.PROJECTION_SNAPSHOTS.put(key,JSON.stringify(projections),{expirationTtl:345600});
       }catch{changeTracking="unavailable";}
     }
-    return reply({status:"connected",source:"PropLine",sport,sportKey:matched.key,
+    return reply({status:"connected",source:"PropLine",sportsbook:"DraftKings",sport,sportKey:matched.key,
       date,sourceFetchedAt:new Date(now).toISOString(),refreshedAt:new Date(now).toISOString(),
       projections,changes,changeTracking,
       dailyRequestsRemaining:quota!==null&&Number.isFinite(Number(quota))?Number(quota):null,
       notes:projections.length?[]:[
-        "No active, fresh, supported sportsbook OVER lines were returned for this date. No substitute lines were generated."
+        "No active, fresh DraftKings OVER lines were returned for this date. Other sportsbooks are intentionally excluded and no substitute lines were generated."
       ]});
   }catch(error){
     const limited=error.status===429,unauthorized=error.status===401||error.status===403;

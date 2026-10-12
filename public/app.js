@@ -168,7 +168,7 @@ async function scan(){
   const own=++scanId,day=el("date").value,league=el("league").value,
     currentSport=sport,button=el("scanSelected");
   button.disabled=true;button.textContent="Scanning verified evidence…";
-  clearResults();status("Requesting real sportsbook OVER lines from PropLine…");
+  clearResults();status("Requesting DraftKings OVER lines through PropLine…");
   try{
     const response=await fetch("/api/lines?"+new URLSearchParams({sport:currentSport,date:day,league}),
       {headers:{Accept:"application/json"},cache:"no-store"});
@@ -184,16 +184,18 @@ async function scan(){
     const chosenPairs=[];
     const rejected=[];
     for(const offer of feed.projections||[]){
+      // Fail closed if upstream ever exposes another bookmaker by mistake.
+      if(offer.bookKey!=="draftkings")continue;
       const matching=chosen.filter(game=>fixtureMatches(offer,game));
       if(matching.length===1)chosenPairs.push({offer,game:matching[0]});
       else if(matching.length>1)rejected.push("Ambiguous fixture for "+offer.player);
     }
     const grouped=groupOffersByPlayerStat(chosenPairs);
-    // Only the single displayed quote is monitored after ranking; other
-    // sportsbook/ALT options never create duplicate player/stat cards.
-    const preface='<p class="season-evidence">PropLine sportsbook odds retrieved: '+
+    // Only the selected DraftKings quote is monitored after ranking;
+    // alternate points never create additional player/stat cards.
+    const preface='<p class="season-evidence">PropLine · DraftKings sportsbook lines retrieved: '+
       safe(feed.sourceFetchedAt)+" · "+chosenPairs.length+
-      ' active sportsbook OVER lines for selected games · Changes: '+
+      ' active DraftKings OVER quotes for selected games · Changes: '+
       safe(feed.changeTracking==="verified"?feed.changes.length+" tracked":
         "Tracking requires Cloudflare KV")+'</p>';
     el("scanOutput").innerHTML=preface+
@@ -201,7 +203,7 @@ async function scan(){
     if(!chosenPairs.length){
       watchedQuotes=null;
       el("scanOutput").innerHTML=preface+
-        '<div class="empty">No supported, fresh sportsbook OVER lines match the selected fixtures. Unavailable or suspended lines were excluded.</div>';
+        '<div class="empty">No current DraftKings OVER lines match the selected fixtures. Unavailable or suspended lines were excluded.</div>';
       status("Verified board queried; no available matching projections.");
       return;
     }
@@ -239,7 +241,8 @@ async function scan(){
         }
         // One winner, with all displayed evidence based on its exact line.
         const chosen=selectBestOverCard(candidates);
-        if(chosen)results.push({...chosen,quotesConsidered:group.offers.length});
+        if(chosen)results.push({...chosen,fixtureId:String(game.id),
+          quotesConsidered:group.offers.length});
       }catch(e){errors.push(offer.player+" / "+offer.market+": "+e.message);}
       counts.completed++;
       if(own===scanId)status("Unique player/stat markets analyzed: "+
@@ -247,6 +250,16 @@ async function scan(){
     }
     if(own!==scanId)return;
     cards=rankEvidence(dedupeVerifiedCards(results));
+    // A second mandatory, canonical-fixture deduplication before display
+    // ensures one DraftKings OVER card for each verified player + stat.
+    const uniqueKeys=new Set();
+    cards=cards.filter(card=>{
+      const key=[card.sport,card.fixtureId,
+        card.offer?.espnPlayerId||normalize(card.player),card.stat].join("|");
+      if(uniqueKeys.has(key))return false;
+      uniqueKeys.add(key);
+      return true;
+    });
     watchedQuotes=cards.length?{sport:currentSport,date:day,league,
       offers:new Map(cards.map(c=>[c.id,{
         line:c.line,status:"active",variant:c.variant,price:c.price
@@ -260,15 +273,15 @@ async function scan(){
     }
     el("scanOutput").innerHTML=preface+
       '<p class="muted">Unique player/stat markets analyzed: '+counts.completed+
-      ' · Real sportsbook quotes checked: '+chosenPairs.length+
-      ' · One-line-per-stat cards: '+cards.length+
+      ' · DraftKings quotes checked: '+chosenPairs.length+
+      ' · One DraftKings line per stat: '+cards.length+
       ' · OVER recommendations with sufficient evidence: '+
       cards.filter(c=>c.recommendation==="OVER").length+'.</p>'+
       (errors.length?'<details class="warning"><summary>'+errors.length+
         ' unverified player/market records withheld</summary><p>'+
         errors.slice(0,20).map(safe).join(" · ")+'</p></details>':"")+
       (cards.length?'<div id="pickCardMount"></div>':
-        '<div class="empty">No verifiable historical evidence was available for the returned sportsbook lines. No placeholders were generated.</div>');
+        '<div class="empty">No verifiable historical evidence was available for the returned DraftKings lines. No placeholders were generated.</div>');
     if(cards.length)renderCards();
     status("Evidence scan finished. Every displayed line came from the verified PropLine feed.");
   }catch(e){

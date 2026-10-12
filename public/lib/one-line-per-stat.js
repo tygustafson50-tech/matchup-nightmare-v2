@@ -84,8 +84,12 @@ export function dedupeVerifiedCards(cards){
     if(!card)continue;
     const officialId=String(card.offer?.espnPlayerId||"");
     const player=officialId?"espn:"+officialId:canonicalName(card.player);
-    const fixture=String(card.offer?.gameId||
-      card.offer?.providerEventId||card.date+"|"+card.team+"|"+card.opponent);
+    // Normalize to the ACTUAL selected ESPN fixture instead of trusting
+    // sportsbook-specific provider event IDs, which may differ between
+    // main and alternative ladders for the exact same game.
+    const fixture=String(card.fixtureId||card.selectedGameId||
+      card.offer?.gameId||card.offer?.providerEventId||
+      card.date+"|"+card.team+"|"+card.opponent);
     const key=[card.sport,fixture,player,card.stat].join("|");
     const previous=map.get(key);
     const best=selectBestOverCard(previous?[previous,card]:[card]);
