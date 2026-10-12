@@ -271,6 +271,12 @@ function summaryPositionIndex(summary){
 export function attachRosterPositions(summary,rosterIndices={}){
   if(!summary||typeof summary!=="object")return summary;
   const hints=summaryPositionIndex(summary);
+  // Keep independently verified nflverse player-position hints when roster
+  // indexes are attached later. Do not throw away the previous evidence.
+  for(const [teamId,players] of Object.entries(summary._verifiedPositionIndex||{})){
+    for(const [athleteId,role] of Object.entries(players||{}))
+      if(role)recordHint(hints,teamId,athleteId,role);
+  }
   for(const [teamId,players] of Object.entries(rosterIndices||{})){
     for(const [athleteId,role] of Object.entries(players||{})){
       if(role)recordHint(hints,teamId,athleteId,role);
