@@ -28,3 +28,13 @@ for(const url of urls){
     console.log(JSON.stringify(report));
   }catch(e){console.log(JSON.stringify({url,error:String(e).slice(0,250)}))}
 }
+
+const inspect="https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/14/statistics?season=2026";
+const data=await (await fetch(inspect)).json();
+const opp=data.results?.opponent;
+console.log("OPP KEYS "+JSON.stringify(Object.keys(opp||{})));
+for(const [key,value] of Object.entries(opp||{})){
+ console.log("OPP GROUP "+key+" "+JSON.stringify(value).slice(0,2400));
+}
+const league=(await (await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/statistics?season=2026")).json());
+console.log("LEAGUE STATS TYPE "+JSON.stringify({type:Array.isArray(league.stats)?"array":"object",keys:Object.keys(league.stats||{}).slice(0,25),head:JSON.stringify(league.stats).slice(0,2300)}));
