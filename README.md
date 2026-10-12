@@ -23,7 +23,13 @@ The response is filtered to genuinely quoted **Over** outcomes with numeric poin
 
 For supported games, existing ESPN public sources are used to confirm the athlete's identity, current team and playing position against **both** official participating rosters before comparing the quote with recorded game data. Missing role, roster, game log or boxscore evidence is excluded or labeled incomplete — not guessed. If the PropLine fixture cannot be uniquely matched to the selected ESPN game, no prop is analyzed.
 
-Recent-game evidence uses the five latest verified current-season player game results. The similar-defense engine scans the current season plus the previous two seasons and uses the same player statistic, position-specific conceded stats and pregame defensive comparison, normalizing against available independently verified season cohorts. Only verifiable similar opponents are included; the number of samples is explicit.
+Recent-game evidence uses the five latest verified current-season player game results.
+
+**Simplified NFL similar-defense matchups (new):** For every NFL stat, look up the upcoming opponent's ESPN **rushing defense rank** (rush yards, carries, rushing TDs) or **passing defense rank** (passing yards/completions/attempts/TDs, targets, receptions, receiving yards/TDs). ESPN's official team /statistics?season=YEAR returns reported opponent-statistic ranks in `results.opponent`, including `rushingYards` and `netPassingYards`. For each of the player's real recorded games in **the current season and the previous two seasons**, look up that historical opponent's own season rushing or passing defensive rank. A game counts as a similar matchup only when that rank is **within ±3 of the upcoming opponent's reported defensive rank**. E.g. a #28 passing defense matches ranks #25–#31 (not #24 or #32). For each matching game, show the actual year, opponent, result against the **current DraftKings line**, and both verified defensive ranks.
+
+These ranks are **ESPN opponent team statistics**, with #1 indicating lower net passing/rushing yards allowed by ESPN's season aggregate ranking. **Historical season rankings may include games played after the individual historical matchup**; this is explicitly disclosed as a limitation and the app must not call those historical numbers pregame rankings. Missing ranks do not count as comparable games or a 100% history. This simpler rank model currently applies to **NFL only**. NBA, college football, college basketball, MLB, and soccer retain their existing sport-specific defensive modeling.
+
+All similar-defense history stays within the sport's three-season window and maintains explicit real sample size.
 
 **No historical line is claimed to have been offered at the time of a past game.** Those real game results are compared with the exact current sportsbook point. No historical 100% rate is a guarantee of a future result.
 
