@@ -93,9 +93,6 @@ function renderCard(c){
       c.line,true,c.market)+
     historyBlock("Recent Matchups — Last 5 Games",c.recentGames,
       c.line,false,c.market)+
-    (c.limitations.length?'<p class="sample-warning">'+c.limitations.map(safe).join(" · ")+'</p>':'')+
-    '<p class="season-evidence">Injury designations shown above come from the ESPN roster at scan time, when available. No listed injury is not confirmation of health or game availability. Always recheck official game-day inactive lists, lineups, and late injury updates.</p>'+
-    '<div class="research-label">Historical percentages are observed results, not probabilities. The current sportsbook quote is compared against prior games; it is not claimed as their historical betting line.</div>'+
     '</article>';
 }
 function renderCards(){
