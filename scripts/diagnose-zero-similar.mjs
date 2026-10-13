@@ -99,3 +99,55 @@ try{
  console.log("LOG "+JSON.stringify({keys:Object.keys(log),
    eventsCount:Object.keys(log.events||{}).length}));
 }catch(e){console.log("LOG ERROR "+String(e))}
+
+import {makeEvidenceClient,loadVerifiedEvidence} from "../public/lib/evidence-client-v3.js";
+import {analyzeVerifiedProp} from "../public/lib/research-v3.js";
+// Construct ONLY a test research input with a hypothetical quote.
+// No sportsbook quote/odds is fetched or reported as a real betting market.
+const sourceClient=makeEvidenceClient({concurrency:8,fetcher:async relative=>{
+  const params=new URL(relative,"https://local.test").searchParams;
+  const kind=params.get("kind"),id=params.get("teamId"),
+    season=params.get("season");
+  const path=kind==="roster"||kind==="schedule"||kind==="teamstats"
+    ?root+"teams/"+id+"/"+(kind==="teamstats"?"statistics":kind)+
+      "?season="+season+(kind==="schedule"?"&limit=100":"")
+    :kind==="summary"?root+"summary?event="+params.get("gameId")
+    :gameroot+"athletes/"+params.get("playerId")+"/gamelog?season="+season;
+  return fetch(path,{signal:AbortSignal.timeout(11000)});
+}});
+const future={id:"999990001",season:2026,date:"2026-10-14T19:00:00Z",
+  home:{id:"14",name:"Los Angeles Rams"},away:{id:"2",name:"Buffalo Bills"}};
+const offer={id:"hypothetical-test-no-sportsbook",source:"PropLine",status:"active",
+  sport:"nfl",player:"Matthew Stafford",espnPlayerId:"12483",
+  stat:"passingYards",position:"QB",market:"Passing yards",line:199.5,
+  quotedAt:"2026-10-12T17:00:00Z",gameDateLocal:"2026-10-14",
+  book:"DraftKings",bookKey:"draftkings",variant:"standard"};
+try{
+  const stage=await loadVerifiedEvidence({client:sourceClient,offer,game:future,
+    onStage:message=>{if(/Comparing|Checking/.test(message))
+      console.log("LIVE STAGE "+message);}});
+  const result=analyzeVerifiedProp({offer,season:stage.season,games:stage.games,
+    upcomingDefense:stage.upcomingDefense,
+    upcomingContext:stage.upcomingContext,
+    defensiveProfiles:stage.defensiveProfiles,
+    matchupModel:stage.matchupModel,
+    now:"2026-10-13T02:00:00Z"});
+  console.log("LIVE ESPN VERIFIED SIMILARS "+JSON.stringify({
+    player:stage.player.name,recordedGames:stage.games.length,
+    currentSeasonResults:result?.recent.tracked,
+    opponentRanks:stage.upcomingDefense?.passing?.rank,
+    contexts:stage.defensiveProfiles.length,
+    historicalVerified:result?.similar?.tracked,
+    examples:result?.similarGames.map(g=>({
+      id:g.id,opponent:g.opponent,actual:g.actual,
+      season:g.season,positionCoverage:g.contextGames,
+      matchBasis:g.matchBasis})).slice(0,6),
+    warnings:result?.limitations?.slice(0,3),
+    sourceCalls:sourceClient.stats()
+  }).slice(0,5500));
+  if(!result||result.similar.tracked<1)
+    throw Error("Live ESPN end-to-end historical similarity still zero.");
+}catch(e){
+  console.log("LIVE ESPN DIAGNOSTIC FAILED "+String(e));
+  throw e;
+}
