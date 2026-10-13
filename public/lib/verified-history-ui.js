@@ -1,7 +1,7 @@
 /**
- * Visible, complete actual game-by-game evidence. This module renders ONLY
- * results with a known recorded statistic, and compares each to the CURRENT
- * sportsbook quote. No old line or invented opponent result is implied.
+ * Collapsible, complete game-by-game research. Each closed section displays
+ * its OVER hits / actually verified visible games. Expansion reveals the
+ * exact stat on each game against today's selected sportsbook line.
  */
 const escapeHtml=v=>String(v??"").replace(/[&<>"']/g,c=>({
   "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
@@ -21,15 +21,25 @@ export function renderVerifiedHistory({
   const statName=String(market||"Recorded statistic").trim();
   const heading=escapeHtml(label||"Verified games");
   const count=actualRows.length;
-  return '<section class="verified-game-history game-log-section'+
+  const overHits=actualRows.filter(g=>g.actual>line).length;
+  const hitRate=count?overHits+"/"+count:"—";
+  return '<details class="verified-game-history game-log-section'+
     (similar?' verified-similar-history':'')+
     '" aria-label="'+heading+'">'+
-    '<div class="verified-history-heading">'+
-      '<div><h3>'+heading+'</h3><span class="verified-stat-context">'+
-      escapeHtml(statName)+' actually recorded in each game</span></div>'+
-      '<span class="verified-history-count">'+count+
-      ' verified game'+(count===1?'':'s')+'</span>'+
-    '</div>'+
+    '<summary class="verified-history-toggle">'+
+      '<span class="verified-history-heading">'+
+        '<span><h3>'+heading+'</h3><span class="verified-stat-context">'+
+          escapeHtml(statName)+' · tap to see each actual game stat</span></span>'+
+      '</span>'+
+      '<span class="verified-history-summary-right">'+
+        '<strong class="verified-history-hits" aria-label="'+overHits+
+          ' OVER out of '+count+' verified games">'+hitRate+'</strong>'+
+        '<small class="verified-history-count">'+count+
+          ' verified game'+(count===1?'':'s')+'</small>'+
+        '<span class="verified-history-chevron" aria-hidden="true"></span>'+
+      '</span>'+
+    '</summary>'+
+    '<div class="verified-history-expanded">'+
     (count?
       '<div class="verified-game-list" role="table" aria-label="'+heading+
         ' and actual '+escapeHtml(statName)+'">'+
@@ -73,5 +83,5 @@ export function renderVerifiedHistory({
         ' from that game, compared with the selected current DraftKings line ('+
         escapeHtml(line)+'). These are not historical sportsbook quotes.</p>'
       :'<div class="game-log-empty">No verified game statistics available for this comparison. No results were invented.</div>')+
-    '</section>';
+    '</div></details>';
 }
