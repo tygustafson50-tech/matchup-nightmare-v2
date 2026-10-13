@@ -105,7 +105,7 @@ test("quota fallback is wired into the real scan and quote-refresh paths",()=>{
   assert.match(app,/showSavedScan\(\{chosen,day,league,currentSport/);
   assert.match(app,/saveCompletedScan\(\{sport:currentSport,date:day,league/);
   assert.match(app,/LAST SAVED SCAN — NOT LIVE/);
-  assert.match(app,/LAST SAVED DRAFTKINGS SELECTION/);
+  assert.match(app,/LAST SAVED VERIFIED SELECTION/);
   assert.match(app,/quotaPaused/);
   assert.match(app,/c\.cachedAt/);
 });
