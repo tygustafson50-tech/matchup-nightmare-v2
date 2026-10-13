@@ -208,3 +208,34 @@ test("source tracking changes only when KV cache is explicitly configured",async
   assert.ok(b.changes.some(x=>x.kind==="removed-or-suspended"));
   assert.ok(b.changes.some(x=>x.kind==="added"));
 });
+
+test("all failed event-odds requests are an upstream error, not a false empty sportsbook board",async()=>{
+  const {response}=await call({failStatus:503});
+  const body=await response.json();
+  assert.equal(response.status,502);
+  assert.equal(body.status,"provider-unavailable");
+  assert.equal(body.eventsFailed,1);
+  assert.match(body.error,/All selected event-odds requests failed/);
+});
+test("snapshot change tracking is isolated to the selected ESPN fixtures",async()=>{
+  const map=new Map();
+  const store={get:async key=>map.get(key)||null,
+    put:async(key,value)=>map.set(key,value)};
+  const a=event({id:"10"});
+  const b={...event({id:"11",home:"New York Jets",away:"New England Patriots"}),
+    espn_event_id:"401999112"};
+  const f1=[{id:"401999111",home:"Los Angeles Rams",away:"Buffalo Bills"}];
+  const f2=[{id:"401999112",home:"New York Jets",away:"New England Patriots"}];
+  const first=await call({odds:[a,b],request:req("nfl",f1),
+    secret:{...env,PROJECTION_SNAPSHOTS:store}});
+  assert.equal((await first.response.json()).changeTracking,"baseline-created");
+  const other=await call({odds:[a,b],request:req("nfl",f2),
+    secret:{...env,PROJECTION_SNAPSHOTS:store}});
+  assert.equal((await other.response.json()).changeTracking,"baseline-created");
+  assert.equal(map.size,2);
+  const repeat=await call({odds:[a,b],request:req("nfl",f1),
+    secret:{...env,PROJECTION_SNAPSHOTS:store}});
+  const body=await repeat.response.json();
+  assert.equal(body.changeTracking,"verified");
+  assert.deepEqual(body.changes,[]);
+});
