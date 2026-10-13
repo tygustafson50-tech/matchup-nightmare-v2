@@ -49,6 +49,22 @@ for(const [name,id,year] of teams){
 for(const g of qs.slice(0,3)){
   try{
    const box=await request(root+"summary?event="+g.gameId);
+   const groups=box.boxscore?.players?.[0]?.statistics||[];
+   console.log("ATHLETE SHAPE "+JSON.stringify({name:g.name,
+     first:groups.filter(x=>x.athletes?.length).slice(0,3).map(x=>({
+       group:x.name,groupKeys:Object.keys(x),
+       rowKeys:Object.keys(x.athletes[0]),
+       row:x.athletes[0]
+     }))}).slice(0,3800));
+   const others=box.boxscore?.players||[];
+   const opposing=others.find(x=>String(x.team?.id)!==String(g.id));
+   if(opposing?.team?.id){
+     const roster=await request(root+"teams/"+opposing.team.id+
+       "/roster?season="+g.year);
+     console.log("ROSTER "+JSON.stringify({name:g.name,team:opposing.team.id,
+       keys:Object.keys(roster),athleteSample:JSON.stringify(roster.athletes?.slice(0,2)).slice(0,2600)
+     }));
+   }
    const teams=box.boxscore?.players||[];
    console.log("BOX "+JSON.stringify({name:g.name,gameId:g.gameId,
     boxTeams:teams.map(t=>({id:t.team?.id,groups:t.statistics?.map(k=>({
