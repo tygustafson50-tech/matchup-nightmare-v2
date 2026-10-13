@@ -5,7 +5,8 @@
  * plus an independently recorded companion stat when available.
  * Players are matched by defense/position fit BEFORE assessing OVER success.
  */
-export const STRICT_MIN_MATCHES=4;
+import {selectDistinctDefenseGames} from "./defense-selection.js";
+export const STRICT_MIN_MATCHES=3;
 export const STRICT_MAX_MATCHES=6;
 const number=n=>typeof n==="number"&&Number.isFinite(n)&&n>=0;
 const gap=(a,b)=>number(a)&&number(b)
@@ -43,7 +44,12 @@ export const DEEP_STAT_DIMENSIONS=Object.freeze({
 });
 const pct=(n)=>Math.round(1000*n)/10;
 const fmt=n=>Number(n).toFixed(2).replace(/0+$/,"").replace(/\.$/,"");
-const RATIO_MAX={allowed:0.30,volume:0.35,support:0.40};
+export const CLOSE_ALLOWED_TOLERANCE=0.10;
+const RATIO_MAX={allowed:0.20,volume:0.35,support:0.40};
+// Primary position/stat tolerance is 10%. A secondary way to qualify is
+// within 10% usage plus <=20% allowed and <=20% companion difference.
+const BACKUP_USAGE_TOLERANCE=0.10;
+const BACKUP_SUPPORT_TOLERANCE=0.20;
 export function deepStatSpec(sport,stat,role){
   const secondary=DEEP_STAT_DIMENSIONS[sport]?.[stat]||null;
   if(!secondary||!role)return null;
@@ -80,8 +86,9 @@ export function makeDeepProfile({sport,role,stat,teamId,gameId,
 }
 /**
  * Strict sources: 3+ past completed games with per-role stat and volume on
- * EACH side, main allowed rate difference <=30%, volume <=35%.
- * Each available valid companion dimension must agree within 40%.
+ * EACH side. Either position-allowed stat differs <=10%, OR a verified
+ * alternate fit requires usage <=10%, primary allowed <=20% and companion
+ * <=20%. This is not an invented league rank. Volume always <=35%.
  * Without a companion metric on both sides: insufficient, never substitute.
  */
 export function compareDeepDefense(target,historical,{sport,stat,role,league}){
@@ -101,7 +108,7 @@ export function compareDeepDefense(target,historical,{sport,stat,role,league}){
   if(allowedGap===null||volumeGap===null)
     return {ok:false,reason:"Missing recorded position stat or usage metric."};
   if(allowedGap>RATIO_MAX.allowed||volumeGap>RATIO_MAX.volume)
-    return {ok:false,reason:"Position allowance or usage differs beyond strict limits."};
+    return {ok:false,reason:"Position-stat allowance or usage differs beyond verified matchup limits."};
   const comparison=[];
   for(const companion of spec.secondary){
     const t=target.secondary?.[companion],h=historical.secondary?.[companion];
@@ -115,15 +122,26 @@ export function compareDeepDefense(target,historical,{sport,stat,role,league}){
   }
   const meanCompanion=comparison.length
     ?comparison.reduce((sum,x)=>sum+x.relativeDifference/100,0)/comparison.length:0;
+  const tightAllowed=allowedGap<=CLOSE_ALLOWED_TOLERANCE;
+  const backupFit=volumeGap<=BACKUP_USAGE_TOLERANCE&&
+    allowedGap<=RATIO_MAX.allowed&&
+    comparison.every(x=>x.relativeDifference/100<=BACKUP_SUPPORT_TOLERANCE);
+  if(!tightAllowed&&!backupFit)
+    return {ok:false,reason:"Neither position stat within 10% nor closely matching verified usage and companion stats."};
+  const matchBasis=tightAllowed?"position allowance within 10%":
+    "usage within 10% + position allowance within 20%";
   const score=Math.max(0,Math.round(100-
     allowedGap/RATIO_MAX.allowed*45-
     volumeGap/RATIO_MAX.volume*30-
     meanCompanion/RATIO_MAX.support*25));
-  return {ok:true,score,roleAllowed:historical.metrics.allowed,
+  return {ok:true,score,matchBasis,matchTier:tightAllowed?1:2,
+    relativeDifference:Math.round(allowedGap*1000)/10,
+    roleAllowed:historical.metrics.allowed,
     targetRoleAllowed:target.metrics.allowed,usage:historical.metrics.volume,
     targetUsage:target.metrics.volume,companion:comparison,
     comparisonGames:historical.verifiedGames,
-    context:"Strict "+sport.toUpperCase()+" "+role+" "+stat+
+    context:"Verified "+sport.toUpperCase()+" "+role+" "+stat+
+      " matched by "+matchBasis+
       ": recorded position/opponent rate "+fmt(historical.metrics.allowed)+
       "/game vs upcoming "+fmt(target.metrics.allowed)+
       "/game, usage "+fmt(historical.metrics.volume)+
@@ -134,7 +152,5 @@ export function compareDeepDefense(target,historical,{sport,stat,role,league}){
   };
 }
 export function chooseDeepGames(games,max=STRICT_MAX_MATCHES){
-  return [...games].sort((a,b)=>(b.similarity??0)-(a.similarity??0)||
-    Date.parse(b.date)-Date.parse(a.date)||
-    String(a.id).localeCompare(String(b.id))).slice(0,max);
+  return selectDistinctDefenseGames(games,max);
 }
