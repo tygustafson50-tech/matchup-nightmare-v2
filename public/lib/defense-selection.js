@@ -7,8 +7,10 @@ export const SIMILAR_DEFENSE_MIN=3;
 export const SIMILAR_DEFENSE_MAX=6;
 export function selectDistinctDefenseGames(rows,max=SIMILAR_DEFENSE_MAX){
   const sorted=[...(Array.isArray(rows)?rows:[])].sort((a,b)=>
+    // Rank-with-position evidence is more detailed than rank-only; never
+    // rank a missing-position sample above a genuine verified role match.
+    (a.matchTier??1)-(b.matchTier??1)||
     (b.similarity??0)-(a.similarity??0)||
-    (a.matchTier??99)-(b.matchTier??99)||
     (a.rankDifference??99)-(b.rankDifference??99)||
     Date.parse(b.date)-Date.parse(a.date)||
     String(a.id).localeCompare(String(b.id)));
