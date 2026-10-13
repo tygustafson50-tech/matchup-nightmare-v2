@@ -81,9 +81,17 @@ function renderCard(c){
     (c.matchupSampleTarget?'<p class="season-evidence nfl-depth-explain">'+
       '<strong>Strict defense comparison:</strong> '+safe(c.similar.tracked)+
       ' of '+safe(c.matchupSampleTarget.min)+'–'+safe(c.matchupSampleTarget.max)+
-      ' desired VERIFIED matchups. '+safe(c.position)+' '+safe(c.market)+
-      ' allowed by upcoming opponent: '+safe(c.upcomingRoleAllowed??
-        "not verified")+'/game (from prior box scores).'+
+      ' desired VERIFIED matchups. '+
+      (c.positionMatchMethod
+        ?safe(c.positionMatchMethod)+': '
+        :safe(c.position)+' '+safe(c.market)+' allowed: ')+
+      safe(c.upcomingRoleAllowed??"not verified")+
+      '/game from prior recorded box scores.'+
+      (c.positionMatchMethod
+        ?' Recorded usage: '+safe(c.upcomingUsageAllowed??"not verified")+
+          '/game; companion statistic(s): '+
+          safe((c.supportingStatNames||[]).join(", ")||"unavailable")+'.'
+        :'')+
       (Number.isFinite(c.upcomingRbReceptionsAllowed)?
         ' RB catches allowed: '+safe(c.upcomingRbReceptionsAllowed)+
         '/game — only a checkdown proxy, not tracked checkdown throws.':"")+
