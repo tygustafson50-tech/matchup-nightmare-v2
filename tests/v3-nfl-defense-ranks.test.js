@@ -117,6 +117,7 @@ test("NFL UI shows defense ranks and clearly labels season aggregate look-ahead"
     import.meta.url),"utf8");
   assert.match(history,/historicalRank/);
   assert.match(history,/verified-actual-number/);
-  assert.match(app,/upcomingDefenseRank/);
-  assert.match(app,/not necessarily pregame rankings/);
+  assert.match(app,/renderUpcomingDefense\(c\.currentDefenseStrength/);
+  assert.doesNotMatch(app,/NFL defensive matchup: /);
+  assert.doesNotMatch(app,/Original book quote last updated/);
 });

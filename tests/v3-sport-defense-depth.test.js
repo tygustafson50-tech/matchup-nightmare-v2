@@ -190,7 +190,11 @@ test("production forwards the verified deep sport model and shows the actual met
   const client=readFileSync(new URL("../public/lib/evidence-client-v3.js",
     import.meta.url),"utf8");
   assert.match(app,/matchupModel:input\.matchupModel/);
-  assert.match(app,/supportingStatNames/);
+  const engine=readFileSync(new URL("../public/lib/research-v3.js",
+    import.meta.url),"utf8");
+  assert.match(engine,/supportingStatNames/);
+  assert.match(app,/renderUpcomingDefense\(c\.currentDefenseStrength/);
+  assert.doesNotMatch(app,/Strict defense comparison:/);
   assert.match(client,/matchupModel:"multi-sport-depth"/);
   assert.match(client,/positionGroup\(sport,player\.position\)/);
 });

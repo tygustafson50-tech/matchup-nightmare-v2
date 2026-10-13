@@ -145,6 +145,7 @@ test("3–6 confirmed defenses can support OVER but never more than six",()=>{
 test("visible NFL cards identify metric as proxy, not measured checkdowns",()=>{
   const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
   assert.match(app,/upcomingContext:input\.upcomingContext/);
-  assert.match(app,/checkdown proxy, not tracked checkdown throws/);
+  assert.match(app,/renderUpcomingDefense\(c\.currentDefenseStrength/);
+  assert.doesNotMatch(app,/Strict defense comparison:/);
   assert.match(app,/Distinct similar defenses \(3–6 target\)/);
 });
