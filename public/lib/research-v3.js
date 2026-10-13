@@ -8,6 +8,8 @@
 import {compareFootballDefenseRanks} from "./football-defense-ranks.js";
 import {strictDefenseComparison,chooseStrictSimilarGames,NFL_SIMILAR_MIN,NFL_SIMILAR_MAX}
   from "./nfl-defense-depth.js";
+import {compareDeepDefense,chooseDeepGames,STRICT_MIN_MATCHES,
+  STRICT_MAX_MATCHES} from "./sport-defense-depth.js";
 export const SPORTS=Object.freeze(["nfl","nba","mlb","ncaaf","ncaab","soccer"]);
 const NUMBER=x=>typeof x==="number"&&Number.isFinite(x);
 const validDate=x=>typeof x==="string"&&Number.isFinite(Date.parse(x));
@@ -202,8 +204,10 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
   const recent=recentWindow(available,season,offer.gameDateLocal+"T23:59:59Z");
   const profiles=(defensiveProfiles||[]).filter(p=>p?.verified===true);
   const useStrictNfl=offer.sport==="nfl"&&matchupModel==="nfl-depth";
+  const useDeepSport=offer.sport!=="nfl"&&matchupModel==="multi-sport-depth";
   const useFootballRank=offer.sport==="nfl"&&matchupModel==="nfl-ranks";
-  const cohorts=useFootballRank||useStrictNfl?{}:buildDefensiveCohorts(profiles);
+  const cohorts=useFootballRank||useStrictNfl||useDeepSport
+    ?{}:buildDefensiveCohorts(profiles);
   const lookup=new Map(profiles.map(p=>[String(p.gameId)+"|"+String(p.teamId),p]));
   const comparable=[];
   const reasons=new Set();
@@ -213,10 +217,13 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
       ?strictDefenseComparison({target:upcomingDefense,historical:historic,
         stat:offer.stat,role,targetContext:upcomingContext,
         historicalContext:historic?.context})
-      :useFootballRank
-        ?compareFootballDefenseRanks(upcomingDefense,historic,offer.stat)
-        :compareMatch(upcomingDefense,historic,cohorts,
-          offer.sport,role,offer.stat,offer.league||null);
+      :useDeepSport
+        ?compareDeepDefense(upcomingDefense,historic,{sport:offer.sport,
+          stat:offer.stat,role,league:offer.league||null})
+        :useFootballRank
+          ?compareFootballDefenseRanks(upcomingDefense,historic,offer.stat)
+          :compareMatch(upcomingDefense,historic,cohorts,
+            offer.sport,role,offer.stat,offer.league||null);
     if(test.ok)comparable.push({...evidenceRow(g),
       result:resultAtLine(g.actual,offer.line),similarity:test.score,
       defenseReason:test.context,defenseMetrics:
@@ -231,6 +238,12 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
         rbReceptionsAllowed:test.rbReceptionsAllowed,
         targetRbReceptionsAllowed:test.targetRbReceptionsAllowed,
         checkdownProxyVerified:test.checkdownProxyVerified
+      }:{})
+      ,...(useDeepSport?{
+        contextGames:test.comparisonGames,roleAllowed:test.roleAllowed,
+        targetRoleAllowed:test.targetRoleAllowed,
+        comparisonUsage:test.usage,targetComparisonUsage:test.targetUsage,
+        supportingStats:test.companion
       }:{})});
     else reasons.add(test.reason);
   }
@@ -238,11 +251,14 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
   // Defense fit is calculated BEFORE looking at whether the player's
   // previous game exceeded this prop. Never cherry-pick the OVER results.
   const selectedComparable=useStrictNfl
-    ?chooseStrictSimilarGames(comparable,NFL_SIMILAR_MAX):comparable;
+    ?chooseStrictSimilarGames(comparable,NFL_SIMILAR_MAX)
+    :useDeepSport?chooseDeepGames(comparable,STRICT_MAX_MATCHES):comparable;
   const recentRate=hitSummary(last5,offer.line);
   const matchedRate=hitSummary(selectedComparable,offer.line);
+  const comparableMinimum=useStrictNfl?NFL_SIMILAR_MIN:
+    useDeepSport?STRICT_MIN_MATCHES:3;
   const enough=recentRate.tracked>=3 &&
-    matchedRate.tracked>=(useStrictNfl?NFL_SIMILAR_MIN:3);
+    matchedRate.tracked>=comparableMinimum;
   const favorable=enough && recentRate.hits/recentRate.tracked>0.5 &&
     matchedRate.hits/matchedRate.tracked>0.5;
   return {id:offer.id,player:offer.player,team:offer.team,
@@ -255,10 +271,17 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
     similar:matchedRate,threeSeasonSample:matchedRate.tracked,
     defenseMatchMethod:useStrictNfl
       ?"Strict NFL pass/rush ranks (±3/±8) + verified position coverage (4–6 games)"
-      :useFootballRank?"NFL rushing/passing defense rank (±3)":
-        "Season-normalized, position-specific defensive cohorts",
-    matchupSampleTarget:useStrictNfl?{min:NFL_SIMILAR_MIN,max:NFL_SIMILAR_MAX}:null,
-    upcomingRoleAllowed:useStrictNfl?upcomingContext?.roleAllowed:null,
+      :useDeepSport?"Strict "+offer.sport.toUpperCase()+
+        " role-specific allowed rates + usage + companion stat (4–6 games)":
+        useFootballRank?"NFL rushing/passing defense rank (±3)":
+          "Season-normalized, position-specific defensive cohorts",
+    matchupSampleTarget:useStrictNfl?{min:NFL_SIMILAR_MIN,max:NFL_SIMILAR_MAX}:
+      useDeepSport?{min:STRICT_MIN_MATCHES,max:STRICT_MAX_MATCHES}:null,
+    upcomingRoleAllowed:useStrictNfl?upcomingContext?.roleAllowed:
+      useDeepSport?upcomingDefense?.metrics?.allowed:null,
+    upcomingUsageAllowed:useDeepSport?upcomingDefense?.metrics?.volume:null,
+    supportingStatNames:useDeepSport?upcomingDefense?.spec?.secondary:null,
+    positionMatchMethod:useDeepSport?upcomingDefense?.spec?.primaryDescription:null,
     upcomingRbReceptionsAllowed:useStrictNfl?upcomingContext?.rbReceptionsAllowed:null,
     checkdownMetricLabel:useStrictNfl?"RB receptions allowed per game (proxy, not tracked checkdowns)":null,
     upcomingDefenseRank:useStrictNfl||useFootballRank?upcomingDefense?.[
@@ -267,10 +290,10 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
     evidenceSufficient:enough,recommendation:favorable?"OVER":null,
     confidenceLabel:favorable?"Supporting historical evidence":"Insufficient or mixed historical evidence",
     limitations:[...(recentRate.tracked<5?["Fewer than five verified current-season games."]:[]),
-      ...(useStrictNfl&&matchedRate.tracked<NFL_SIMILAR_MIN?
-        ["Only "+matchedRate.tracked+" of "+NFL_SIMILAR_MIN+
-          " minimum strictly comparable NFL games verified. No OVER recommendation; never pad with weaker defenses."]:
-        !useStrictNfl&&matchedRate.tracked<3?
+      ...((useStrictNfl||useDeepSport)&&matchedRate.tracked<comparableMinimum?
+        ["Only "+matchedRate.tracked+" of "+comparableMinimum+
+          " minimum strictly comparable games verified. No OVER recommendation; do not add weaker defenses."]:
+        !(useStrictNfl||useDeepSport)&&matchedRate.tracked<3?
           ["Insufficient independently verified position-specific comparable defenses."]:[]),
       ...[...reasons].slice(0,3)],
     why:favorable?"Both observed samples exceeded the exact current PropLine line in most recorded games. This is historical evidence, not a forecast.":
