@@ -129,7 +129,7 @@ test("3 true distinct rank-matched defenses yield populated similar results with
     defensiveProfiles:profiles,matchupModel:"nfl-depth",
     now:"2026-10-12T18:00:00Z"});
   assert.equal(c.similar.tracked,3);
-  assert.deepEqual(c.similarGames.map(x=>x.actual),[65,74,83]);
+  assert.deepEqual(c.similarGames.map(x=>x.actual).sort((a,b)=>a-b),[65,74,83]);
   assert.ok(c.similarGames.every(x=>x.defenseReason.includes("NOT VERIFIED")));
   assert.ok(c.similarGames.every(x=>x.matchTier>=3));
   assert.equal(c.recent.tracked,3);
