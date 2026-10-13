@@ -65,7 +65,7 @@ export function deepStatSpec(sport,stat,role){
         :"Position-sourced game totals, not league-wide defensive ranks"};
 }
 export function makeDeepProfile({sport,role,stat,teamId,gameId,
-  season,asOf,metrics,verifiedGames,secondaryStats,secondaryGames}){
+  season,asOf,metrics,verifiedGames,secondaryStats,secondaryGames,league=null}){
   const spec=deepStatSpec(sport,stat,role);
   if(!spec||verifiedGames<3||!number(metrics?.allowed)||!number(metrics?.volume))
     return null;
@@ -76,7 +76,7 @@ export function makeDeepProfile({sport,role,stat,teamId,gameId,
   }
   return {sport,position:role,stat,teamId:String(teamId),gameId,
     season,asOf,verifiedGames,pregameGames:verifiedGames,
-    metrics,secondary:support,spec,verified:true,league:null};
+    metrics,secondary:support,spec,verified:true,league};
 }
 /**
  * Strict sources: 3+ past completed games with per-role stat and volume on
