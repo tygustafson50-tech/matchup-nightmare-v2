@@ -276,7 +276,7 @@ async function scan(){
     const rejected=[];
     for(const offer of feed.projections||[]){
       // Fail closed if upstream ever exposes another bookmaker by mistake.
-      if(offer.bookKey!=="draftkings")continue;
+      if(!offer.bookKey||offer.status!=="active")continue;
       const matching=chosen.filter(game=>fixtureMatches(offer,game));
       if(matching.length===1)chosenPairs.push({offer,game:matching[0]});
       else if(matching.length>1)rejected.push("Ambiguous fixture for "+offer.player);
