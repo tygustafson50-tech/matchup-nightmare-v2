@@ -34,6 +34,7 @@ jobs:
           code=$?
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           tail -n 150 test-output.log >> "$GITHUB_STEP_SUMMARY"
+          cat test-output.log
           exit 0
       - name: Report test failures on PR
         if: ${{ github.event_name == 'pull_request' && steps.suite.outputs.exit_code != '0' }}
