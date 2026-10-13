@@ -219,7 +219,7 @@ export function concededAgainstPosition(summary,{sport,defenseId,role,stat}){
   // not how many strikeouts its pitching staff conceded to other batters.
   // Goalkeeper saves depend on UPCOMING OPPONENT'S shot output.
   const offenseProxy=sport==="mlb"&&role==="P"||
-    sport==="soccer"&&role==="GK"&&stat==="saves";
+    sport==="soccer"&&role==="GK";
   const sourceTeamId=offenseProxy?own.team.id:other.team.id;
   const lineup=playersFromBoxscore(summary,sport,sourceTeamId);
   const volume=volumeStat(sport,role,stat);
@@ -237,7 +237,7 @@ export function concededAgainstPosition(summary,{sport,defenseId,role,stat}){
     ["SF","PF","F"].includes(r)?"F":r;
   const relevant=lineup.filter(x=>{
     const observed=positionGroup(sport,x.position);
-    return sport==="soccer"&&role==="GK"&&stat==="saves"
+    return sport==="soccer"&&role==="GK"
       ?["F","M","D"].includes(observed)
       :["nba","ncaab"].includes(sport)
         ?comparableBasketRole(observed)===comparableBasketRole(unitRole)
