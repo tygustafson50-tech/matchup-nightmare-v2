@@ -89,7 +89,9 @@ const BOOKS=new Set(["draftkings"]);
 // Only validated selected ESPN fixtures may trigger paid API calls.
 const teamNorm=x=>String(x||"").normalize("NFKD").toLowerCase()
   .replace(/[\u0300-\u036f]/g,"").replace(/\bsaint\b/g,"st")
-  .replace(/\bstate\b/g,"st").replace(/\bfc\b|\bcf\b/g,"")
+  .replace(/\bstate\b/g,"st")
+  .replace(/\bman\b/g,"manchester").replace(/\butd\b/g,"united")
+  .replace(/\bde\b/g,"").replace(/\bfc\b|\bcf\b/g,"")
   .replace(/\bthe\b/g,"").replace(/[^a-z0-9]/g,"");
 function readFixtureFilter(raw){
   if(!raw)return {fixtures:[{all:true}]};
@@ -112,7 +114,9 @@ function sameTeam(a,b,sport){
   const x=teamNorm(a),y=teamNorm(b);
   if(!x||!y)return false;
   if(x===y||x.length>=8&&y.length>=8&&
-    (x.endsWith(y)||y.endsWith(x)))return true;
+    (x.endsWith(y)||y.endsWith(x)||
+      x.length>=10&&y.length>=10&&(x.startsWith(y)||y.startsWith(x))))
+    return true;
   // Professional US teams have unique mascot names *within the sport*.
   // ESPN may say "LA Lakers", DraftKings "Los Angeles Lakers".
   if(["nfl","nba","mlb"].includes(sport)){
