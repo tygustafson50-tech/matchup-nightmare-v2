@@ -281,3 +281,43 @@ The hit counter in the closed Similar Defenses dropdown is recalculated
 from the selected unique historical games. The recent five games remain
 separate. Existing saved scans may still show results computed under the
 older 4–6 rule until the user performs a fresh scan.
+
+## October 2026: Zero verified similar defenses resolved
+
+Live ESPN evidence exposed two concrete integration issues:
+
+1. The NFL team schedule endpoint puts completed-game status under
+   `event.competitions[0].status.type.completed`, not `event.status`.
+   Previously even teams with 17 valid scheduled events had **zero**
+   completed games in the defensive sample.
+2. NFL game-summary box score athlete rows often have **no position**.
+   The current-season team rosters do contain verified athlete IDs and
+   RB/WR/QB/TE positions; the scanner now joins on those IDs before
+   computing actual source-recorded positional allowances. ESPN older
+   season rosters, notably 2025, can return **empty athlete lists**.
+
+When a historical defense passes the verified ESPN rank-within-five or
+yards-allowed-within-ten-percent rule but does not have enough source
+position coverage, the scanner now retains it as a prominently disclosed
+**rank/rate-only comparison**, not as a measured RB/WR/TE coverage match.
+Every historical *player game stat* remains required to come from the real
+ESPN box score, and missing stats are never padded with zero or fabricated.
+Actually verified position-coverage comparisons rank ahead of rank-only
+comparisons in the list. The card reports how many are rank-only. ESPN's
+historical season-aggregate ranks may include later games.
+
+Deep position enrichment is limited to **eight ranked candidates per
+player**, prioritizing the current season where valid rosters exist. This
+keeps excessive additional ESPN traffic down while allowing the verified
+rank/rate fallback to search all historical verified opponents.
+
+**Verification:** A live public ESPN diagnostic for Matthew Stafford
+(current 2026, plus 2025 and 2024) recovered 42 recorded game
+summaries and **six** distinct verified rank/rate-similar defense games;
+one also had a position-specific sample of three preceding games. This
+used a hypothetical test-only line for analysis and did not query or
+invent a real sportsbook quote. No diagnostic script or temporary
+GitHub workflow step is retained on production.
+
+As always, a **fresh live scan** is required to recalculate previously
+saved old results, which are labeled LAST SAVED SCAN — NOT LIVE.

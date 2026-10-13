@@ -125,7 +125,7 @@ function soccerRosterPlayers(summary,teamId){
   const unique=new Map(out.map(x=>[x.id,x]));
   return [...unique.values()];
 }
-export function playersFromBoxscore(summary,sport,teamId){
+export function playersFromBoxscore(summary,sport,teamId,positionsById=null){
   if(sport==="soccer")return soccerRosterPlayers(summary,teamId);
   const roster=summary?.boxscore?.players;
   if(!Array.isArray(roster))return [];
@@ -138,10 +138,13 @@ export function playersFromBoxscore(summary,sport,teamId){
         if(!idOk(a.id)||!nameOf(a)||row.didNotPlay===true||row.stats===null)continue;
         const stats=statsFrom(group,row,sport);
         if(!Object.keys(stats).length)continue;
+        const verifiedPosition=positionsById instanceof Map
+          ?positionsById.get(String(a.id))||"": "";
+        const observedPosition=codeOf(a.position)||codeOf(row.position)||
+          verifiedPosition;
         const old=players.get(String(a.id))||{id:String(a.id),name:nameOf(a),
-          position:codeOf(a.position)||codeOf(row.position)||"",
-          stats:{},verified:true};
-        if(!old.position)old.position=codeOf(a.position)||codeOf(row.position)||"";
+          position:observedPosition,stats:{},verified:true};
+        if(!old.position)old.position=observedPosition;
         Object.assign(old.stats,stats);
         players.set(old.id,old);
       }
@@ -172,12 +175,18 @@ export function gamelogEvents(payload,season,cutoff){
 export function completedTeamGames(schedule,teamId,before,season){
   const out=[];
   for(const e of schedule?.events||[]){
-    const cs=e.competitions?.[0]?.competitors||[];
+    const competition=e.competitions?.[0];
+    const cs=competition?.competitors||[];
     const own=cs.find(x=>String(x.team?.id)===String(teamId));
     const opp=cs.find(x=>String(x.team?.id)!==String(teamId));
+    // CRITICAL: ESPN /teams/{id}/schedule puts game status inside
+    // event.competitions[0].status, while the scoreboard often uses
+    // event.status. The previous e.status-only check excluded EVERY
+    // completed team-schedule event and forced similar-defense counts to 0.
+    const state=competition?.status?.type||e.status?.type;
+    const complete=state?.completed===true||state?.state==="post";
     if(!own||!opp||!idOk(e.id)||!e.date||Date.parse(e.date)>=Date.parse(before)||
-       !Number.isFinite(Date.parse(e.date))||
-       !(e.status?.type?.completed===true||e.status?.type?.state==="post"))continue;
+       !Number.isFinite(Date.parse(e.date))||!complete)continue;
     if(e.season?.year&&Number(e.season.year)!==Number(season))continue;
     out.push({id:String(e.id),date:e.date,opponentId:String(opp.team?.id),
       opponent:opp.team?.displayName||opp.team?.name||"Opponent",season:Number(season)});
@@ -438,7 +447,15 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
     // Try multiple seasons if ESPN lacks an early-game context, but do not
     // spend the entire quota on repeated matches against the same defense.
     const candidate=[],perDefense=new Map();
-    for(const row of ranked){
+    // Current-season opponent rosters expose verified athlete positions,
+    // while ESPN historical 2024/25 rosters are frequently empty. Check
+    // current-season position coverage first, then the closest historical
+    // defense profiles, without changing defense-only final selection.
+    const priority=[
+      ...ranked.filter(x=>Number(x.game.season)===Number(season)),
+      ...ranked.filter(x=>Number(x.game.season)!==Number(season))
+    ];
+    for(const row of priority){
       const id=row.game.opponentId;
       const count=perDefense.get(id)||0;
       if(count>=2)continue;
@@ -448,9 +465,22 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
     }
     onStage("Checking "+candidate.length+" NFL rank-similar defenses for "+
       role+" coverage and RB checkdown proxies…");
+    // ESPN NFL game-summary athlete rows often omit position entirely,
+    // even for rushers/receivers whose actual stats are present. Resolve
+    // the athlete ID from the official opponent roster for THAT season,
+    // never guess RB/WR/TE from the receiving/rushing boxscore group.
+    const resolvePositions=async (box,defenseId,year)=>{
+      const opponentTeam=(box?.boxscore?.players||[]).find(t=>
+        t?.team?.id&&String(t.team.id)!==String(defenseId));
+      if(!opponentTeam?.team?.id)return new Map();
+      const roster=await client.call({sport:"nfl",kind:"roster",
+        teamId:String(opponentTeam.team.id),season:String(year)});
+      return new Map(flattenRoster(roster).filter(p=>p.position)
+        .map(p=>[p.id,p.position]));
+    };
     const fetchContext=(teamId,year,cutoff)=>
       buildDefenseContext({teamId,season:year,cutoff,role,stat:offer.stat,
-        schedule,summary});
+        schedule,summary,resolvePositions});
     const verifiedContext=await Promise.allSettled([
       fetchContext(enemy.id,season,game.date),
       ...candidate.map(x=>fetchContext(x.game.opponentId,

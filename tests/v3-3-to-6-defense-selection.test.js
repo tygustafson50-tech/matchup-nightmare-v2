@@ -93,7 +93,7 @@ test("incomplete verified team pool produces 0–2, never padded or synthetic",(
     {id:"b",opponentId:"1",similarity:85},
     {id:"c",opponentId:"2",similarity:82}
   ]).length,2);
-  assert.ok(NFL_MAX_CANDIDATES>16);
+  assert.ok(NFL_MAX_CANDIDATES>=6&&NFL_MAX_CANDIDATES<=12);
 });
 test("production NFL and other sports forward source opponent IDs to distinct selector",()=>{
   const engine=readFileSync(new URL("../public/lib/research-v3.js",import.meta.url),"utf8");
