@@ -72,7 +72,8 @@ export function seasonWindow(selectedSeason){
 }
 const nonnegative=n=>NUMBER(n)&&n>=0;
 const evidenceRow=g=>({
-  id:String(g.id),date:g.date,opponent:g.opponent,season:g.season,
+  id:String(g.id),date:g.date,opponent:g.opponent,
+  opponentId:g.opponentId?String(g.opponentId):null,season:g.season,
   actual:g.actual,team:g.team,source:g.source
 });
 export function resultAtLine(actual,line){
@@ -226,6 +227,7 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
             offer.sport,role,offer.stat,offer.league||null);
     if(test.ok)comparable.push({...evidenceRow(g),
       result:resultAtLine(g.actual,offer.line),similarity:test.score,
+      matchTier:test.matchTier||1,matchBasis:test.matchBasis||null,
       defenseReason:test.context,defenseMetrics:
         useFootballRank||useStrictNfl?historic[test.rankLane]:historic.metrics,
       ...((useFootballRank||useStrictNfl)?{
@@ -240,6 +242,7 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
         checkdownProxyVerified:test.checkdownProxyVerified
       }:{})
       ,...(useDeepSport?{
+        relativeDifference:test.relativeDifference,
         contextGames:test.comparisonGames,roleAllowed:test.roleAllowed,
         targetRoleAllowed:test.targetRoleAllowed,
         comparisonUsage:test.usage,targetComparisonUsage:test.targetUsage,
@@ -270,13 +273,14 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
     recentGames:last5,recent:recentRate,similarGames:selectedComparable,
     similar:matchedRate,threeSeasonSample:matchedRate.tracked,
     defenseMatchMethod:useStrictNfl
-      ?"Strict NFL pass/rush ranks (±3/±8) + verified position coverage (4–6 games)"
-      :useDeepSport?"Strict "+offer.sport.toUpperCase()+
-        " role-specific allowed rates + usage + companion stat (4–6 games)":
+      ?"NFL defense: ±5 ranks OR ±10% allowed yards, plus position coverage (3–6 unique defenses)"
+      :useDeepSport?"Verified "+offer.sport.toUpperCase()+
+        " role allowance within 10% or tight usage fit (3–6 unique defenses)":
         useFootballRank?"NFL rushing/passing defense rank (±3)":
           "Season-normalized, position-specific defensive cohorts",
     matchupSampleTarget:useStrictNfl?{min:NFL_SIMILAR_MIN,max:NFL_SIMILAR_MAX}:
       useDeepSport?{min:STRICT_MIN_MATCHES,max:STRICT_MAX_MATCHES}:null,
+    similarDefenseCount:selectedComparable.length,
     upcomingRoleAllowed:useStrictNfl?upcomingContext?.roleAllowed:
       useDeepSport?upcomingDefense?.metrics?.allowed:null,
     upcomingUsageAllowed:useDeepSport?upcomingDefense?.metrics?.volume:null,
@@ -291,8 +295,8 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
     confidenceLabel:favorable?"Supporting historical evidence":"Insufficient or mixed historical evidence",
     limitations:[...(recentRate.tracked<5?["Fewer than five verified current-season games."]:[]),
       ...((useStrictNfl||useDeepSport)&&matchedRate.tracked<comparableMinimum?
-        ["Only "+matchedRate.tracked+" of "+comparableMinimum+
-          " minimum strictly comparable games verified. No OVER recommendation; do not add weaker defenses."]:
+        ["Only "+matchedRate.tracked+" verified distinct similar defenses; "+
+          comparableMinimum+" needed for a supported OVER. We do not fabricate or repeat defenses."]:
         !(useStrictNfl||useDeepSport)&&matchedRate.tracked<3?
           ["Insufficient independently verified position-specific comparable defenses."]:[]),
       ...[...reasons].slice(0,3)],
