@@ -4,7 +4,6 @@ on:
     branches:
       - main
       - rebuild/prizepicks-evidence-v3
-      - fix/zero-similar-espn-evidence
   pull_request:
     branches: [main]
 permissions:
@@ -26,8 +25,6 @@ jobs:
           node --check public/lib/evidence-client-v3.js
           node --check functions/api/lines.js
           node --check server.js
-      - name: Diagnose ESPN zero similar matchup
-        run: node scripts/diagnose-zero-similar.mjs
       - name: Run Node tests
         id: suite
         shell: bash
