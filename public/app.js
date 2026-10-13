@@ -78,13 +78,25 @@ function renderCard(c){
         ' · Upcoming opponent rank: '+safe(c.upcomingDefenseRank??
           "not verified")+
         ' (1 = fewest yards allowed). Historical opponent ranks are season aggregates, not necessarily pregame rankings.</p>':'')+
+    (c.matchupSampleTarget?'<p class="season-evidence nfl-depth-explain">'+
+      '<strong>Strict defense comparison:</strong> '+safe(c.similar.tracked)+
+      ' of '+safe(c.matchupSampleTarget.min)+'–'+safe(c.matchupSampleTarget.max)+
+      ' desired VERIFIED matchups. '+safe(c.position)+' '+safe(c.market)+
+      ' allowed by upcoming opponent: '+safe(c.upcomingRoleAllowed??
+        "not verified")+'/game (from prior box scores).'+
+      (Number.isFinite(c.upcomingRbReceptionsAllowed)?
+        ' RB catches allowed: '+safe(c.upcomingRbReceptionsAllowed)+
+        '/game — only a checkdown proxy, not tracked checkdown throws.':"")+
+      ' Unavailable samples never receive a fabricated value or 100% label.</p>':'')+
     '<p class="season-evidence">Original book quote last updated '+safe(kickoff(c.quotedAt))+
       ' · Selected from '+safe(c.quotesConsidered||1)+' real sportsbook line(s)'+
       ' · Three-season window '+safe(c.seasonWindow.join(" / "))+'</p>'+
     '<div class="scan-stats">'+
       '<div><strong>'+safe(hitText(c.recent))+'</strong><small>Last five current-season games</small></div>'+
       '<div><strong>'+safe(hitText(c.similar))+'</strong><small>Similar defenses — three seasons</small></div>'+
-      '<div><strong>'+safe(total)+'</strong><small>Verified qualifying historical matchups</small></div>'+
+      '<div><strong>'+safe(total)+'</strong><small>'+
+        (c.matchupSampleTarget?'Strict verified matchups (4–6 required)':
+          'Verified qualifying historical matchups')+'</small></div>'+
     '</div>'+
     '<p class="muted matchup-rationale">'+(archived
       ?(rec?"Previously supported OVER "+safe(c.line)+" "+safe(c.market)+
@@ -328,6 +340,7 @@ async function scan(){
           const card=analyzeVerifiedProp({offer:confirmedOffer,
             season:input.season,games:input.games,
             upcomingDefense:input.upcomingDefense,
+            upcomingContext:input.upcomingContext,
             defensiveProfiles:input.defensiveProfiles,
             matchupModel:input.matchupModel});
           if(card)candidates.push(card);
