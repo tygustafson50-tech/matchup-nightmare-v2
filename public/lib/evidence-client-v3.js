@@ -125,7 +125,7 @@ function soccerRosterPlayers(summary,teamId){
   const unique=new Map(out.map(x=>[x.id,x]));
   return [...unique.values()];
 }
-export function playersFromBoxscore(summary,sport,teamId){
+export function playersFromBoxscore(summary,sport,teamId,positionsById=null){
   if(sport==="soccer")return soccerRosterPlayers(summary,teamId);
   const roster=summary?.boxscore?.players;
   if(!Array.isArray(roster))return [];
@@ -138,10 +138,13 @@ export function playersFromBoxscore(summary,sport,teamId){
         if(!idOk(a.id)||!nameOf(a)||row.didNotPlay===true||row.stats===null)continue;
         const stats=statsFrom(group,row,sport);
         if(!Object.keys(stats).length)continue;
+        const verifiedPosition=positionsById instanceof Map
+          ?positionsById.get(String(a.id))||"": "";
+        const observedPosition=codeOf(a.position)||codeOf(row.position)||
+          verifiedPosition;
         const old=players.get(String(a.id))||{id:String(a.id),name:nameOf(a),
-          position:codeOf(a.position)||codeOf(row.position)||"",
-          stats:{},verified:true};
-        if(!old.position)old.position=codeOf(a.position)||codeOf(row.position)||"";
+          position:observedPosition,stats:{},verified:true};
+        if(!old.position)old.position=observedPosition;
         Object.assign(old.stats,stats);
         players.set(old.id,old);
       }
@@ -454,9 +457,22 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
     }
     onStage("Checking "+candidate.length+" NFL rank-similar defenses for "+
       role+" coverage and RB checkdown proxies…");
+    // ESPN NFL game-summary athlete rows often omit position entirely,
+    // even for rushers/receivers whose actual stats are present. Resolve
+    // the athlete ID from the official opponent roster for THAT season,
+    // never guess RB/WR/TE from the receiving/rushing boxscore group.
+    const resolvePositions=async (box,defenseId,year)=>{
+      const opponentTeam=(box?.boxscore?.players||[]).find(t=>
+        t?.team?.id&&String(t.team.id)!==String(defenseId));
+      if(!opponentTeam?.team?.id)return new Map();
+      const roster=await client.call({sport:"nfl",kind:"roster",
+        teamId:String(opponentTeam.team.id),season:String(year)});
+      return new Map(flattenRoster(roster).filter(p=>p.position)
+        .map(p=>[p.id,p.position]));
+    };
     const fetchContext=(teamId,year,cutoff)=>
       buildDefenseContext({teamId,season:year,cutoff,role,stat:offer.stat,
-        schedule,summary});
+        schedule,summary,resolvePositions});
     const verifiedContext=await Promise.allSettled([
       fetchContext(enemy.id,season,game.date),
       ...candidate.map(x=>fetchContext(x.game.opponentId,
