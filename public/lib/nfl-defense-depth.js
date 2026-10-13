@@ -18,7 +18,10 @@ export const NFL_PRIMARY_RANK_BAND=5;
 export const NFL_PRIMARY_YARDS_TOLERANCE=0.10;
 export const NFL_SECONDARY_RANK_BAND=16;
 export const NFL_COVERAGE_GAMES=4;
-export const NFL_MAX_CANDIDATES=24;
+// Try deep role/coverage enrichment for a bounded selection only. Other
+// rank-verified historical opponents still qualify as clearly labeled
+// rank-only matches, without 4 more ESPN requests per opponent.
+export const NFL_MAX_CANDIDATES=8;
 
 // All QB/RB/WR/TE prop positions and ALL supported football stat markets
 // are eligible. Real ESPN stat totals and three+ prior recorded samples are
