@@ -320,6 +320,7 @@ export async function onRequestGet({request,env={}}){
         })));
     let quota=eventList.quota;
     const eventFailures=[];
+    let successfulEventResponses=0;
     const projections=[];
     const diagnostics={bookmakerBoards:0,supportedMarkets:0,
       freshMarkets:0,selectionsConsidered:0,verifiedSelections:0};
@@ -330,6 +331,7 @@ export async function onRequestGet({request,env={}}){
           String(got.reason?.message||"provider unavailable").slice(0,90));
         continue;
       }
+      successfulEventResponses++;
       if(got.value.quota!=null)quota=got.value.quota;
       // Event odds response can omit fixture metadata. Only inject fields
       // from the verified /events source (never source our own point/price).
@@ -349,13 +351,23 @@ export async function onRequestGet({request,env={}}){
     if(eventFailures.some(msg=>/HTTP 429/.test(msg))&&!projections.length)
       return reply({status:"rate-limited",source:"PropLine",
         projections:[],error:"PropLine quota reached while loading selected game props."},429);
+    // A failed feed is not evidence that no book has posted props.
+    if(candidates.length>0&&successfulEventResponses===0)
+      return reply({status:"provider-unavailable",source:"PropLine",
+        projections:[],eventsChecked:candidates.length,
+        eventsFailed:eventFailures.length,
+        error:"All selected event-odds requests failed. The provider's prop availability is unknown; please retry.",
+        providerWarnings:eventFailures.slice(0,8)},502);
     const fetchedEvents=candidates.length;
     let changes=[],changeTracking="unavailable";
     if(env.PROJECTION_SNAPSHOTS&&
        typeof env.PROJECTION_SNAPSHOTS.get==="function"&&
        typeof env.PROJECTION_SNAPSHOTS.put==="function"){
       try{
-        const key="propline:v1:"+matched.key+":"+date;
+        // A scan for different games must not mark unqueried quotes removed.
+        const fixtureScope=requested.fixtures.map(f=>f.all?"all":f.id)
+          .sort().join(",");
+        const key="propline:v2:"+matched.key+":"+date+":"+fixtureScope;
         const prior=JSON.parse(await env.PROJECTION_SNAPSHOTS.get(key)||"null");
         if(Array.isArray(prior)){changes=compare(prior,projections);changeTracking="verified";}
         else changeTracking="baseline-created";
