@@ -66,7 +66,7 @@ test("invalid localStorage or browser privacy restrictions do not invent cache",
   assert.equal(result.saved,0);assert.equal(result.failed,1);
   assert.deepEqual(readLastScan(scope([game]),broken,now+1000).cards,[]);
 });
-test("saves only real DraftKings quotes and never accepts fabricated/other books",()=>{
+test("rejects mismatched bookmaker identities, fake sources and invalid cache entries",()=>{
   const storage=memory(),data=scope([game]);
   const rejected=[
     {...card(),bookKey:"fanduel"},
@@ -87,4 +87,19 @@ test("tampered cached records cannot be represented as verified historical resul
   item.cards[0].bookKey="fanduel";
   storage.setItem(key,JSON.stringify(item));
   assert.equal(readLastScan(data,storage,now+1000).cards.length,0);
+});
+
+
+test("valid FanDuel and PrizePicks source cards survive quota fallback without inventing prices",()=>{
+  const storage=memory(),data=scope([game]);
+  const fanDuel={...card(),id:"fd-verified",bookKey:"fanduel",
+    offer:{...card().offer,bookKey:"fanduel"}};
+  const prizePicks={...card(),id:"pp-verified",bookKey:"prizepicks",
+    price:null,offer:{...card().offer,bookKey:"prizepicks"}};
+  const stored=saveCompletedScan({...data,cards:[fanDuel,prizePicks]},storage,now);
+  assert.equal(stored.saved,1);
+  const restored=readLastScan(data,storage,now+1000);
+  assert.deepEqual(restored.cards.map(c=>c.bookKey),["fanduel","prizepicks"]);
+  assert.equal(restored.cards[1].price,null);
+  assert.ok(restored.cards.every(c=>c.cachedAt===stored.savedAt));
 });
