@@ -172,12 +172,18 @@ export function gamelogEvents(payload,season,cutoff){
 export function completedTeamGames(schedule,teamId,before,season){
   const out=[];
   for(const e of schedule?.events||[]){
-    const cs=e.competitions?.[0]?.competitors||[];
+    const competition=e.competitions?.[0];
+    const cs=competition?.competitors||[];
     const own=cs.find(x=>String(x.team?.id)===String(teamId));
     const opp=cs.find(x=>String(x.team?.id)!==String(teamId));
+    // CRITICAL: ESPN /teams/{id}/schedule puts game status inside
+    // event.competitions[0].status, while the scoreboard often uses
+    // event.status. The previous e.status-only check excluded EVERY
+    // completed team-schedule event and forced similar-defense counts to 0.
+    const state=competition?.status?.type||e.status?.type;
+    const complete=state?.completed===true||state?.state==="post";
     if(!own||!opp||!idOk(e.id)||!e.date||Date.parse(e.date)>=Date.parse(before)||
-       !Number.isFinite(Date.parse(e.date))||
-       !(e.status?.type?.completed===true||e.status?.type?.state==="post"))continue;
+       !Number.isFinite(Date.parse(e.date))||!complete)continue;
     if(e.season?.year&&Number(e.season.year)!==Number(season))continue;
     out.push({id:String(e.id),date:e.date,opponentId:String(opp.team?.id),
       opponent:opp.team?.displayName||opp.team?.name||"Opponent",season:Number(season)});
