@@ -447,7 +447,15 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
     // Try multiple seasons if ESPN lacks an early-game context, but do not
     // spend the entire quota on repeated matches against the same defense.
     const candidate=[],perDefense=new Map();
-    for(const row of ranked){
+    // Current-season opponent rosters expose verified athlete positions,
+    // while ESPN historical 2024/25 rosters are frequently empty. Check
+    // current-season position coverage first, then the closest historical
+    // defense profiles, without changing defense-only final selection.
+    const priority=[
+      ...ranked.filter(x=>Number(x.game.season)===Number(season)),
+      ...ranked.filter(x=>Number(x.game.season)!==Number(season))
+    ];
+    for(const row of priority){
       const id=row.game.opponentId;
       const count=perDefense.get(id)||0;
       if(count>=2)continue;
