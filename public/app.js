@@ -65,9 +65,9 @@ function renderCard(c){
   const total=c.similar.tracked;
   return '<article class="scan-card">'+
     renderPlayerCardHeader(c)+
-    '<div class="scan-line">'+(archived?"LAST SAVED DRAFTKINGS SELECTION: ":
-      c.offer?.quoteShape==="milestone"?"VERIFIED DRAFTKINGS MILESTONE: ":
-      "PROPLINE VERIFIED OVER LINE: ")+'<strong>'+
+    '<div class="scan-line">'+(archived?"LAST SAVED VERIFIED SELECTION: ":
+      c.offer?.quoteShape==="milestone"?"VERIFIED MILESTONE: ":
+      "VERIFIED OVER LINE: ")+'<strong>'+
       safe(c.offer?.quoteShape==="milestone"?
         c.offer.selectionLabel||c.offer.minimumStat+"+ "+c.market:c.line)+
       '</strong>'+(c.offer?.quoteShape==="milestone"?
@@ -235,7 +235,7 @@ async function scan(){
   const own=++scanId,day=el("date").value,league=el("league").value,
     currentSport=sport,button=el("scanSelected");
   button.disabled=true;button.textContent="Scanning verified evidence…";
-  clearResults();status("Requesting DraftKings OVER lines through PropLine…");
+  clearResults();status("Comparing verified OVER lines from available providers…");
   try{
     if(quotaPaused){
       showSavedScan({chosen,day,league,currentSport,
@@ -284,9 +284,9 @@ async function scan(){
     const grouped=groupOffersByPlayerStat(chosenPairs);
     // Only the selected DraftKings quote is monitored after ranking;
     // alternate points never create additional player/stat cards.
-    const preface='<p class="season-evidence">PropLine · DraftKings sportsbook lines retrieved: '+
+    const preface='<p class="season-evidence">PropLine · Verified player-prop lines retrieved: '+
       safe(feed.sourceFetchedAt)+" · "+chosenPairs.length+
-      ' active DraftKings OVER quotes for selected games · '+
+      ' active OVER quotes across available providers · '+
       safe(feed.eventsChecked??0)+' event board(s) checked · Changes: '+
       safe(feed.changeTracking==="verified"?feed.changes.length+" tracked":
         "Tracking requires Cloudflare KV")+'</p>';
@@ -298,18 +298,18 @@ async function scan(){
       const providerCount=(feed.projections||[]).length;
       const reason=providerCount?
         "PropLine returned "+providerCount+
-        " DraftKings player quotes, but they could not be safely linked to the selected ESPN fixtures.":
+        " provider quotes, but they could not be safely linked to the selected ESPN fixtures.":
         (feed.eventsChecked||0)===0?
         "The selected games could not be matched to a PropLine event on this date.":
         (feed.eventsFailed||0)>0?
         "PropLine did not return usable prices for one or more selected events.":
-        diagnostics.draftKingsBoards===0?
-        "DraftKings has not posted a player-prop board for the selected games.":
+        diagnostics.bookmakerBoards===0?
+        "No connected prop source has posted a player-prop board for the selected games.":
         diagnostics.supportedMarkets===0?
-        "DraftKings has not posted supported player-stat markets for the selected games.":
+        "Available sources have not posted supported player-stat markets for the selected games.":
         diagnostics.freshMarkets===0?
-        "The DraftKings player-stat quotes are suspended or older than our freshness limit.":
-        "No valid DraftKings OVER or equivalent player milestone selections are currently listed.";
+        "Available player-stat quotes are suspended or older than our freshness limit.":
+        "No verified OVER or equivalent player milestone selections are currently listed.";
       el("scanOutput").innerHTML=preface+
         '<div class="empty">'+safe(reason)+
         ' Try another upcoming fixture or check later for newly posted markets. We do not invent lines.</div>';
@@ -371,7 +371,7 @@ async function scan(){
     if(own!==scanId)return;
     cards=rankEvidence(dedupeVerifiedCards(results));
     // A second mandatory, canonical-fixture deduplication before display
-    // ensures one DraftKings OVER card for each verified player + stat.
+    // ensures one OVER card across all books for each verified player + stat.
     const uniqueKeys=new Set();
     cards=cards.filter(card=>{
       const key=[card.sport,card.fixtureId,
@@ -394,15 +394,15 @@ async function scan(){
     }
     el("scanOutput").innerHTML=preface+
       '<p class="muted">Unique player/stat markets analyzed: '+counts.completed+
-      ' · DraftKings quotes checked: '+chosenPairs.length+
-      ' · One DraftKings line per stat: '+cards.length+
+      ' · Provider quotes checked: '+chosenPairs.length+
+      ' · One line per player/stat: '+cards.length+
       ' · OVER recommendations with sufficient evidence: '+
       cards.filter(c=>c.recommendation==="OVER").length+'.</p>'+
       (errors.length?'<details class="warning"><summary>'+errors.length+
         ' unverified player/market records withheld</summary><p>'+
         errors.slice(0,20).map(safe).join(" · ")+'</p></details>':"")+
       (cards.length?'<div id="pickCardMount"></div>':
-        '<div class="empty">No verifiable historical evidence was available for the returned DraftKings lines. No placeholders were generated.</div>');
+        '<div class="empty">No verifiable historical evidence was available for the returned provider lines. No placeholders were generated.</div>');
     if(cards.length)renderCards();
     const saved=saveCompletedScan({sport:currentSport,date:day,league,
       games:chosen,cards},scanStorage());
