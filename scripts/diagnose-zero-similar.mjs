@@ -49,6 +49,13 @@ for(const [name,id,year] of teams){
 for(const g of qs.slice(0,3)){
   try{
    const box=await request(root+"summary?event="+g.gameId);
+   console.log("SUMMARY STRUCT "+JSON.stringify({name:g.name,
+    keys:Object.keys(box),
+    rosters:Array.isArray(box.rosters)?box.rosters.map(x=>({
+      keys:Object.keys(x),team:x.team?.id,size:x.roster?.length,
+      sample:x.roster?.[0]&&{position:x.roster[0].position,
+      athlete:x.roster[0].athlete?.id}})):null
+    }).slice(0,2200));
    const groups=box.boxscore?.players?.[0]?.statistics||[];
    console.log("ATHLETE SHAPE "+JSON.stringify({name:g.name,
      first:groups.filter(x=>x.athletes?.length).slice(0,3).map(x=>({
@@ -62,7 +69,10 @@ for(const g of qs.slice(0,3)){
      const roster=await request(root+"teams/"+opposing.team.id+
        "/roster?season="+g.year);
      console.log("ROSTER "+JSON.stringify({name:g.name,team:opposing.team.id,
-       keys:Object.keys(roster),athleteSample:JSON.stringify(roster.athletes?.slice(0,2)).slice(0,2600)
+       keys:Object.keys(roster),athleteSample:(roster.athletes||[]).flatMap(x=>x.items||[])
+         .slice(0,4).map(x=>({id:x.id,position:x.position?.abbreviation,
+          name:x.displayName})),
+       counts:roster.athletes?.map(x=>({group:x.position,count:x.items?.length}))
      }));
    }
    const teams=box.boxscore?.players||[];
