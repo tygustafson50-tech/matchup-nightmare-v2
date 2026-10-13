@@ -39,10 +39,14 @@ function roleTotals(summary,defenseId,role,stat,positionsById=null){
   if(!opponent?.team?.id||!teams.some(x=>String(x.team?.id)===String(defenseId)))
     return null;
   const players=playersFromBoxscore(summary,"nfl",opponent.team.id,positionsById);
-  const entries=players.filter(x=>positionGroup("nfl",x.position)===role);
-  if(!entries.length)return null; // RB with no row must not become invented 0.
-  if(!entries.every(x=>valid(x.stats?.[stat])))return null;
-  return entries.reduce((sum,p)=>sum+p.stats[stat],0);
+  // Sum only athletes who actually have the chosen stat recorded. A WR
+  // can appear in both rushing and receiving summary groups; lack of a
+  // rushing row is not a reason to discard the *real* receiving yards
+  // contributed by the other WRs. Never fill missing individual stats 0.
+  const recorded=players.filter(x=>positionGroup("nfl",x.position)===role &&
+    valid(x.stats?.[stat]));
+  if(!recorded.length)return null;
+  return recorded.reduce((sum,p)=>sum+p.stats[stat],0);
 }
 export function readDefenseGameContext(
   summary,defenseId,role,stat,positionsById=null
