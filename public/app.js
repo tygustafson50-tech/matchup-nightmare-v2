@@ -65,9 +65,14 @@ function renderCard(c){
   const total=c.similar.tracked;
   return '<article class="scan-card">'+
     renderPlayerCardHeader(c)+
-    '<div class="scan-line">'+(archived?"LAST SAVED DRAFTKINGS OVER LINE: ":
-      "PROPLINE VERIFIED OVER LINE: ")+'<strong>'+safe(c.line)+
-      '</strong> '+safe(c.market)+
+    '<div class="scan-line">'+(archived?"LAST SAVED DRAFTKINGS SELECTION: ":
+      c.offer?.quoteShape==="milestone"?"VERIFIED DRAFTKINGS MILESTONE: ":
+      "PROPLINE VERIFIED OVER LINE: ")+'<strong>'+
+      safe(c.offer?.quoteShape==="milestone"?
+        c.offer.selectionLabel||c.offer.minimumStat+"+ "+c.market:c.line)+
+      '</strong>'+(c.offer?.quoteShape==="milestone"?
+        ' · equivalent OVER '+safe(c.line)+' '+safe(c.market):
+        ' '+safe(c.market))+
       (Number.isFinite(c.price)?' · '+safe(c.price>0?'+':'')+safe(c.price):'')+
       ' · '+safe(c.book)+'</div>'+
     renderUpcomingDefense(c.currentDefenseStrength,{
@@ -199,15 +204,18 @@ function showSavedScan({chosen,day,league,currentSport,reason}){
 }
 function fixtureMatches(offer,game){
   const canonical=x=>String(x||"").normalize("NFKD").toLowerCase()
-    .replace(/[\\u0300-\\u036f]/g,"")
-    .replace(/\\bstate\\b/g,"st")
-    .replace(/\\bfc\\b|\\bcf\\b/g,"")
+    .replace(/[\u0300-\u036f]/g,"")
+    .replace(/\bstate\b/g,"st")
+    .replace(/\bman\b/g,"manchester").replace(/\butd\b/g,"united")
+    .replace(/\bfc\b|\bcf\b/g,"")
     .replace(/[^a-z0-9]/g,"");
   const equivalent=(x,y)=>{
     const a=canonical(x),b=canonical(y);
     if(!a||!b)return false;
     if(a===b||a.length>=8&&b.length>=8&&
-      (a.endsWith(b)||b.endsWith(a)))return true;
+      (a.endsWith(b)||b.endsWith(a)||
+        a.length>=10&&b.length>=10&&
+        (a.startsWith(b)||b.startsWith(a))))return true;
     if(["nfl","nba","mlb"].includes(offer.sport)){
       const mascot=v=>String(v||"").toLowerCase().trim()
         .split(/[^a-z0-9]+/).filter(Boolean).at(-1)||"";
@@ -286,10 +294,25 @@ async function scan(){
       '<div class="empty">Loading actual athlete boxscores and pregame defensive records…</div>';
     if(!chosenPairs.length){
       watchedQuotes=null;
+      const diagnostics=feed.diagnostics||{};
+      const providerCount=(feed.projections||[]).length;
+      const reason=providerCount?
+        "PropLine returned "+providerCount+
+        " DraftKings player quotes, but they could not be safely linked to the selected ESPN fixtures.":
+        (feed.eventsChecked||0)===0?
+        "The selected games could not be matched to a PropLine event on this date.":
+        (feed.eventsFailed||0)>0?
+        "PropLine did not return usable prices for one or more selected events.":
+        diagnostics.draftKingsBoards===0?
+        "DraftKings has not posted a player-prop board for the selected games.":
+        diagnostics.supportedMarkets===0?
+        "DraftKings has not posted supported player-stat markets for the selected games.":
+        diagnostics.freshMarkets===0?
+        "The DraftKings player-stat quotes are suspended or older than our freshness limit.":
+        "No valid DraftKings OVER or equivalent player milestone selections are currently listed.";
       el("scanOutput").innerHTML=preface+
-        '<div class="empty">No current DraftKings OVER props match the selected fixtures. '+
-        safe((feed.notes||[]).join(" "))+
-        ' Unavailable or suspended lines are never replaced with fake odds.</div>';
+        '<div class="empty">'+safe(reason)+
+        ' Try another upcoming fixture or check later for newly posted markets. We do not invent lines.</div>';
       status("Verified board queried; no available matching projections.");
       return;
     }
