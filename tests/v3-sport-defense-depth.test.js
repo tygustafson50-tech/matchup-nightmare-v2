@@ -24,7 +24,7 @@ const actualPositions={
   soccer:{F:"F",M:"M",D:"D",GK:"G"}
 };
 test("all actual supported non-NFL roles and stats have stat-aware configurations",()=>{
-  assert.equal(STRICT_MIN_MATCHES,4);
+  assert.equal(STRICT_MIN_MATCHES,3);
   assert.equal(STRICT_MAX_MATCHES,6);
   for(const [sport,choices] of Object.entries(roles)){
     for(const role of choices){
@@ -159,7 +159,7 @@ function analyze(sport,stat,position,role,numMatches){
     defensiveProfiles:hist,
     matchupModel:"multi-sport-depth",now:"2026-10-12T19:00:00Z"});
 }
-test("all sports enforce 4–6 sampled verified matches with no 100% padding",()=>{
+test("all sports target 3–6 sampled distinct verified defenses with no invented hits",()=>{
   for(const [sport,stat,position,role] of [
     ["ncaaf","passingYards","QB","QB"],
     ["nba","points","PG","PG"],
@@ -169,14 +169,17 @@ test("all sports enforce 4–6 sampled verified matches with no 100% padding",()
     ["soccer","shots","F","F"],
     ["soccer","saves","G","GK"]
   ]){
+    const two=analyze(sport,stat,position,role,2);
+    assert.equal(two.similar.tracked,2,sport);
+    assert.equal(two.recommendation,null,sport);
+    assert.equal(two.evidenceSufficient,false,sport);
+    assert.match(two.limitations.join(" "),/needed for a supported OVER/);
     const three=analyze(sport,stat,position,role,3);
     assert.equal(three.similar.tracked,3,sport);
-    assert.equal(three.recommendation,null,sport);
-    assert.equal(three.evidenceSufficient,false,sport);
-    assert.match(three.limitations.join(" "),/No OVER recommendation/);
+    assert.equal(three.recommendation,"OVER",sport);
     const all=analyze(sport,stat,position,role,9);
     assert.equal(all.similar.tracked,6,sport);
-    assert.equal(all.matchupSampleTarget.min,4);
+    assert.equal(all.matchupSampleTarget.min,3);
     assert.equal(all.matchupSampleTarget.max,6);
     assert.equal(all.recommendation,"OVER",sport);
     assert.ok(all.similarGames.every(g=>g.supportingStats.length>0),sport);

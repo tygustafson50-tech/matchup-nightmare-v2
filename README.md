@@ -244,3 +244,40 @@ sportsbook or paid feed is required. Archived scans keep their old research
 until the next successful fresh scan. Not all sports have active DraftKings
 player-prop markets on every date, and the single-book college basketball
 coverage limitation remains.
+
+## Current similar-defense selection: 3–6 distinct opponents
+
+The scanner now selects **3–6 unique verified defenses**, not 4–6
+potentially repeated games. It still examines the same current and two
+previous seasons. A qualifying historical opponent contributes only its
+closest genuinely comparable player game (even if the player faced it more
+than once); game results and sportsbook line comparisons are never invented
+or selected according to past OVER outcomes.
+
+- **NFL QB/RB/WR/TE markets:** the historical defense qualifies through
+  verified ESPN *primary* pass/rush league rank within **five places OR**
+  primary yards allowed per game within **10%** of the upcoming opponent.
+  Secondary passing/rushing behavior cannot be radically different,
+  and the position's prior recorded allowances remain required. RB catches
+  allowed can inform the documented checkdown proxy but cannot demonstrate
+  actual route coverage. NFL candidate search checks up to 24 verified
+  rank/rate-eligible historical games with at most two seasons/games per
+  opposing team before selecting unique qualified defenses.
+- **NCAAF, NBA, NCAAB, MLB, soccer:** use ESPN-recorded role/stat
+  allowances **within 10%**, or an independently verified strong alternate
+  match in which usage is within 10%, role allowance within 20%, and the
+  companion position-stat comparison within 20%. Existing three-game
+  pre-matchup source-verification and within-league requirements still
+  apply. These comparisons are **not** claimed to be sourced league-wide
+  defensive ranks.
+- **At least three distinct qualifying defenses** are required for a
+  supported OVER recommendation, alongside the independent recent-game
+  threshold and majority OVER hit rates. Only the best six are displayed.
+  If ESPN cannot verify three distinct genuinely similar opponents,
+  0–2 are shown as insufficient; the app never pads results or promises
+  false always-available matches.
+
+The hit counter in the closed Similar Defenses dropdown is recalculated
+from the selected unique historical games. The recent five games remain
+separate. Existing saved scans may still show results computed under the
+older 4–6 rule until the user performs a fresh scan.

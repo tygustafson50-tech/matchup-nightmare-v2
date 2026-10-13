@@ -425,17 +425,27 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
     // Fetch additional position-specific pregame coverage ONLY for defenses
     // that pass both published league-rank gates. This cuts ESPN requests
     // versus fetching arbitrary deep coverage for every team in NFL history.
-    const candidate=records.map(g=>{
+    const ranked=records.map(g=>{
       const profile=rankingByTeamSeason.get(g.opponentId+"|"+g.season);
       const rank=selected&&profile?strictDefenseGate(selected,profile,offer.stat):
         {ok:false};
       return {game:g,profile,rank};
     }).filter(x=>x.rank.ok).sort((a,b)=>
+      Number(b.rank.rankMatch)-Number(a.rank.rankMatch)||
       a.rank.primaryGap-b.rank.primaryGap||
-      a.rank.secondaryGap-b.rank.secondaryGap||
       a.rank.primaryYards-b.rank.primaryYards||
-      Date.parse(b.game.date)-Date.parse(a.game.date)
-    ).slice(0,NFL_MAX_CANDIDATES);
+      Date.parse(b.game.date)-Date.parse(a.game.date));
+    // Try multiple seasons if ESPN lacks an early-game context, but do not
+    // spend the entire quota on repeated matches against the same defense.
+    const candidate=[],perDefense=new Map();
+    for(const row of ranked){
+      const id=row.game.opponentId;
+      const count=perDefense.get(id)||0;
+      if(count>=2)continue;
+      perDefense.set(id,count+1);
+      candidate.push(row);
+      if(candidate.length>=NFL_MAX_CANDIDATES)break;
+    }
     onStage("Checking "+candidate.length+" NFL rank-similar defenses for "+
       role+" coverage and RB checkdown proxies…");
     const fetchContext=(teamId,year,cutoff)=>

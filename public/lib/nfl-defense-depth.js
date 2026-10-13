@@ -6,17 +6,19 @@
  */
 import {positionGroup} from "./research-v3.js";
 import {playersFromBoxscore,completedTeamGames} from "./evidence-client-v3.js";
+import {selectDistinctDefenseGames} from "./defense-selection.js";
 
 const valid=n=>typeof n==="number"&&Number.isFinite(n)&&n>=0;
 const bounded=(a,b,floor=1)=>valid(a)&&valid(b)
   ?Math.abs(a-b)/Math.max(floor,a,b):null;
 const average=arr=>arr.reduce((x,y)=>x+y,0)/arr.length;
-export const NFL_SIMILAR_MIN=4;
+export const NFL_SIMILAR_MIN=3;
 export const NFL_SIMILAR_MAX=6;
-export const NFL_PRIMARY_RANK_BAND=3;
-export const NFL_SECONDARY_RANK_BAND=8;
+export const NFL_PRIMARY_RANK_BAND=5;
+export const NFL_PRIMARY_YARDS_TOLERANCE=0.10;
+export const NFL_SECONDARY_RANK_BAND=16;
 export const NFL_COVERAGE_GAMES=4;
-export const NFL_MAX_CANDIDATES=16;
+export const NFL_MAX_CANDIDATES=24;
 
 // All QB/RB/WR/TE prop positions and ALL supported football stat markets
 // are eligible. Real ESPN stat totals and three+ prior recorded samples are
@@ -85,17 +87,26 @@ export function strictDefenseGate(target,historical,stat){
     return {ok:false,reason:"Published ESPN rushing and passing ranks unavailable."};
   const primaryGap=Math.abs(a.rank-b.rank),
     secondaryGap=Math.abs(c.rank-d.rank);
-  if(primaryGap>NFL_PRIMARY_RANK_BAND)
-    return {ok:false,reason:"Primary defensive rank differs by more than 3."};
-  if(secondaryGap>NFL_SECONDARY_RANK_BAND)
-    return {ok:false,reason:"Other defensive rank differs by more than 8."};
-  const primaryYards=bounded(a.yardsPerGame,b.yardsPerGame),
-    secondaryYards=bounded(c.yardsPerGame,d.yardsPerGame);
-  if(primaryYards===null||secondaryYards===null||
-    primaryYards>0.25||secondaryYards>0.4)
-    return {ok:false,reason:"Pass/rush yards allowed per game are not comparable."};
+  const primaryYards=bounded(a.yardsPerGame,b.yardsPerGame);
+  const secondaryYards=bounded(c.yardsPerGame,d.yardsPerGame);
+  if(primaryYards===null||secondaryYards===null)
+    return {ok:false,reason:"Real pass/rush allowed yardage is missing."};
+  // The upcoming opponent is similar when the PRIMARY defense is within
+  // five actual ESPN league ranks OR allowed yardage within ten percent.
+  const rankMatch=primaryGap<=NFL_PRIMARY_RANK_BAND;
+  const rateMatch=primaryYards<=NFL_PRIMARY_YARDS_TOLERANCE;
+  if(!rankMatch&&!rateMatch)
+    return {ok:false,reason:"Primary defense differs by over 5 ranks AND over 10% in yards allowed."};
+  // Passing and rushing cannot be wildly opposite even if primary fits;
+  // the companion dimension is no longer an overly narrow ±8 requirement.
+  if(secondaryGap>NFL_SECONDARY_RANK_BAND&&secondaryYards>0.35)
+    return {ok:false,reason:"Secondary rushing/passing defense is radically different."};
+  if(secondaryYards>0.5)
+    return {ok:false,reason:"Secondary pass/rush yards allowed differs by over 50%."};
   return {ok:true,primary,secondary,primaryGap,secondaryGap,
-    primaryYards,secondaryYards,primaryRank:a.rank,
+    primaryYards,secondaryYards,rankMatch,rateMatch,
+    matchBasis:rankMatch?"within 5 defensive ranks":"within 10% yards allowed",
+    primaryRank:a.rank,
     historicalRank:b.rank,otherRank:c.rank,historicalOtherRank:d.rank};
 }
 export function strictDefenseComparison({
@@ -129,10 +140,12 @@ export function strictDefenseComparison({
     checkdownGap=bounded(targetContext.rbReceptionsAllowed,
       historicalContext.rbReceptionsAllowed);
   }
-  const score=Math.round(
-    100-25*gate.primaryGap/3-10*gate.secondaryGap/8-
-    20*gate.primaryYards/0.25-10*gate.secondaryYards/0.4-
-    35*roleGap/0.35);
+  const score=Math.round(100-
+    27*Math.min(1,gate.primaryGap/NFL_PRIMARY_RANK_BAND)-
+    12*Math.min(1,gate.secondaryGap/NFL_SECONDARY_RANK_BAND)-
+    14*Math.min(1,gate.primaryYards/NFL_PRIMARY_YARDS_TOLERANCE)-
+    10*Math.min(1,gate.secondaryYards/0.5)-
+    37*Math.min(1,roleGap/0.35));
   const context="Strict ESPN NFL "+gate.primary+" #"+gate.historicalRank+
     " vs upcoming #"+gate.primaryRank+
     "; "+gate.secondary+" #"+gate.historicalOtherRank+
@@ -143,12 +156,14 @@ export function strictDefenseComparison({
       "RB receptions allowed "+historicalContext.rbReceptionsAllowed+
       " vs "+targetContext.rbReceptionsAllowed+
       "/game — CHECKDOWN PROXY only, not route/tracked checkdowns. ":"")+
-    "Primary rank ±3, other rank ±8, allowed-yardage and role filters. "+
+    "Primary matched "+gate.matchBasis+
+    "; verified complementary pass/rush rates and position coverage. "+
     "Season league ranks may include later games.";
   return {ok:true,score:Math.max(0,Math.min(100,score)),
     context,rankLane:gate.primary,targetRank:gate.primaryRank,
     historicalRank:gate.historicalRank,
-    rankDifference:gate.primaryGap,
+    rankDifference:gate.primaryGap,matchBasis:gate.matchBasis,
+    matchTier:gate.rankMatch?1:2,
     roleAllowed:historicalContext.roleAllowed,
     targetRoleAllowed:targetContext.roleAllowed,
     rbReceptionsAllowed:historicalContext.rbReceptionsAllowed,
@@ -157,9 +172,6 @@ export function strictDefenseComparison({
     contextGames:historicalContext.verifiedGames};
 }
 export function chooseStrictSimilarGames(rows,max=NFL_SIMILAR_MAX){
-  // Deterministic defense-only ranking; NEVER select based on OVER success.
-  return [...rows].sort((a,b)=>(b.similarity??0)-(a.similarity??0)||
-    (a.rankDifference??99)-(b.rankDifference??99)||
-    Date.parse(b.date)-Date.parse(a.date)||String(a.id).localeCompare(String(b.id))
-  ).slice(0,max);
+  // One game per genuinely distinct historical defense, highest actual fit.
+  return selectDistinctDefenseGames(rows,max);
 }
