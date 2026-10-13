@@ -135,7 +135,7 @@ test("3–6 confirmed defenses can support OVER but never more than six",()=>{
   assert.equal(all.matchupSampleTarget.min,3);
   assert.equal(all.matchupSampleTarget.max,6);
   assert.ok(all.similarGames.every(x=>x.contextGames>=3));
-  assert.match(all.defenseMatchMethod,/Strict NFL/);
+  assert.match(all.defenseMatchMethod,/±5 ranks OR ±10% allowed yards/);
 });
 test("visible NFL cards identify metric as proxy, not measured checkdowns",()=>{
   const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
