@@ -32,22 +32,24 @@ const ROLE_STAT=Object.fromEntries(["QB","RB","WR","TE"].map(role=>[
 ]));
 const laneOf=stat=>["rushingYards","rushAttempts","rushingTDs"].includes(stat)
   ?"rushing":"passing";
-function roleTotals(summary,defenseId,role,stat){
+function roleTotals(summary,defenseId,role,stat,positionsById=null){
   const teams=summary?.boxscore?.players;
   if(!Array.isArray(teams)||teams.length!==2)return null;
   const opponent=teams.find(x=>String(x.team?.id)!==String(defenseId));
   if(!opponent?.team?.id||!teams.some(x=>String(x.team?.id)===String(defenseId)))
     return null;
-  const players=playersFromBoxscore(summary,"nfl",opponent.team.id);
+  const players=playersFromBoxscore(summary,"nfl",opponent.team.id,positionsById);
   const entries=players.filter(x=>positionGroup("nfl",x.position)===role);
   if(!entries.length)return null; // RB with no row must not become invented 0.
   if(!entries.every(x=>valid(x.stats?.[stat])))return null;
   return entries.reduce((sum,p)=>sum+p.stats[stat],0);
 }
-export function readDefenseGameContext(summary,defenseId,role,stat){
-  const value=roleTotals(summary,defenseId,role,stat);
-  const rbCatches=roleTotals(summary,defenseId,"RB","receptions");
-  const rbTargets=roleTotals(summary,defenseId,"RB","targets");
+export function readDefenseGameContext(
+  summary,defenseId,role,stat,positionsById=null
+){
+  const value=roleTotals(summary,defenseId,role,stat,positionsById);
+  const rbCatches=roleTotals(summary,defenseId,"RB","receptions",positionsById);
+  const rbTargets=roleTotals(summary,defenseId,"RB","targets",positionsById);
   return {value,rbCatches,rbTargets};
 }
 /**
@@ -55,15 +57,22 @@ export function readDefenseGameContext(summary,defenseId,role,stat){
  * schedule/summary methods. Every metric measures completed PRIOR games.
  */
 export async function buildDefenseContext({
-  teamId,season,cutoff,role,stat,schedule,summary,maxGames=NFL_COVERAGE_GAMES
+  teamId,season,cutoff,role,stat,schedule,summary,
+  resolvePositions=null,maxGames=NFL_COVERAGE_GAMES
 }){
   const sample=completedTeamGames(await schedule(teamId,season),teamId,
     cutoff,season).slice(0,maxGames);
-  const responses=await Promise.allSettled(sample.map(g=>summary(g.id)));
+  const responses=await Promise.allSettled(sample.map(async g=>{
+    const box=await summary(g.id);
+    const positionsById=resolvePositions
+      ?await resolvePositions(box,teamId,season)
+      :null;
+    return readDefenseGameContext(box,teamId,role,stat,positionsById);
+  }));
   const context=[];
   for(const result of responses){
     if(result.status!=="fulfilled")continue;
-    context.push(readDefenseGameContext(result.value,teamId,role,stat));
+    context.push(result.value);
   }
   const values=context.map(x=>x.value).filter(valid);
   const rbCatches=context.map(x=>x.rbCatches).filter(valid);
