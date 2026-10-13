@@ -50,8 +50,8 @@ function filtered(){
   return cards.filter(c=>(m==="all"||c.market===m)&&
     (t==="all"||c.team===t)&&(p==="all"||c.position===p));
 }
-// Show the full real per-game stat by default, rather than making the
-// similar-defense evidence invisible inside collapsed <details>.
+// Keep the complete original game-by-game evidence inside an accessible
+// collapsed section; its summary still shows the verified OVER hit count.
 function historyBlock(label,games,line,similar=false,market="Recorded stat"){
   return renderVerifiedHistory({label,games,line,similar,market,
     formatDate:prettyDate});
@@ -114,7 +114,7 @@ function renderCard(c){
       safe(c.why)+'</p>'+
     historyBlock("Similar Defenses — Last 3 Seasons",c.similarGames,
       c.line,true,c.market)+
-    historyBlock("Recent Games — Current Season",c.recentGames,
+    historyBlock("Recent Matchups — Last 5 Games",c.recentGames,
       c.line,false,c.market)+
     (c.limitations.length?'<p class="sample-warning">'+c.limitations.map(safe).join(" · ")+'</p>':'')+
     '<p class="season-evidence">Injury designations shown above come from the ESPN roster at scan time, when available. No listed injury is not confirmation of health or game availability. Always recheck official game-day inactive lists, lineups, and late injury updates.</p>'+
