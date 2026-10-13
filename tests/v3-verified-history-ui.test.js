@@ -35,7 +35,10 @@ test("verified receiving-yards games expose the actual yards for EACH verified m
   assert.match(html,/>UNDER<\/strong>/);
   assert.match(html,/>PUSH<\/strong>/);
   assert.match(html,/historical #27 · upcoming #28/);
-  assert.doesNotMatch(html,/<details\b/);
+  assert.match(html,/<details class="verified-game-history/);
+  assert.match(html,/<summary class="verified-history-toggle">/);
+  assert.match(html,/<strong class="verified-history-hits"[^>]*>1\/3<\/strong>/);
+  assert.doesNotMatch(html,/<details[^>]*\sopen(?:\s|=|>)/);
   assert.equal((html.match(/class="verified-actual-number"/g)||[]).length,3);
 });
 
@@ -68,13 +71,14 @@ test("escaped player opponents and market fields cannot inject unsafe markup",()
   assert.match(html,/&lt;img src=x/);
 });
 
-test("both recent and three-season similar histories are visible by default and prioritize similar evidence",()=>{
+test("recent and similar histories are collapsed by default and still prioritize similar evidence",()=>{
   const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
   assert.match(app,/import \{renderVerifiedHistory\}/);
   assert.match(app,/market=c.market|c\.line,true,c\.market/);
   assert.doesNotMatch(app,/historyBlock\("Similar Defenses[^\n]+,true\)\+/);
   assert.ok(app.indexOf('historyBlock("Similar Defenses')<
-    app.indexOf('historyBlock("Recent Games'));
+    app.indexOf('historyBlock("Recent Matchups'));
+  assert.match(app,/historyBlock\("Recent Matchups — Last 5 Games"/);
 });
 
 test("ESPN recorded results pass through the real rank-based research and remain numeric",()=>{
@@ -112,4 +116,65 @@ test("ESPN recorded results pass through the real rank-based research and remain
   assert.match(output,/32/);
   assert.match(output,/49.5/);
   assert.match(output,/3 verified games/);
+});
+
+test("collapsed recent matchup header shows 4/5 exact real OVER hits",()=>{
+  const five=[10,20,30,40,0].map((actual,i)=>({
+    id:"r"+i,date:"2026-10-0"+(i+1)+"T18:00:00Z",
+    opponent:"Verified Team "+i,actual
+  }));
+  const html=renderVerifiedHistory({label:"Recent Matchups — Last 5 Games",
+    games:five,line:5.5,market:"Receptions",formatDate:dateFmt});
+  assert.match(html,/<summary class="verified-history-toggle">/);
+  assert.match(html,/<strong class="verified-history-hits"[^>]*>4\/5<\/strong>/);
+  assert.match(html,/aria-label="4 OVER out of 5 verified games"/);
+  assert.match(html,/Recent Matchups — Last 5 Games/);
+  assert.doesNotMatch(html,/<details[^>]*\sopen(?:\s|=|>)/);
+  assert.equal((html.match(/class="verified-actual-number"/g)||[]).length,5);
+});
+test("collapsed similar defenses header shows 4/4 from four actual historical games",()=>{
+  const four=[71,62,89,75].map((actual,i)=>({
+    id:"s"+i,date:"2025-10-0"+(i+1)+"T18:00:00Z",
+    opponent:"Rank-matched Defense "+i,actual,
+    similarity:92-i
+  }));
+  const html=renderVerifiedHistory({label:"Similar Defenses — Last 3 Seasons",
+    games:four,line:54.5,market:"Receiving yards",similar:true,
+    formatDate:dateFmt});
+  assert.match(html,/<strong class="verified-history-hits"[^>]*>4\/4<\/strong>/);
+  assert.match(html,/4 verified games/);
+  assert.match(html,/Similar Defenses — Last 3 Seasons/);
+  assert.equal((html.match(/class="verified-actual-number"/g)||[]).length,4);
+});
+test("PUSH is not OVER; invalid or missing stats do not inflate closed hit fractions",()=>{
+  const html=renderVerifiedHistory({label:"Recent Matchups",
+    games:[
+      {...games[0],actual:9},
+      {...games[1],actual:5},
+      {...games[2],actual:1},
+      {...games[0],id:"bad",actual:null},
+      {...games[1],id:"bad2",actual:NaN}
+    ],line:5,market:"Points"});
+  assert.match(html,/>1\/3<\/strong>/);
+  assert.match(html,/aria-label="1 OVER out of 3 verified games"/);
+  assert.equal((html.match(/class="verified-actual-number"/g)||[]).length,3);
+});
+test("empty section does not imply 0/0 hit rate or a verified OVER",()=>{
+  const html=renderVerifiedHistory({label:"Similar Defenses",
+    games:[],line:4.5,market:"Receptions",similar:true});
+  assert.match(html,/<strong class="verified-history-hits"[^>]*>—<\/strong>/);
+  assert.match(html,/0 verified games/);
+  assert.doesNotMatch(html,/>0\/0</);
+});
+test("native closed dropdowns are keyboard-accessible without extra JS",()=>{
+  const html=renderVerifiedHistory({label:"Similar Defenses",games,
+    line:49.5,market:"Receiving yards",similar:true});
+  assert.equal((html.match(/<details\b/g)||[]).length,1);
+  assert.equal((html.match(/<summary\b/g)||[]).length,1);
+  assert.equal((html.match(/<\/summary>/g)||[]).length,1);
+  assert.equal((html.match(/<\/details>/g)||[]).length,1);
+  const stylesheet=readFileSync(new URL("../public/styles.css",import.meta.url),"utf8");
+  assert.match(stylesheet,/summary:focus-visible/);
+  assert.match(stylesheet,/verified-history-chevron/);
+  assert.match(stylesheet,/\.verified-game-history\[open\]/);
 });
