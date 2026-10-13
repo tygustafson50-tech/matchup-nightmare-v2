@@ -127,7 +127,7 @@ function drawGames(){
     '<small>'+safe(kickoff(g.date))+" · "+safe(g.status)+'</small></div>'+
     (g.home?.logo?'<img alt="" src="'+safe(g.home.logo)+'">':"")+
     '<b>'+(selected.has(String(g.id))?"✓":"+")+'</b></button>').join("")
-    :'<div class="empty">No scheduled games returned. Try another date.</div>';
+    :'<div class="empty">No upcoming games available on this date. Select a future date to scan pregame props.</div>';
   el("games").querySelectorAll("button").forEach(btn=>{
     btn.onclick=()=>{
       const id=btn.dataset.id;
@@ -149,8 +149,12 @@ async function loadGames(){
     const data=await response.json();
     if(!response.ok||!Array.isArray(data.games))throw Error(data.error||"Schedule unavailable");
     if(own!==scanId)return;
-    games=data.games;
-    el("scheduleStatus").textContent=games.length+" games · "+(data.source||"ESPN");
+    // Do not offer games already underway: active props may legitimately
+    // disappear as soon as the game begins.
+    games=data.games.filter(g=>Number.isFinite(Date.parse(g.date))&&
+      Date.parse(g.date)>Date.now()&&
+      !/final|in progress|halftime|postponed|cancelled/i.test(g.status||""));
+    el("scheduleStatus").textContent=games.length+" upcoming games · "+(data.source||"ESPN");
     status("Choose up to 16 games. PropLine requires a configured API key before scanning real sportsbook lines.");
   }catch(error){
     if(own!==scanId)return;
@@ -232,6 +236,10 @@ function fixtureMatches(offer,game){
 async function scan(){
   const chosen=games.filter(g=>selected.has(String(g.id)));
   if(!chosen.length){status("Select at least one game.");return;}
+  if(chosen.some(g=>Date.parse(g.date)<=Date.now())){
+    status("The selected game has already started. Choose an upcoming game for pregame OVER lines.");
+    return;
+  }
   const own=++scanId,day=el("date").value,league=el("league").value,
     currentSport=sport,button=el("scanSelected");
   button.disabled=true;button.textContent="Scanning verified evidence…";
@@ -325,11 +333,14 @@ async function scan(){
     // alternative quotes or sportsbooks PropLine returned for that market.
     for(const group of grouped){
       if(own!==scanId)return;
-      const offer=group.offers.find(x=>x.espnPlayerId)||group.offers[0];
+      // Conflicting provider IDs alone should not discard all books. Verify
+      // the name against BOTH official rosters, then retain only quotes whose
+      // ESPN ID agrees with that single official athlete.
+      const selectedOffer=group.offers.find(x=>x.espnPlayerId)||group.offers[0];
+      const offer=group.identityConflict?
+        {...selectedOffer,espnPlayerId:null}:selectedOffer;
       const game=group.game;
       try{
-        if(group.identityConflict)throw Error(
-          "Conflicting provider athlete IDs for the same player/stat.");
         const input=await loadVerifiedEvidence({
           client,offer,game,league,
           onStage:stage=>{if(own===scanId)status(stage);}
