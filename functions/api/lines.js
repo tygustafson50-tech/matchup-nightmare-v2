@@ -83,19 +83,15 @@ const YES_ONLY_MARKETS=new Set([
   "anytime_goal_scorer","player_assists","player_2plus_assists",
   "player_tackles","2plus_goals",...Object.keys(MINIMUM_MARKET)
 ]);
-// Read real player props from several primary sportsbook, DFS and exchange
-// boards. PropLine supplies the original source on each priced selection.
-// Explicit selection avoids loading hundreds of unused global game-line feeds.
-const BOOKS=new Set([
-  "draftkings","fanduel","fanatics","hardrock","betmgm","betrivers",
-  "bovada","pinnacle","unibet","thescorebet","betonlineag","lowvig",
-  "betus","prizepicks","underdog","novig","prophetx","kalshi",
-  "polymarket_us"
+// PropLine documents an unfiltered per-event prop request. Keep every
+// identifiable book returned by the connected provider, not just a whitelist
+// that excludes new or previously unsupported books.
+const validBook=key=>typeof key==="string"&&/^[a-z][a-z0-9_]{2,39}$/.test(key);
+// Pick'em legs are actual posted thresholds but their +100 is not an
+// individual sportsbook price. Preserve the threshold, hide synthetic odds.
+const DFS_SYNTHETIC_PRICE=new Set([
+  "prizepicks","underdog","sleeper","dabble","parlayplay"
 ]);
-// PrizePicks publishes synthetic even-money prices: retain the real line,
-// but never display or rank its +100 as genuine single-leg sportsbook odds.
-const DFS_SYNTHETIC_PRICE=new Set(["prizepicks"]);
-const BOOK_QUERY=[...BOOKS].join(",");
 // Only validated selected ESPN fixtures may trigger paid API calls.
 const teamNorm=x=>String(x||"").normalize("NFKD").toLowerCase()
   .replace(/[\u0300-\u036f]/g,"").replace(/\bsaint\b/g,"st")
@@ -195,7 +191,7 @@ const linesFrom=(event,{sport,date,now,diagnostics=null}={})=>{
     return [];
   const offers=[],seen=new Set();
   for(const bookmaker of event.bookmakers){
-    if(!BOOKS.has(bookmaker?.key)||bookmaker?.pregame_only===true &&
+    if(!validBook(bookmaker?.key)||bookmaker?.pregame_only===true &&
       Date.parse(event.commence_time)<=now)continue;
     if(diagnostics)diagnostics.bookmakerBoards++;
     for(const market of bookmaker.markets||[]){
@@ -319,7 +315,7 @@ export async function onRequestGet({request,env={}}){
     const eventOdds=await Promise.allSettled(candidates.map(e=>
       api("sports/"+encodeURIComponent(matched.key)+"/events/"+
         encodeURIComponent(String(e.id))+"/odds",env.PROPLINE_API_KEY,{
-          markets:MARKETS[sport].join(","),bookmakers:BOOK_QUERY,
+          markets:MARKETS[sport].join(","),
           includeBookIds:"true"
         })));
     let quota=eventList.quota;
