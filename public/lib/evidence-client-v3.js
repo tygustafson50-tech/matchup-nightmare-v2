@@ -312,13 +312,30 @@ function flattenRoster(payload){
   const uniq=new Map(out.map(x=>[x.id,x]));
   return [...uniq.values()];
 }
+// Provider names can use initials or omit generational suffixes. Only
+// use an unambiguous exact/initial alias on an OFFICIAL fixture roster;
+// a sportsbook nickname alone never verifies player identity.
+function athleteNameMatch(quoted,official){
+  const components=value=>String(value||"").normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g,"").toLowerCase()
+    .replace(/\s+\([a-z]{2,4}\)\s*$/i,"")
+    .replace(/[^a-z0-9-\s]/g," ").replace(/\b(jr|sr|ii|iii|iv)\b/g,"")
+    .trim().split(/\s+/).filter(Boolean);
+  const a=components(quoted),b=components(official);
+  if(!a.length||!b.length)return false;
+  if(a.join(" ")===b.join(" "))return true;
+  // 'J. Smith-Njigba' -> 'Jaxon Smith-Njigba' but never guess
+  // different full first names or distinct surnames.
+  return a.length>=2&&b.length>=2&&a[0].length===1&&
+    a[0]===b[0][0]&&a.slice(1).join(" ")===b.slice(1).join(" ");
+}
 async function findVerifiedAthlete(client,offer,season,teamId,sport,league){
   const params={sport,kind:"roster",teamId:String(teamId),season:String(season)};
   if(sport==="soccer")params.league=league;
   const roster=flattenRoster(await client.call(params));
   const matches=roster.filter(a=>{
     const sameIdentity=offer.espnPlayerId?
-      String(offer.espnPlayerId)===a.id:normalize(a.name)===normalize(offer.player);
+      String(offer.espnPlayerId)===a.id:athleteNameMatch(offer.player,a.name);
     const role=positionGroup(sport,a.position);
     return sameIdentity && role && (!offer.position ||
       role===positionGroup(sport,offer.position));
