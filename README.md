@@ -25,7 +25,7 @@ For supported games, existing ESPN public sources are used to confirm the athlet
 
 Recent-game evidence uses the five latest verified current-season player game results.
 
-**Simplified NFL similar-defense matchups (new):** For every NFL stat, look up the upcoming opponent's ESPN **rushing defense rank** (rush yards, carries, rushing TDs) or **passing defense rank** (passing yards/completions/attempts/TDs, targets, receptions, receiving yards/TDs). ESPN's official team /statistics?season=YEAR returns reported opponent-statistic ranks in `results.opponent`, including `rushingYards` and `netPassingYards`. For each of the player's real recorded games in **the current season and the previous two seasons**, look up that historical opponent's own season rushing or passing defensive rank. A game counts as a similar matchup only when that rank is **within ±3 of the upcoming opponent's reported defensive rank**. E.g. a #28 passing defense matches ranks #25–#31 (not #24 or #32). For each matching game, show the actual year, opponent, result against the **current DraftKings line**, and both verified defensive ranks.
+**NFL verified defensive league rankings (baseline):** For every NFL stat, look up the upcoming opponent's ESPN **rushing defense rank** (rush yards, carries, rushing TDs) or **passing defense rank** (passing yards/completions/attempts/TDs, targets, receptions, receiving yards/TDs). ESPN's official team /statistics?season=YEAR returns reported opponent-statistic ranks in `results.opponent`, including `rushingYards` and `netPassingYards`. For each of the player's real recorded games in **the current season and the previous two seasons**, look up that historical opponent's own season rushing or passing defensive rank. A game counts as a similar matchup only when that rank is **within ±3 of the upcoming opponent's reported defensive rank**. E.g. a #28 passing defense matches ranks #25–#31 (not #24 or #32). For each matching game, show the actual year, opponent, result against the **current DraftKings line**, and both verified defensive ranks.
 
 These ranks are **ESPN opponent team statistics**, with #1 indicating lower net passing/rushing yards allowed by ESPN's season aggregate ranking. **Historical season rankings may include games played after the individual historical matchup**; this is explicitly disclosed as a limitation and the app must not call those historical numbers pregame rankings. Missing ranks do not count as comparable games or a 100% history. This simpler rank model currently applies to **NFL only**. NBA, college football, college basketball, MLB, and soccer retain their existing sport-specific defensive modeling.
 
@@ -131,3 +131,53 @@ than invent a line or imply an API key error. PropLine lists Bovada as
 supporting all 57 sports including NCAA basketball; switching the sole
 sportsbook to Bovada would require an explicit product choice.
 Off-season sports similarly have no new scheduled games/props on some dates.
+
+## Strict NFL similar defenses — 4–6 game evidence goal
+
+For a **fresh NFL scan**, the old single-rank historical matching is upgraded
+to a more selective, stat/position-specific comparison:
+
+- **Passing and rushing together:** For passing/receiving markets, the
+  upcoming opponent's verified ESPN net passing defensive rank must be
+  within **three places** of the historical defense, and the rushing rank
+  within **eight**. For rushing markets the primary and secondary ranks
+  are reversed. Published yards allowed per game also must agree to within
+  25% for the primary lane and 40% for the secondary lane.
+- **Player role and actual opponent allowances:** Independently
+  verify at least **three PRIOR completed box scores** for the upcoming
+  and the historical defenses against the applicable QB/RB/WR/TE player
+  group and chosen statistic. The relevant allowed rate per game must be
+  within **35%** of the upcoming opponent's allowed rate. This compares
+  real passing/rushing production, receiving totals or receptions
+  surrendered to the actual position; it is not inferred from a generic
+  passing-defense rank.
+- **Short passing/checkdown context:** For *RB receiving markets*, the
+  defensive record must also contain three prior opponent box scores with
+  RB catches, and those RB receptions allowed averages must be within
+  **35%**. For QB/WR/TE markets we display the RB-catch rate when verifiable
+  as additional context. This **is only a proxy** for how favorable the
+  defense is to passes completed to RBs. ESPN's public box scores do not
+  identify which catches were genuine checkdowns or chart the depth of
+  individual pass routes. Therefore the app never calls it an actual
+  checkdown count or routes defended.
+
+Only verified game results from the current and prior two seasons are used.
+The scanner ranks qualifying historical games **only by defense fit, never
+by whether the player hit the prop**, then displays up to the six closest
+matches. It **requires at least four matches** for the "OVER supported"
+designation and continues using the five most recent current-season games
+separately. If fewer than four defensively similar games pass the strict
+verification gates, the real smaller sample is shown and the card is marked
+**insufficient evidence**, not forced into 4–6 or padded with weaker defenses.
+No number of passing/rushing/checkdown historical hits is a guaranteed
+future probability.
+
+**Caveat:** The ESPN published team passing/rushing rankings are
+season-to-date/current and full-season/historical aggregates. Historical
+final-season ranks may incorporate games occurring after the historical
+matchup. The **position-allowed** sample instead uses only games completed
+before the matchup and labels its actual sample coverage. NFL strict
+analysis can require significantly more public ESPN requests than the old
+rank-only comparison, but does not use extra PropLine lines. Other sports
+retain their existing models. Previously saved local scans remain marked
+as stale until refreshed.
