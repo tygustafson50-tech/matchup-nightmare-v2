@@ -57,7 +57,10 @@ async function call({odds=[event()],events=null,sports=null,secret=env,
     }
     assert.match(parsed.pathname,/\/events\/[^/]+\/odds$/);
     assert.equal(parsed.searchParams.get("includeBookIds"),"true");
-    assert.equal(parsed.searchParams.get("bookmakers"),"draftkings");
+    const enabled=(parsed.searchParams.get("bookmakers")||"").split(",");
+    for(const book of ["draftkings","fanduel","bovada","fanatics",
+      "hardrock","prizepicks"])
+      assert.ok(enabled.includes(book),"Provider missing: "+book);
     assert.ok(parsed.searchParams.get("markets"));
     if(failStatus)
       return new Response(JSON.stringify({error:"quota"}),{
@@ -85,12 +88,12 @@ test("the official per-event PLAYER PROPS endpoint is used instead of bulk game 
   assert.equal(response.status,200);
   assert.equal(body.status,"connected");
   assert.equal(body.source,"PropLine");
-  assert.equal(body.sportsbook,"DraftKings");
+  assert.equal(body.sportsbook,"Multiple verified sources");
   assert.equal(body.dailyRequestsRemaining,995);
   assert.equal(hits.length,3);
   assert.match(hits[1],/\/events$/);
   assert.match(hits[2],/\/events\/10\/odds/);
-  assert.ok(hits[2].includes("bookmakers=draftkings"));
+  assert.ok(new URL(hits[2]).searchParams.get("bookmakers").includes("fanduel"));
   assert.equal(body.eventsFound,1);
   assert.equal(body.eventsChecked,1);
   assert.equal(body.projections.length,1);
@@ -105,12 +108,14 @@ test("the official per-event PLAYER PROPS endpoint is used instead of bulk game 
   assert.equal(p.team,null);
   assert.doesNotMatch(JSON.stringify(body),/my-propline-secret/);
 });
-test("DraftKings only: exclude FanDuel even on a valid selected match",async()=>{
+test("the same player/stat can be quoted by DraftKings and FanDuel for comparison",async()=>{
   const dk=event(),fd=event({point:2.5,book:"fanduel"});
   const {response}=await call({odds:[{...dk,bookmakers:[...fd.bookmakers,...dk.bookmakers]}]});
   const body=await response.json();
-  assert.equal(body.projections.length,1);
-  assert.equal(body.projections[0].bookKey,"draftkings");
+  assert.equal(body.projections.length,2);
+  assert.deepEqual(new Set(body.projections.map(x=>x.bookKey)),
+    new Set(["draftkings","fanduel"]));
+  assert.ok(body.projections.every(x=>x.source==="PropLine"));
 });
 test("selected fixtures: never spend free API requests on games not selected",async()=>{
   const a=event({id:"10"});
@@ -162,7 +167,7 @@ test("no DraftKings player prices (NCAAB may be unsupported by the book)",async(
   const b=await response.json();
   assert.equal(b.eventsChecked,1);
   assert.deepEqual(b.projections,[]);
-  assert.match(b.notes.join(" "),/DraftKings/);
+  assert.match(b.notes.join(" "),/provider|sources|book/i);
 });
 test("sport key mismatch never routes football odds to a basketball league",async()=>{
   const {response}=await call({sports:[{key:"football_nfl",title:"NFL"}],
