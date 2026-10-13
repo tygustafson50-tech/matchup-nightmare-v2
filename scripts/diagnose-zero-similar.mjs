@@ -22,6 +22,18 @@ for(const [name,id,year] of teams){
   const cutoff=(year===2026?"2026-10-20T00:00:00Z":
     year+"-12-24T00:00:00Z");
   const qualified=completedTeamGames(schedule,id,cutoff,year);
+  console.log("RAW EVENT "+JSON.stringify({name,keys:Object.keys(ev[0]||{}),
+    event:ev[0]&&{id:ev[0].id,status:ev[0].status,
+    competitions:ev[0].competitions?.[0]&&{
+      keys:Object.keys(ev[0].competitions[0]),status:ev[0].competitions[0].status,
+      competitors:ev[0].competitions[0].competitors?.map(x=>({
+        keys:Object.keys(x),winner:x.winner,score:x.score,
+        teamId:x.team?.id
+      }))}},
+    eventLast:ev[ev.length-1]&&{id:ev[ev.length-1].id,
+      status:ev[ev.length-1].status,
+      compStatus:ev[ev.length-1].competitions?.[0]?.status}
+   }).slice(0,3900));
   const ranks=parseFootballDefenseRanks(stats,{season:year,teamId:id});
   console.log("TEAM "+JSON.stringify({name,year,scheduleKeys:Object.keys(schedule),
     events:ev.length,firstEvent:ev[0]&&{id:ev[0].id,date:ev[0].date,
