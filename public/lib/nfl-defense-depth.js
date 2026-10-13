@@ -126,9 +126,34 @@ export function strictDefenseComparison({
   if(!ROLE_STAT[role]?.[stat])return {
     ok:false,reason:"Position-specific ESPN stat unavailable for this role."
   };
+  // Historical ESPN team rosters sometimes contain *zero* athlete
+  // positions (confirmed against 2025 game schedules). A missing position
+  // history cannot invalidate an independently verified ESPN rank/rate
+  // comparison. Label these as RANK-ONLY, never as verified WR/RB coverage.
   if(!targetContext||!historicalContext||
-    targetContext.verifiedGames<3||historicalContext.verifiedGames<3)
-    return {ok:false,reason:"Fewer than 3 pregame boxscores with the required position/stat totals."};
+    targetContext.verifiedGames<3||historicalContext.verifiedGames<3){
+    const score=Math.max(0,Math.round(46-
+      14*Math.min(1,gate.primaryGap/NFL_PRIMARY_RANK_BAND)-
+      10*Math.min(1,gate.primaryYards/NFL_PRIMARY_YARDS_TOLERANCE)-
+      7*Math.min(1,gate.secondaryYards/0.5)));
+    return {ok:true,score,
+      matchBasis:gate.matchBasis+" (rank/rate only — position sample missing)",
+      matchTier:gate.rankMatch?3:4,
+      rankLane:gate.primary,targetRank:gate.primaryRank,
+      historicalRank:gate.historicalRank,rankDifference:gate.primaryGap,
+      contextGames:historicalContext?.verifiedGames||0,
+      roleAllowed:null,targetRoleAllowed:null,
+      rbReceptionsAllowed:null,targetRbReceptionsAllowed:null,
+      checkdownProxyVerified:false,positionCoverageVerified:false,
+      context:"ESPN "+gate.primary+" defense #"+gate.historicalRank+
+        " vs upcoming #"+gate.primaryRank+
+        "; ESPN allowed yards "+historical[gate.primary].yardsPerGame+
+        " vs "+target[gate.primary].yardsPerGame+"/game; "+
+        "matched "+gate.matchBasis+". Verified league ranks and yards only."+
+        " Historical player stat is real ESPN boxscore evidence; position coverage"+
+        " and checkdown rates NOT VERIFIED for this comparison."+
+        " Historical full-season rank may include later games."};
+  }
   const roleGap=bounded(targetContext.roleAllowed,historicalContext.roleAllowed);
   if(roleGap===null||roleGap>0.35)
     return {ok:false,reason:"Allowed "+role+" "+stat+" rate differs by over 35%."};
@@ -178,6 +203,7 @@ export function strictDefenseComparison({
     rbReceptionsAllowed:historicalContext.rbReceptionsAllowed,
     targetRbReceptionsAllowed:targetContext.rbReceptionsAllowed,
     checkdownProxyVerified:checkdownGap!==null,
+    positionCoverageVerified:true,
     contextGames:historicalContext.verifiedGames};
 }
 export function chooseStrictSimilarGames(rows,max=NFL_SIMILAR_MAX){
