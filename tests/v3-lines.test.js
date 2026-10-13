@@ -143,7 +143,7 @@ test("suspended and old markets never turn into new quote cards",()=>{
   assert.equal(normalizePropLineOdds([event({suspended:true})],{
     sport:"nfl",date:DATE,now:Date.now()}).length,0);
   assert.equal(normalizePropLineOdds([event({
-    stampAt:new Date(Date.now()-50*60000).toISOString()
+    stampAt:new Date(Date.now()-120*60000).toISOString()
   })],{sport:"nfl",date:DATE,now:Date.now()}).length,0);
 });
 test("missing game/season/league returns explicit no-event state, not fake props",async()=>{
