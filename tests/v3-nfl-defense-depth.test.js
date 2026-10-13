@@ -40,8 +40,13 @@ test("missing or different WR position stats never pad strict matches",()=>{
   const target=defense(1,2026),historical=defense(2,2025,27,13,224,108);
   const common={target,historical,role:"WR",stat:"receivingYards",targetContext:ctx(160)};
   assert.equal(strictDefenseComparison({...common,historicalContext:ctx(260)}).ok,false);
-  assert.equal(strictDefenseComparison({...common,
-    historicalContext:{...ctx(175),verifiedGames:2}}).ok,false);
+  const thin=strictDefenseComparison({...common,
+    historicalContext:{...ctx(175),verifiedGames:2}});
+  // Two old-season boxscores are insufficient for verified WR coverage,
+  // but the actual published defensive ranks remain usable (clearly labeled).
+  assert.equal(thin.ok,true);
+  assert.equal(thin.positionCoverageVerified,false);
+  assert.match(thin.context,/position coverage.*NOT VERIFIED/);
 });
 const summary={boxscore:{players:[
   {team:{id:"9"},statistics:[{name:"receiving",labels:["REC","YDS","TGTS"],
