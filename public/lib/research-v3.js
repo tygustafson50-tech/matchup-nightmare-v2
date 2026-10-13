@@ -239,7 +239,8 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
         targetRoleAllowed:test.targetRoleAllowed,
         rbReceptionsAllowed:test.rbReceptionsAllowed,
         targetRbReceptionsAllowed:test.targetRbReceptionsAllowed,
-        checkdownProxyVerified:test.checkdownProxyVerified
+        checkdownProxyVerified:test.checkdownProxyVerified,
+        positionCoverageVerified:test.positionCoverageVerified===true
       }:{})
       ,...(useDeepSport?{
         relativeDifference:test.relativeDifference,
@@ -258,6 +259,8 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
     :useDeepSport?chooseDeepGames(comparable,STRICT_MAX_MATCHES):comparable;
   const recentRate=hitSummary(last5,offer.line);
   const matchedRate=hitSummary(selectedComparable,offer.line);
+  const rankOnlyMatches=useStrictNfl?selectedComparable.filter(x=>
+    x.positionCoverageVerified!==true).length:0;
   const comparableMinimum=useStrictNfl?NFL_SIMILAR_MIN:
     useDeepSport?STRICT_MIN_MATCHES:3;
   const enough=recentRate.tracked>=3 &&
@@ -281,6 +284,7 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
     matchupSampleTarget:useStrictNfl?{min:NFL_SIMILAR_MIN,max:NFL_SIMILAR_MAX}:
       useDeepSport?{min:STRICT_MIN_MATCHES,max:STRICT_MAX_MATCHES}:null,
     similarDefenseCount:selectedComparable.length,
+    rankOnlyMatches,
     upcomingRoleAllowed:useStrictNfl?upcomingContext?.roleAllowed:
       useDeepSport?upcomingDefense?.metrics?.allowed:null,
     upcomingUsageAllowed:useDeepSport?upcomingDefense?.metrics?.volume:null,
@@ -294,6 +298,10 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
     evidenceSufficient:enough,recommendation:favorable?"OVER":null,
     confidenceLabel:favorable?"Supporting historical evidence":"Insufficient or mixed historical evidence",
     limitations:[...(recentRate.tracked<5?["Fewer than five verified current-season games."]:[]),
+      ...(rankOnlyMatches?[
+        rankOnlyMatches+" of "+selectedComparable.length+
+        " defenses use verified ESPN rank/yardage comparisons only: historical position-coverage samples were unavailable."
+      ]:[]),
       ...((useStrictNfl||useDeepSport)&&matchedRate.tracked<comparableMinimum?
         ["Only "+matchedRate.tracked+" verified distinct similar defenses; "+
           comparableMinimum+" needed for a supported OVER. We do not fabricate or repeat defenses."]:
