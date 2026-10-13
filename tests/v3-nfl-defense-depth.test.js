@@ -18,10 +18,10 @@ const ctx=(roleAllowed,rbReceptionsAllowed=4)=>({
 test("NFL rank gates require BOTH passing and running rankings and yardage",()=>{
   const target=defense(1,2026,28,10),good=defense(2,2025,26,16,238,117);
   assert.equal(strictDefenseGate(target,good,"receivingYards").ok,true);
-  assert.equal(strictDefenseGate(target,defense(3,2025,24,14),"receivingYards").ok,false);
-  assert.equal(strictDefenseGate(target,defense(4,2025,27,22),"receivingYards").ok,false);
-  assert.equal(strictDefenseGate(target,defense(5,2025,27,12,400,100),"receivingYards").ok,false);
-  assert.equal(NFL_PRIMARY_RANK_BAND,3);
+  assert.equal(strictDefenseGate(target,defense(3,2025,22,14,280,105),"receivingYards").ok,false);
+  assert.equal(strictDefenseGate(target,defense(4,2025,27,31,220,180),"receivingYards").ok,false);
+  assert.equal(strictDefenseGate(target,defense(5,2025,20,12,400,100),"receivingYards").ok,false);
+  assert.equal(NFL_PRIMARY_RANK_BAND,5);
 });
 test("RB receptions against defense are a checkdown PROXY, never actual tracked checkdowns",()=>{
   const target=defense(1,2026),historical=defense(2,2025,27,13,224,108);
@@ -90,7 +90,7 @@ test("select six best defensive fits without looking at prop OVERS",()=>{
   }));
   assert.deepEqual(chooseStrictSimilarGames(rows).map(x=>x.id),
     ["0","1","2","3","4","5"]);
-  assert.equal(NFL_SIMILAR_MIN,4);
+  assert.equal(NFL_SIMILAR_MIN,3);
   assert.equal(NFL_SIMILAR_MAX,6);
 });
 const offer={id:"real-quote",source:"PropLine",sport:"nfl",status:"active",
@@ -115,22 +115,22 @@ function analyzed(matches){
     upcomingDefense:up,upcomingContext:target,defensiveProfiles:profiles,
     matchupModel:"nfl-depth",now:"2026-10-12T20:00:00Z"});
 }
-test("0–3 matches never qualify for OVER or an invented 100% sample",()=>{
-  for(const count of [0,1,2,3]){
+test("0–2 matches never qualify for OVER or an invented 100% sample",()=>{
+  for(const count of [0,1,2]){
     const result=analyzed(count);
     assert.equal(result.similar.tracked,count);
     assert.equal(result.evidenceSufficient,false);
     assert.equal(result.recommendation,null);
-    assert.match(result.limitations.join(" "),/No OVER recommendation/);
+    assert.match(result.limitations.join(" "),/needed for a supported OVER/);
   }
 });
-test("4–6 confirmed matches can support OVER but never more than six",()=>{
-  const four=analyzed(4);
-  assert.equal(four.similar.tracked,4);
-  assert.equal(four.recommendation,"OVER");
+test("3–6 confirmed defenses can support OVER but never more than six",()=>{
+  const three=analyzed(3);
+  assert.equal(three.similar.tracked,3);
+  assert.equal(three.recommendation,"OVER");
   const all=analyzed(8);
   assert.equal(all.similar.tracked,6);
-  assert.equal(all.matchupSampleTarget.min,4);
+  assert.equal(all.matchupSampleTarget.min,3);
   assert.equal(all.matchupSampleTarget.max,6);
   assert.ok(all.similarGames.every(x=>x.contextGames>=3));
   assert.match(all.defenseMatchMethod,/Strict NFL/);
@@ -139,5 +139,5 @@ test("visible NFL cards identify metric as proxy, not measured checkdowns",()=>{
   const app=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
   assert.match(app,/upcomingContext:input\.upcomingContext/);
   assert.match(app,/checkdown proxy, not tracked checkdown throws/);
-  assert.match(app,/Strict verified matchups \(4–6 required\)/);
+  assert.match(app,/Distinct similar defenses \(3–6 target\)/);
 });
