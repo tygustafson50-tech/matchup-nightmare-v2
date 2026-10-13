@@ -7,6 +7,8 @@
 import {positionGroup,supportsMarket} from "./research-v3.js";
 import {parseFootballDefenseRanks} from "./football-defense-ranks.js";
 import {extractRosterVisuals} from "./player-profile-v3.js";
+import {strictDefenseGate,buildDefenseContext,NFL_MAX_CANDIDATES}
+  from "./nfl-defense-depth.js";
 const safeNum=n=>{
   if(typeof n==="number")return Number.isFinite(n)?n:null;
   if(typeof n!=="string"||!n.trim())return null;
@@ -400,10 +402,53 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
     if(!selected)notes.push("Upcoming opponent's verified ESPN rushing/passing defensive ranks unavailable.");
     if(profiles.length<records.length)notes.push(
       "Some historical opponent defense ranks are unavailable; unmatched games are excluded.");
-    notes.push("NFL rank comparison uses ESPN season-aggregate rushing and passing defense ranks, within ±3 places; past season final rankings may include games after the matchup.");
+    const role=positionGroup(sport,player.position);
+    // Fetch additional position-specific pregame coverage ONLY for defenses
+    // that pass both published league-rank gates. This cuts ESPN requests
+    // versus fetching arbitrary deep coverage for every team in NFL history.
+    const candidate=records.map(g=>{
+      const profile=rankingByTeamSeason.get(g.opponentId+"|"+g.season);
+      const rank=selected&&profile?strictDefenseGate(selected,profile,offer.stat):
+        {ok:false};
+      return {game:g,profile,rank};
+    }).filter(x=>x.rank.ok).sort((a,b)=>
+      a.rank.primaryGap-b.rank.primaryGap||
+      a.rank.secondaryGap-b.rank.secondaryGap||
+      a.rank.primaryYards-b.rank.primaryYards||
+      Date.parse(b.game.date)-Date.parse(a.game.date)
+    ).slice(0,NFL_MAX_CANDIDATES);
+    onStage("Checking "+candidate.length+" NFL rank-similar defenses for "+
+      role+" coverage and RB checkdown proxies…");
+    const fetchContext=(teamId,year,cutoff)=>
+      buildDefenseContext({teamId,season:year,cutoff,role,stat:offer.stat,
+        schedule,summary});
+    const verifiedContext=await Promise.allSettled([
+      fetchContext(enemy.id,season,game.date),
+      ...candidate.map(x=>fetchContext(x.game.opponentId,
+        x.game.season,x.game.date))
+    ]);
+    const currentContext=verifiedContext[0].status==="fulfilled"?
+      verifiedContext[0].value:null;
+    const detailed=new Map();
+    for(let i=0;i<candidate.length;i++){
+      const value=verifiedContext[i+1];
+      if(value.status==="fulfilled")
+        detailed.set(candidate[i].game.id,value.value);
+    }
+    const contextualProfiles=profiles.map(p=>({
+      ...p,context:detailed.get(p.gameId)||null
+    }));
+    if(!currentContext||currentContext.verifiedGames<3)
+      notes.push("Fewer than three verified prior games against the upcoming defense's relevant "+
+        role+" stat; strict matchups are unavailable.");
+    if(detailed.size<candidate.length)
+      notes.push("Some candidate opponent position-specific box scores could not be verified.");
+    notes.push("Strict NFL defense matching requires both passing and rushing ranks, yards allowed, and 3+ PRIOR ESPN games allowed to the player's position. RB catches allowed is a checkdown proxy, not identified routes.");
+    notes.push("Season-to-date/current versus full-season/historical league rankings may contain games after the historical matchup. Only 4–6 strongly matched games can support an OVER; fewer are marked insufficient.");
     return {player,team,enemy,season,games:records,upcomingDefense:selected,
-      defensiveProfiles:profiles,matchupModel:"nfl-ranks",notes,
-      source:"ESPN athlete game summaries + opponent league rankings"};
+      upcomingContext:currentContext,defensiveProfiles:contextualProfiles,
+      matchupModel:"nfl-depth",notes,
+      source:"ESPN athlete summaries, team defense ranks and prior-game position totals"};
   }
   const role=positionGroup(sport,offer.position);
   const desired=[{teamId:String(enemy.id),season,cutoff:game.date,
