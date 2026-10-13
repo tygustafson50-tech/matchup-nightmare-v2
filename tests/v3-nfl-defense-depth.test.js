@@ -108,7 +108,9 @@ function analyzed(matches){
       season:year,stat:"receptions",sport:"nfl",playerId:"42",
       opponentId:String(i+10),actual:i%5===0?2:6,opponent:"Example "+i,
       team:"A",source:"ESPN game summary",verified:true});
-    profiles.push({...defense(i+10,year,i<matches?25+i%3:15,17,226,119),
+    // Nonqualifiers differ BOTH by >5 ranks and >10% pass yardage.
+    profiles.push({...defense(i+10,year,i<matches?25+i%3:15,17,
+      i<matches?226:300,119),
       gameId:id,context:ctx(5,5)});
   }
   return analyzeVerifiedProp({offer,season:2026,games,
