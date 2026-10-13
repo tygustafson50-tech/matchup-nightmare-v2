@@ -83,9 +83,19 @@ const YES_ONLY_MARKETS=new Set([
   "anytime_goal_scorer","player_assists","player_2plus_assists",
   "player_tackles","2plus_goals",...Object.keys(MINIMUM_MARKET)
 ]);
-// Single designated sportsbook for every sport and market. PropLine remains
-// the data provider; ONLY real DraftKings quotes may enter our scanner.
-const BOOKS=new Set(["draftkings"]);
+// Read real player props from several primary sportsbook, DFS and exchange
+// boards. PropLine supplies the original source on each priced selection.
+// Explicit selection avoids loading hundreds of unused global game-line feeds.
+const BOOKS=new Set([
+  "draftkings","fanduel","fanatics","hardrock","betmgm","betrivers",
+  "bovada","pinnacle","unibet","thescorebet","betonlineag","lowvig",
+  "betus","prizepicks","underdog","novig","prophetx","kalshi",
+  "polymarket_us"
+]);
+// PrizePicks publishes synthetic even-money prices: retain the real line,
+// but never display or rank its +100 as genuine single-leg sportsbook odds.
+const DFS_SYNTHETIC_PRICE=new Set(["prizepicks"]);
+const BOOK_QUERY=[...BOOKS].join(",");
 // Only validated selected ESPN fixtures may trigger paid API calls.
 const teamNorm=x=>String(x||"").normalize("NFKD").toLowerCase()
   .replace(/[\u0300-\u036f]/g,"").replace(/\bsaint\b/g,"st")
@@ -187,7 +197,7 @@ const linesFrom=(event,{sport,date,now,diagnostics=null}={})=>{
   for(const bookmaker of event.bookmakers){
     if(!BOOKS.has(bookmaker?.key)||bookmaker?.pregame_only===true &&
       Date.parse(event.commence_time)<=now)continue;
-    if(diagnostics)diagnostics.draftKingsBoards++;
+    if(diagnostics)diagnostics.bookmakerBoards++;
     for(const market of bookmaker.markets||[]){
       if(!MARKET_MAP[market?.key]||!MARKETS[sport].includes(market.key))continue;
       if(diagnostics)diagnostics.supportedMarkets++;
@@ -221,7 +231,8 @@ const linesFrom=(event,{sport,date,now,diagnostics=null}={})=>{
           quoteShape:selection.shape,selectionLabel:selection.selectionLabel,
           minimumStat:selection.minimumStat,
           variant,status:"active",quotedAt:market.last_update,
-          price:outcome.price,
+          price:DFS_SYNTHETIC_PRICE.has(bookmaker.key)?null:outcome.price,
+          priceIsSynthetic:DFS_SYNTHETIC_PRICE.has(bookmaker.key),
           espnPlayerId,providerPlayerId:qualifiedPlayer||null,
           espnTeamId:null,espnOpponentId:null
         });
@@ -308,13 +319,13 @@ export async function onRequestGet({request,env={}}){
     const eventOdds=await Promise.allSettled(candidates.map(e=>
       api("sports/"+encodeURIComponent(matched.key)+"/events/"+
         encodeURIComponent(String(e.id))+"/odds",env.PROPLINE_API_KEY,{
-          markets:MARKETS[sport].join(","),bookmakers:"draftkings",
+          markets:MARKETS[sport].join(","),bookmakers:BOOK_QUERY,
           includeBookIds:"true"
         })));
     let quota=eventList.quota;
     const eventFailures=[];
     const projections=[];
-    const diagnostics={draftKingsBoards:0,supportedMarkets:0,
+    const diagnostics={bookmakerBoards:0,supportedMarkets:0,
       freshMarkets:0,selectionsConsidered:0,verifiedSelections:0};
     for(let i=0;i<eventOdds.length;i++){
       const got=eventOdds[i],listed=candidates[i];
@@ -355,7 +366,7 @@ export async function onRequestGet({request,env={}}){
         await env.PROJECTION_SNAPSHOTS.put(key,JSON.stringify(projections),{expirationTtl:345600});
       }catch{changeTracking="unavailable";}
     }
-    return reply({status:"connected",source:"PropLine",sportsbook:"DraftKings",sport,sportKey:matched.key,
+    return reply({status:"connected",source:"PropLine",sportsbook:"Multiple verified sources",sport,sportKey:matched.key,
       date,sourceFetchedAt:new Date(now).toISOString(),refreshedAt:new Date(now).toISOString(),
       projections,changes,changeTracking,
       eventsFound:today.length,eventsChecked:fetchedEvents,
@@ -368,13 +379,13 @@ export async function onRequestGet({request,env={}}){
           eventFailures.length+" selected event prop request(s) were unavailable."]:[]),
         ...(!projections.length?[
           today.length===0?"No selected events were found by PropLine for that date.":
-          diagnostics.draftKingsBoards===0?
-            "DraftKings did not publish a player-prop board for these selected events.":
+          diagnostics.bookmakerBoards===0?
+            "None of the connected prop providers have a player-prop board for these events.":
           diagnostics.supportedMarkets===0?
-            "DraftKings has no supported player-stat markets on the selected events.":
+            "Connected providers have no supported player-stat markets for these games.":
           diagnostics.freshMarkets===0?
-            "DraftKings player markets are suspended or too old to verify.":
-            "No currently eligible OVER or YES/milestone selections were published in DraftKings' player markets."]:[]
+            "Available player markets are suspended or too old to verify.":
+            "No eligible active OVER or equivalent YES/milestone selections are listed across connected providers."]:[]
         )
       ]});
   }catch(error){
