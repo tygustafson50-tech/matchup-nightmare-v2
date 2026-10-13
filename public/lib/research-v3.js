@@ -6,6 +6,7 @@
  * history, normalized against documented SAME-SEASON observed cohorts.
  */
 import {compareFootballDefenseRanks} from "./football-defense-ranks.js";
+import {defenseStrength} from "./defense-strength.js";
 import {strictDefenseComparison,chooseStrictSimilarGames,NFL_SIMILAR_MIN,NFL_SIMILAR_MAX}
   from "./nfl-defense-depth.js";
 import {compareDeepDefense,chooseDeepGames,STRICT_MIN_MATCHES,
@@ -210,6 +211,14 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
   const cohorts=useFootballRank||useStrictNfl||useDeepSport
     ?{}:buildDefensiveCohorts(profiles);
   const lookup=new Map(profiles.map(p=>[String(p.gameId)+"|"+String(p.teamId),p]));
+  const snapshotFor=g=>defenseStrength({
+    sport:offer.sport,stat:offer.stat,position:offer.position,
+    profile:lookup.get(String(g.id)+"|"+String(g.opponentId))
+  });
+  const currentDefenseStrength=defenseStrength({
+    sport:offer.sport,stat:offer.stat,position:offer.position,
+    profile:upcomingDefense
+  });
   const comparable=[];
   const reasons=new Set();
   for(const g of available){
@@ -226,6 +235,7 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
           :compareMatch(upcomingDefense,historic,cohorts,
             offer.sport,role,offer.stat,offer.league||null);
     if(test.ok)comparable.push({...evidenceRow(g),
+      defenseStrength:snapshotFor(g),
       result:resultAtLine(g.actual,offer.line),similarity:test.score,
       matchTier:test.matchTier||1,matchBasis:test.matchBasis||null,
       defenseReason:test.context,defenseMetrics:
@@ -251,7 +261,9 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
       }:{})});
     else reasons.add(test.reason);
   }
-  const last5=recent.map(g=>({...evidenceRow(g),result:resultAtLine(g.actual,offer.line)}));
+  const last5=recent.map(g=>({...evidenceRow(g),
+    defenseStrength:snapshotFor(g),
+    result:resultAtLine(g.actual,offer.line)}));
   // Defense fit is calculated BEFORE looking at whether the player's
   // previous game exceeded this prop. Never cherry-pick the OVER results.
   const selectedComparable=useStrictNfl
@@ -284,7 +296,7 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
     matchupSampleTarget:useStrictNfl?{min:NFL_SIMILAR_MIN,max:NFL_SIMILAR_MAX}:
       useDeepSport?{min:STRICT_MIN_MATCHES,max:STRICT_MAX_MATCHES}:null,
     similarDefenseCount:selectedComparable.length,
-    rankOnlyMatches,
+    rankOnlyMatches,currentDefenseStrength,
     upcomingRoleAllowed:useStrictNfl?upcomingContext?.roleAllowed:
       useDeepSport?upcomingDefense?.metrics?.allowed:null,
     upcomingUsageAllowed:useDeepSport?upcomingDefense?.metrics?.volume:null,
