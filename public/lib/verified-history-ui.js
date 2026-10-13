@@ -3,6 +3,7 @@
  * its OVER hits / actually verified visible games. Expansion reveals the
  * exact stat on each game against today's selected sportsbook line.
  */
+import {renderDefenseBadge} from "./defense-strength-ui.js";
 const escapeHtml=v=>String(v??"").replace(/[&<>"']/g,c=>({
   "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
 }[c]));
@@ -45,7 +46,7 @@ export function renderVerifiedHistory({
         ' and actual '+escapeHtml(statName)+'">'+
       '<div class="game-log-header" role="row">'+
         '<span role="columnheader">Date</span>'+
-        '<span role="columnheader">Opponent</span>'+
+        '<span role="columnheader">Opponent · Defense rank/strength</span>'+
         '<span role="columnheader">Actual '+escapeHtml(statName)+'</span>'+
         '<span role="columnheader">Result</span></div>'+
       actualRows.map(g=>{
@@ -55,6 +56,7 @@ export function renderVerifiedHistory({
         const value=escapeHtml(g.actual);
         const date=escapeHtml(formatDate(g.date));
         const against=escapeHtml(g.opponent);
+        const defenseBadge=renderDefenseBadge(g.defenseStrength);
         const rankNote=similar?'<div class="verified-defense-detail">'+
           (g.rankLane&&Number.isInteger(g.historicalRank)&&Number.isInteger(g.targetRank)
             ?escapeHtml(g.rankLane)+" defense: historical #"+
@@ -68,7 +70,9 @@ export function renderVerifiedHistory({
         return '<div class="verified-game-entry">'+
           '<div class="game-log-row" role="row">'+
             '<span class="game-log-date" role="cell">'+date+'</span>'+
-            '<strong class="game-log-opponent" role="cell" title="'+against+'">'+against+'</strong>'+
+            '<strong class="game-log-opponent" role="cell" title="'+against+'">'+
+              '<span class="game-log-opponent-name">'+against+'</span>'+
+              defenseBadge+'</strong>'+
             '<div class="verified-actual-stat" role="cell">'+
               '<strong class="verified-actual-number">'+value+'</strong>'+
               '<small class="verified-actual-unit">'+escapeHtml(statName)+'</small>'+
@@ -78,6 +82,7 @@ export function renderVerifiedHistory({
               '" role="cell">'+result+'</strong>'+
           '</div>'+rankNote+'</div>';
       }).join("")+'</div>'+
+      '<p class="verified-history-note">Defense strength uses ESPN season-wide NFL ranks or verified prior-game position/stat averages, never unverified grades. Past-season NFL ranks can include games after the historical matchup.</p>'+
       '<p class="verified-history-note">Each total is the actual recorded '+
         escapeHtml(statName).toLowerCase()+
         ' from that game, compared with the selected current DraftKings line ('+

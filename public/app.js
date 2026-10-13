@@ -9,6 +9,7 @@ import {groupOffersByPlayerStat,selectBestOverCard,dedupeVerifiedCards}
   from "/lib/one-line-per-stat.js";
 import {saveCompletedScan,readLastScan} from "/lib/last-scan-cache.js";
 import {renderVerifiedHistory} from "/lib/verified-history-ui.js";
+import {renderUpcomingDefense} from "/lib/defense-strength-ui.js";
 import {renderPlayerCardHeader} from "/lib/player-profile-v3.js";
 const SPORTS={
   nfl:"🏈 NFL",nba:"🏀 NBA",mlb:"⚾ MLB",
@@ -69,6 +70,9 @@ function renderCard(c){
       '</strong> '+safe(c.market)+
       (Number.isFinite(c.price)?' · '+safe(c.price>0?'+':'')+safe(c.price):'')+
       ' · '+safe(c.book)+'</div>'+
+    renderUpcomingDefense(c.currentDefenseStrength,{
+      opponent:c.opponent,sport:c.sport
+    })+
     (archived?'<p class="sample-warning">Previously saved research from '+
       safe(kickoff(c.cachedAt))+
       '. The price, line and player availability have NOT been reverified. Do not treat this as an active sportsbook offer.</p>':'')+
