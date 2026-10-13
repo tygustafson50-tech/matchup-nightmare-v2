@@ -57,10 +57,8 @@ async function call({odds=[event()],events=null,sports=null,secret=env,
     }
     assert.match(parsed.pathname,/\/events\/[^/]+\/odds$/);
     assert.equal(parsed.searchParams.get("includeBookIds"),"true");
-    const enabled=(parsed.searchParams.get("bookmakers")||"").split(",");
-    for(const book of ["draftkings","fanduel","bovada","fanatics",
-      "hardrock","prizepicks"])
-      assert.ok(enabled.includes(book),"Provider missing: "+book);
+    assert.equal(parsed.searchParams.has("bookmakers"),false,
+      "Omitting the book filter lets PropLine return every available book.");
     assert.ok(parsed.searchParams.get("markets"));
     if(failStatus)
       return new Response(JSON.stringify({error:"quota"}),{
@@ -93,7 +91,7 @@ test("the official per-event PLAYER PROPS endpoint is used instead of bulk game 
   assert.equal(hits.length,3);
   assert.match(hits[1],/\/events$/);
   assert.match(hits[2],/\/events\/10\/odds/);
-  assert.ok(new URL(hits[2]).searchParams.get("bookmakers").includes("fanduel"));
+  assert.equal(new URL(hits[2]).searchParams.has("bookmakers"),false);
   assert.equal(body.eventsFound,1);
   assert.equal(body.eventsChecked,1);
   assert.equal(body.projections.length,1);
