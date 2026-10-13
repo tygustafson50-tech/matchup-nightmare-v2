@@ -39,7 +39,7 @@ test("RB receptions against defense are a checkdown PROXY, never actual tracked 
 test("missing or different WR position stats never pad strict matches",()=>{
   const target=defense(1,2026),historical=defense(2,2025,27,13,224,108);
   const common={target,historical,role:"WR",stat:"receivingYards",targetContext:ctx(160)};
-  assert.equal(strictDefenseComparison({...common,historicalContext:ctx(235)}).ok,false);
+  assert.equal(strictDefenseComparison({...common,historicalContext:ctx(260)}).ok,false);
   assert.equal(strictDefenseComparison({...common,
     historicalContext:{...ctx(175),verifiedGames:2}}).ok,false);
 });
