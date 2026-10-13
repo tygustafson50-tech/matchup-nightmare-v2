@@ -61,12 +61,17 @@ test("MLB pitcher comparison uses actual opposing lineup strikeouts, never oppos
       athletes:[{athlete:{id:"22",displayName:"Pitcher",position:{abbreviation:"P"}},
         stats:["6.0","12"]}]}]}
   ]}};
-  const got=concededAgainstPosition(summary,{sport:"mlb",defenseId:"2",
+  // A pitcher faces the actual batting lineup of the team identified as
+  // the upcoming opponent; team 1 in this fixture.
+  const got=concededAgainstPosition(summary,{sport:"mlb",defenseId:"1",
     role:"P",stat:"pitcherKs"});
-  assert.deepEqual(got,{allowed:3,volume:5});
+  assert.deepEqual(got,{allowed:3,volume:5,
+    volumeSource:"atBats",statSource:"battingStrikeouts"});
   assert.equal(playersFromBoxscore(summary,"mlb","1")[0].stats.battingStrikeouts,3);
-  assert.equal(concededAgainstPosition(summary,{sport:"mlb",defenseId:"2",
-    role:"P",stat:"pitchingOuts"}),null);
+  const outs=concededAgainstPosition(summary,{sport:"mlb",defenseId:"1",
+    role:"P",stat:"pitchingOuts"});
+  assert.equal(outs.allowed,5);
+  assert.equal(outs.statSource,"atBats");
 });
 test("unavailable verified stat never becomes zero",()=>{
   assert.equal(resultAtLine(null,2.5),"UNVERIFIED");
@@ -139,7 +144,8 @@ test("real NBA generic G/F boxscore roles match verified PG or SG defensive samp
   ]}};
   const guards=concededAgainstPosition(summary,{sport:"nba",defenseId:"2",
     role:"PG",stat:"points"});
-  assert.deepEqual(guards,{allowed:23,volume:18});
+  assert.deepEqual(guards,{allowed:23,volume:18,
+    statSource:"points",volumeSource:"fieldGoalAttempts"});
   const points=playersFromBoxscore(summary,"nba","1");
   assert.equal(points.find(x=>x.id==="11").stats.assists,7);
   assert.equal(points.find(x=>x.id==="12").stats.rebounds,7);
