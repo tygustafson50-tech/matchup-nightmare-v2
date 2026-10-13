@@ -512,3 +512,62 @@
 @media(prefers-reduced-motion:reduce){
   .verified-history-chevron{transition:none}
 }
+
+
+/* Source-backed opponent defensive rank / role-stat allowances, all sports. */
+.upcoming-defense-strength{
+  margin:12px 0;
+  border:1px solid #92733a;
+  border-radius:12px;
+  background:linear-gradient(135deg,#282219,#121314 82%);
+  padding:14px;
+}
+.upcoming-defense-heading{font-size:12px;letter-spacing:.045em;color:#e5c585}
+.upcoming-defense-body{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.upcoming-defense-strength .defense-strength{font-size:13px}
+.defense-strength{
+  display:inline-flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:3px;
+  padding:6px 9px;
+  border:1px solid #71592e;
+  border-radius:8px;
+  max-width:100%;
+  color:#f2d899;
+  background:#292316;
+  font-size:10px;
+  font-weight:600;
+  line-height:1.35;
+  overflow-wrap:anywhere;
+}
+.defense-strength strong{font-weight:800;font-size:1.12em;color:#ffe0a0}
+.defense-strength > span{color:#c9bb9c;font-weight:500}
+.defense-strength.unavailable{
+  border-color:#505056;color:#aaaab0;background:#25252a;
+}
+.defense-current-secondary{display:flex;gap:8px;flex-wrap:wrap;color:#e6d4b0;font-size:12px}
+.defense-current-secondary span{
+  padding:7px 10px;border:1px solid #514733;border-radius:7px;
+  background:#201d19;font-variant-numeric:tabular-nums;
+}
+.upcoming-defense-source{margin:10px 0 0;font-size:10px;color:#bfb099;line-height:1.55}
+.verified-game-history .game-log-opponent{
+  display:flex;flex-direction:column;align-items:flex-start;gap:6px;
+  min-width:0;
+}
+.game-log-opponent-name{display:block;min-width:0;overflow-wrap:anywhere}
+.verified-game-history .game-log-opponent .defense-strength{
+  font-size:9px;
+  padding:5px 6px;
+  max-width:100%;
+}
+.verified-game-history .game-log-opponent .defense-strength strong{
+  font-size:10px;white-space:normal;
+}
+@media(max-width:540px){
+  .upcoming-defense-strength{padding:10px}
+  .upcoming-defense-body{gap:8px}
+  .verified-game-history .game-log-opponent .defense-strength{font-size:8px;padding:4px}
+  .verified-game-history .game-log-opponent .defense-strength strong{font-size:9px}
+}
