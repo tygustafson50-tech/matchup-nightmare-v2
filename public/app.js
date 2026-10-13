@@ -81,7 +81,7 @@ function renderCard(c){
     (c.matchupSampleTarget?'<p class="season-evidence nfl-depth-explain">'+
       '<strong>Strict defense comparison:</strong> '+safe(c.similar.tracked)+
       ' of '+safe(c.matchupSampleTarget.min)+'–'+safe(c.matchupSampleTarget.max)+
-      ' desired VERIFIED matchups. '+
+      ' target distinct VERIFIED defenses. '+
       (c.positionMatchMethod
         ?safe(c.positionMatchMethod)+': '
         :safe(c.position)+' '+safe(c.market)+' allowed: ')+
@@ -103,7 +103,7 @@ function renderCard(c){
       '<div><strong>'+safe(hitText(c.recent))+'</strong><small>Last five current-season games</small></div>'+
       '<div><strong>'+safe(hitText(c.similar))+'</strong><small>Similar defenses — three seasons</small></div>'+
       '<div><strong>'+safe(total)+'</strong><small>'+
-        (c.matchupSampleTarget?'Strict verified matchups (4–6 required)':
+        (c.matchupSampleTarget?'Distinct similar defenses (3–6 target)':
           'Verified qualifying historical matchups')+'</small></div>'+
     '</div>'+
     '<p class="muted matchup-rationale">'+(archived
