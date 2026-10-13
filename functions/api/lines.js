@@ -33,8 +33,11 @@ const MARKETS={
   ncaab:["player_points","player_rebounds","player_assists","player_threes",
     "player_points_rebounds_assists","player_steals","player_blocks"],
   mlb:["pitcher_strikeouts","pitcher_outs","batter_hits","batter_home_runs",
-    "batter_total_bases","batter_runs","batter_rbis","batter_walks"],
-  soccer:["player_assists","player_tackles"]
+    "batter_total_bases","batter_runs","batter_rbis","batter_walks",
+    "batter_1plus_hits","batter_2plus_hits","batter_3plus_hits","batter_4plus_hits",
+    "batter_2plus_home_runs","batter_1plus_rbis","batter_2plus_rbis","batter_3plus_rbis"],
+  soccer:["player_assists","player_2plus_assists","player_tackles",
+    "anytime_goal_scorer","2plus_goals"]
 };
 const MARKET_MAP={
   player_pass_yds:["passingYards","Passing yards"],
@@ -57,8 +60,29 @@ const MARKET_MAP={
   batter_total_bases:["totalBases","Total bases"],
   batter_runs:["runs","Runs"],batter_rbis:["rbis","RBIs"],
   batter_walks:["walks","Walks"],
-  player_tackles:["tackles","Tackles"]
+  player_tackles:["tackles","Tackles"],
+  player_2plus_assists:["assists","Assists"],
+  anytime_goal_scorer:["goals","Goals"],"2plus_goals":["goals","Goals"],
+  batter_1plus_hits:["hits","Hits"],batter_2plus_hits:["hits","Hits"],
+  batter_3plus_hits:["hits","Hits"],batter_4plus_hits:["hits","Hits"],
+  batter_2plus_home_runs:["homeRuns","Home runs"],
+  batter_1plus_rbis:["rbis","RBIs"],batter_2plus_rbis:["rbis","RBIs"],
+  batter_3plus_rbis:["rbis","RBIs"]
 };
+// N+ price comes directly from the sportsbook. For an integer count,
+// recorded >= N is mathematically equivalent to Over (N - 0.5).
+const MINIMUM_MARKET={
+  "2plus_goals":2,player_2plus_assists:2,
+  batter_1plus_hits:1,batter_2plus_hits:2,batter_3plus_hits:3,
+  batter_4plus_hits:4,batter_2plus_home_runs:2,
+  batter_1plus_rbis:1,batter_2plus_rbis:2,batter_3plus_rbis:3
+};
+const YES_ONLY_MARKETS=new Set([
+  "batter_home_runs","batter_runs","batter_rbis","batter_hits",
+  "batter_total_bases","batter_walks",
+  "anytime_goal_scorer","player_assists","player_2plus_assists",
+  "player_tackles","2plus_goals",...Object.keys(MINIMUM_MARKET)
+]);
 // Single designated sportsbook for every sport and market. PropLine remains
 // the data provider; ONLY real DraftKings quotes may enter our scanner.
 const BOOKS=new Set(["draftkings"]);
@@ -123,9 +147,34 @@ const dateCentral=iso=>{
   const get=type=>parts.find(p=>p.type===type)?.value||"";
   return get("year")+"-"+get("month")+"-"+get("day");
 };
+// The timestamp is the book's last delivery, not merely its last price change.
+// Permit slower pregame market refreshes, never old or suspended selections.
 const timeOk=(value,now)=>typeof value==="string"&&Number.isFinite(Date.parse(value))&&
-  Date.parse(value)<=now+120000&&now-Date.parse(value)<=30*60*1000;
-const linesFrom=(event,{sport,date,now}={})=>{
+  Date.parse(value)<=now+120000&&now-Date.parse(value)<=90*60*1000;
+function quotedSelection(outcome,market,sport){
+  const name=str(outcome?.name),word=name.toLowerCase(),point=outcome?.point;
+  if(Number.isFinite(point)&&point>=0&&["over","yes"].includes(word))
+    return {line:point,shape:"over-under",selectionLabel:null,minimumStat:null};
+  if(!YES_ONLY_MARKETS.has(market.key)||!MARKETS[sport].includes(market.key)||
+    point!==null&&point!==undefined)return null;
+  if(["no","under"].includes(word))return null;
+  const rung=/^(\d{1,3})\s*\+/.exec(name);
+  const minimum=rung?Number(rung[1]):MINIMUM_MARKET[market.key]||1;
+  if(!rung&&word!=="yes"&&teamNorm(name)!==teamNorm(outcome.description))
+    return null;
+  if(!Number.isInteger(minimum)||minimum<1||minimum>100)return null;
+  return {line:minimum-0.5,shape:"milestone",
+    selectionLabel:rung?name:minimum+"+ "+MARKET_MAP[market.key][1],
+    minimumStat:minimum};
+}
+function selectionStillOffered(outcome,market){
+  // A quote missing from the book's latest delivery is not offered now.
+  if(!outcome.last_seen_at)return true;
+  const seen=Date.parse(outcome.last_seen_at),delivered=Date.parse(market.last_update);
+  return Number.isFinite(seen)&&Number.isFinite(delivered)&&
+    seen>=delivered-120000;
+}
+const linesFrom=(event,{sport,date,now,diagnostics=null}={})=>{
   if(!event||!event.id||!Array.isArray(event.bookmakers)||
     !Number.isFinite(Date.parse(event.commence_time))||
     dateCentral(event.commence_time)!==date||!str(event.home_team)||!str(event.away_team))
@@ -134,33 +183,41 @@ const linesFrom=(event,{sport,date,now}={})=>{
   for(const bookmaker of event.bookmakers){
     if(!BOOKS.has(bookmaker?.key)||bookmaker?.pregame_only===true &&
       Date.parse(event.commence_time)<=now)continue;
+    if(diagnostics)diagnostics.draftKingsBoards++;
     for(const market of bookmaker.markets||[]){
-      if(!MARKET_MAP[market?.key]||!MARKETS[sport].includes(market.key)||
-        market.suspended_at||!timeOk(market.last_update,now))continue;
+      if(!MARKET_MAP[market?.key]||!MARKETS[sport].includes(market.key))continue;
+      if(diagnostics)diagnostics.supportedMarkets++;
+      if(market.suspended_at||!timeOk(market.last_update,now))continue;
+      if(diagnostics)diagnostics.freshMarkets++;
       for(const outcome of market.outcomes||[]){
-        if(str(outcome.name).toLowerCase()!=="over"||
-          typeof outcome.point!=="number"||!Number.isFinite(outcome.point)||
-          outcome.point<0||!str(outcome.description))continue;
+        if(diagnostics)diagnostics.selectionsConsidered++;
+        if(!str(outcome?.description)||!Number.isFinite(outcome?.price)||
+          outcome.price===0||!selectionStillOffered(outcome,market))continue;
+        const selection=quotedSelection(outcome,market,sport);
+        if(!selection)continue;
         const [stat,display]=MARKET_MAP[market.key];
         const player=str(outcome.description).replace(/\s+\([A-Z]{2,4}\)$/,"").trim();
         const qualifiedPlayer=String(outcome.player_id||"");
         const espnPlayerId=/^espn:(\d{1,15})$/.exec(qualifiedPlayer)?.[1]||null;
         const sourceId=String(outcome.outcome_id||outcome.book_outcome_id||"");
         const id=[bookmaker.key,event.id,market.key,
-          sourceId||player.toLowerCase().replace(/[^a-z0-9]/g,""),outcome.point].join("|");
+          sourceId||player.toLowerCase().replace(/[^a-z0-9]/g,""),selection.line].join("|");
         if(seen.has(id))continue;seen.add(id);
         const rawType=String(outcome.line_type||market.line_type||"").toLowerCase();
         const variant=rawType==="main"?"standard":
           rawType==="alternate"||rawType==="milestone"?"alternative":"unclassified";
+        if(diagnostics)diagnostics.verifiedSelections++;
         offers.push({
           id,source:"PropLine",book:bookmaker.title||bookmaker.key,
           bookKey:bookmaker.key,player,team:null,opponent:null,position:null,
           sport,gameId:str(event.espn_event_id)||null,
           providerEventId:String(event.id),gameDateLocal:date,
           fixture:{home:event.home_team,away:event.away_team},
-          market:display,stat,line:outcome.point,
+          market:display,stat,line:selection.line,
+          quoteShape:selection.shape,selectionLabel:selection.selectionLabel,
+          minimumStat:selection.minimumStat,
           variant,status:"active",quotedAt:market.last_update,
-          price:Number.isFinite(outcome.price)?outcome.price:null,
+          price:outcome.price,
           espnPlayerId,providerPlayerId:qualifiedPlayer||null,
           espnTeamId:null,espnOpponentId:null
         });
@@ -253,6 +310,8 @@ export async function onRequestGet({request,env={}}){
     let quota=eventList.quota;
     const eventFailures=[];
     const projections=[];
+    const diagnostics={draftKingsBoards:0,supportedMarkets:0,
+      freshMarkets:0,selectionsConsidered:0,verifiedSelections:0};
     for(let i=0;i<eventOdds.length;i++){
       const got=eventOdds[i],listed=candidates[i];
       if(got.status!=="fulfilled"){
@@ -272,7 +331,7 @@ export async function onRequestGet({request,env={}}){
           home_team:priced.home_team||listed.home_team,
           away_team:priced.away_team||listed.away_team};
         try{
-          projections.push(...normalizePropLineOdds([verified],{sport,date,now}));
+          projections.push(...normalizePropLineOdds([verified],{sport,date,now,diagnostics}));
         }catch{eventFailures.push(String(listed.id)+": malformed odds response");}
       }
     }
@@ -296,7 +355,7 @@ export async function onRequestGet({request,env={}}){
       date,sourceFetchedAt:new Date(now).toISOString(),refreshedAt:new Date(now).toISOString(),
       projections,changes,changeTracking,
       eventsFound:today.length,eventsChecked:fetchedEvents,
-      eventsFailed:eventFailures.length,providerWarnings:eventFailures.slice(0,8),
+      eventsFailed:eventFailures.length,providerWarnings:eventFailures.slice(0,8),diagnostics,
       dailyRequestsRemaining:quota!==null&&Number.isFinite(Number(quota))?Number(quota):null,
       notes:[
         ...(today.length>MAX_EVENTS?["Only the first "+MAX_EVENTS+
@@ -305,7 +364,13 @@ export async function onRequestGet({request,env={}}){
           eventFailures.length+" selected event prop request(s) were unavailable."]:[]),
         ...(!projections.length?[
           today.length===0?"No selected events were found by PropLine for that date.":
-          "No active, fresh DraftKings OVER lines were returned for the selected events. This can mean DraftKings does not offer player props for that sport/date. No substitute lines were generated."]:[]
+          diagnostics.draftKingsBoards===0?
+            "DraftKings did not publish a player-prop board for these selected events.":
+          diagnostics.supportedMarkets===0?
+            "DraftKings has no supported player-stat markets on the selected events.":
+          diagnostics.freshMarkets===0?
+            "DraftKings player markets are suspended or too old to verify.":
+            "No currently eligible OVER or YES/milestone selections were published in DraftKings' player markets."]:[]
         )
       ]});
   }catch(error){
