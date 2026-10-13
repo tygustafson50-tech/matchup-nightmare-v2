@@ -120,7 +120,7 @@ test("raw ESPN summary parser does not invent missing stats",()=>{
   assert.equal(player.stats.passingYards,undefined);
   assert.deepEqual(concededAgainstPosition(summary,{
     sport:"nfl",defenseId:"2",role:"WR",stat:"receivingYards"}),
-    {allowed:62,volume:6});
+    {allowed:62,volume:6,statSource:"receivingYards",volumeSource:"targets"});
 });
 test("gamelog only accepts dated games before event within specified season",()=>{
   const raw={events:{

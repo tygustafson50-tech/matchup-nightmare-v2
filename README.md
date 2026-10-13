@@ -181,3 +181,66 @@ analysis can require significantly more public ESPN requests than the old
 rank-only comparison, but does not use extra PropLine lines. Other sports
 retain their existing models. Previously saved local scans remain marked
 as stale until refreshed.
+
+## Strict similar-defense matchups for every supported sport, position and prop
+
+Every **fresh** NFL, college football, NBA, college basketball, MLB and soccer
+player-prop scan now targets **four to six independently verified historical
+games** from the current season plus the prior two seasons, while still showing
+the player's separate **last five current-season games**. The app selects
+historical games based exclusively on defensive/opponent-profile resemblance,
+**not** which games happened to beat today's sportsbook line. It displays at
+most six strongest valid comparisons and only marks an OVER supported when
+**at least four** pass and the recent/similar hit-rate evidence is favorable.
+If 0–3 pass, show the actual smaller sample and an insufficient-evidence note.
+Never pad with weak or fabricated games, and never call historical hit rates
+betting probabilities.
+
+**NFL (QB/RB/WR/TE, across every ESPN-recorded market):** Passing or rushing
+defensive rankings (primary rank ±3, other rank ±8), recorded yards allowed,
+plus at least three **earlier completed game** box scores of what that defense
+allowed to the relevant QB/RB/WR/TE group on the exact stat. RB receptions
+allowed is available as a **short-pass/checkdown proxy** only, not verified
+checkdown routes, average depth of target or coverage schemes. Never
+manufacture target counts when ESPN omits them.
+
+**College football:** Each specific QB/RB/WR/TE stat compares the observed
+position allowance, usage volume and related on-field result (e.g., receiving
+yards with receptions, rushing yards with rush attempts, passing yards with
+completions). This is based on three or more *prior* ESPN box scores per
+opponent. There is no unsupported claim of NFL-style full-league NCAA ranks.
+
+**NBA and college basketball:** The exact ESPN-reported G/F/C or PG/SG/SF/PF/C
+role's points, assists, rebounds, threes, PRA, steals or blocks is matched
+against a similarly measured role allowance, field-goal attempt volume and
+companion stat. These are recorded opposing-player outcomes, not invented
+defensive rankings. Generic ESPN G/F labels are handled as role families.
+
+**MLB:** Hitters' real hits, total bases, home runs, runs, RBIs or walks
+compare the verified opponent pitcher-staff results versus batters, batting
+opportunities and recorded companion stat. A **pitcher K** matchup measures
+the upcoming opponent's own batting strikeouts/at-bats; **pitching outs**
+uses the opponent's batting at-bats as an explicitly named **opportunity
+proxy**, **not** as actual innings/outs conceded. Without verified source
+fields, the model reports insufficient evidence instead.
+
+**Soccer:** Recorded player-position shots, on-target shots, goals, assists,
+tackles and fouls use the corresponding prior position group's recorded
+results and a related stat. For **goalkeeper saves**, the opponent's own
+shots on target and attempts measure **save opportunities**, not a guaranteed
+save total. League-specific profiles are never mixed across competitions.
+
+All non-NFL sports require prior source samples of three or more completed
+games on both the upcoming and historical opponents, position-stat allowed
+rate within 30%, relevant usage within 35%, and a verified related statistic
+within 40%. Those thresholds are **research heuristics**, not validated
+predictive odds. Each sourced game is annotated with the allowed rate and
+supporting metric used. For all sports, historical box scores/defensive
+contexts must be from before the historical matchup; where the older NFL
+season-wide ranking may include later games, that limitation stays disclosed.
+
+Live lines remain **DraftKings ONLY** via PropLine; no new data provider,
+sportsbook or paid feed is required. Archived scans keep their old research
+until the next successful fresh scan. Not all sports have active DraftKings
+player-prop markets on every date, and the single-book college basketball
+coverage limitation remains.

@@ -7,6 +7,7 @@
 import {positionGroup,supportsMarket} from "./research-v3.js";
 import {parseFootballDefenseRanks} from "./football-defense-ranks.js";
 import {extractRosterVisuals} from "./player-profile-v3.js";
+import {deepStatSpec,makeDeepProfile} from "./sport-defense-depth.js";
 import {strictDefenseGate,buildDefenseContext,NFL_MAX_CANDIDATES}
   from "./nfl-defense-depth.js";
 const safeNum=n=>{
@@ -203,23 +204,32 @@ function volumeStat(sport,role,stat){
         ?"targets":"rushAttempts";
   }
   if(["nba","ncaab"].includes(sport))return "fieldGoalAttempts";
-  if(sport==="mlb")return role==="P"&&stat==="pitcherKs"?"atBats":
-    role==="BATTER"?"atBats":null;
-  if(sport==="soccer")return role==="GK"?null:"shots";
+  if(sport==="mlb")return role==="P"||role==="BATTER"?"atBats":null;
+  if(sport==="soccer")return "shots";
   return null;
 }
 export function concededAgainstPosition(summary,{sport,defenseId,role,stat}){
   const teams=sport==="soccer"&&Array.isArray(summary?.rosters)
     ?summary.rosters:summary?.boxscore?.players||[];
   if(teams.length!==2)return null;
+  const own=teams.find(t=>String(t.team?.id)===String(defenseId));
   const other=teams.find(t=>String(t.team?.id)!==String(defenseId));
-  if(!teams.some(t=>String(t.team?.id)===String(defenseId))||!other?.team?.id)return null;
-  const lineup=playersFromBoxscore(summary,sport,other.team.id);
+  if(!own?.team?.id||!other?.team?.id)return null;
+  // Pitcher props depend on the UPCOMING OPPONENT'S batting behavior,
+  // not how many strikeouts its pitching staff conceded to other batters.
+  // Goalkeeper saves depend on UPCOMING OPPONENT'S shot output.
+  const offenseProxy=sport==="mlb"&&role==="P"||
+    sport==="soccer"&&role==="GK";
+  const sourceTeamId=offenseProxy?own.team.id:other.team.id;
+  const lineup=playersFromBoxscore(summary,sport,sourceTeamId);
   const volume=volumeStat(sport,role,stat);
   if(!volume)return null;
   const unitRole=sport==="mlb"&&role==="P"?"BATTER":role;
-  const observedStat=sport==="mlb"&&role==="P"&&stat==="pitcherKs"
-    ?"battingStrikeouts":stat;
+  const observedStat=sport==="mlb"&&role==="P"
+    ?stat==="pitcherKs"?"battingStrikeouts":
+      stat==="pitchingOuts"?"atBats":stat
+    :sport==="soccer"&&role==="GK"&&stat==="saves"
+      ?"shotsOnTarget":stat;
   // NBA and college boxscores usually label players simply G or F, even
   // when a team roster identifies PG/SG/SF/PF. Match recorded position
   // *families* without guessing a more specific player role.
@@ -227,19 +237,28 @@ export function concededAgainstPosition(summary,{sport,defenseId,role,stat}){
     ["SF","PF","F"].includes(r)?"F":r;
   const relevant=lineup.filter(x=>{
     const observed=positionGroup(sport,x.position);
-    return ["nba","ncaab"].includes(sport)
-      ?comparableBasketRole(observed)===comparableBasketRole(unitRole)
-      :observed===unitRole;
+    return sport==="soccer"&&role==="GK"
+      ?["F","M","D"].includes(observed)
+      :["nba","ncaab"].includes(sport)
+        ?comparableBasketRole(observed)===comparableBasketRole(unitRole)
+        :observed===unitRole;
   });
   if(!relevant.length)return null;
   // Unknown positive contributors can understate the full position group.
   // Prefer missing to a falsely low defensive allowance.
   if(lineup.some(x=>!positionGroup(sport,x.position)&&
        (x.stats[observedStat]||0)>0))return null;
+  // ESPN football sometimes omits targets, but records receptions. Only
+  // use another actual source field as the explicitly identified proxy.
+  const chosenVolume=volume==="targets" &&
+    !relevant.every(x=>Number.isFinite(x.stats.targets)) &&
+    relevant.every(x=>Number.isFinite(x.stats.receptions))
+      ?"receptions":volume;
   if(!relevant.every(x=>Number.isFinite(x.stats[observedStat])&&
-       Number.isFinite(x.stats[volume])))return null;
+       Number.isFinite(x.stats[chosenVolume])))return null;
   return {allowed:relevant.reduce((sum,x)=>sum+x.stats[observedStat],0),
-    volume:relevant.reduce((sum,x)=>sum+x.stats[volume],0)};
+    volume:relevant.reduce((sum,x)=>sum+x.stats[chosenVolume],0),
+    volumeSource:chosenVolume,statSource:observedStat};
 }
 export function makeEvidenceClient({fetcher=globalThis.fetch,concurrency=6,onProgress=()=>{}}={}){
   const cache=new Map(),queue=[];let active=0,completed=0;
@@ -450,7 +469,9 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
       matchupModel:"nfl-depth",notes,
       source:"ESPN athlete summaries, team defense ranks and prior-game position totals"};
   }
-  const role=positionGroup(sport,offer.position);
+  // PropLine rarely includes a position. The roster has ALREADY
+  // identified the real athlete's ESPN position above.
+  const role=positionGroup(sport,player.position);
   const desired=[{teamId:String(enemy.id),season,cutoff:game.date,
     gameId:null,kind:"target"}];
   for(const row of records)desired.push({teamId:row.opponentId,
@@ -466,21 +487,37 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
         demand.teamId,demand.cutoff,demand.season).slice(0,8);
     }catch{continue;}
     const previous=await Promise.allSettled(prior.map(g=>summary(g.id)));
-    const measurements=[];
+    const spec=deepStatSpec(sport,offer.stat,role);
+    const measurements=[],secondary={};
+    for(const key of spec?.secondary||[])secondary[key]=[];
     for(const item of previous){
       if(item.status!=="fulfilled")continue;
-      const value=concededAgainstPosition(item.value,{sport,defenseId:demand.teamId,
-        role,stat:offer.stat});
+      const value=concededAgainstPosition(item.value,{sport,
+        defenseId:demand.teamId,role,stat:offer.stat});
       if(value)measurements.push(value);
+      for(const key of spec?.secondary||[]){
+        const feature=concededAgainstPosition(item.value,{sport,
+          defenseId:demand.teamId,role,stat:key});
+        if(feature)secondary[key].push(feature.allowed);
+      }
     }
     if(measurements.length<3)continue;
-    profiles.push({sport,season:demand.season,position:role,stat:offer.stat,
-      teamId:demand.teamId,gameId:demand.gameId,league:sport==="soccer"?league:null,
-      asOf:demand.cutoff,pregameGames:measurements.length,verified:true,
-      metrics:{allowed:measurements.reduce((a,b)=>a+b.allowed,0)/measurements.length,
-        volume:measurements.reduce((a,b)=>a+b.volume,0)/measurements.length}});
+    const mean=items=>items.reduce((sum,x)=>sum+x,0)/items.length;
+    const metrics={allowed:mean(measurements.map(x=>x.allowed)),
+      volume:mean(measurements.map(x=>x.volume))};
+    const extra=Object.fromEntries(Object.entries(secondary)
+      .filter(([,items])=>items.length>=3).map(([key,items])=>[key,mean(items)]));
+    const source=Object.fromEntries(Object.entries(secondary)
+      .map(([key,items])=>[key,items.length]));
+    const profile=makeDeepProfile({sport,role,stat:offer.stat,
+      teamId:demand.teamId,gameId:demand.gameId,
+      season:demand.season,asOf:demand.cutoff,metrics,
+      verifiedGames:measurements.length,secondaryStats:extra,
+      secondaryGames:source,league:sport==="soccer"?league:null});
+    if(profile)profiles.push(profile);
   }
   return {player,team,enemy,season,games:records,upcomingDefense:
     profiles.find(p=>p.teamId===String(enemy.id)&&p.gameId===null)||null,
-    defensiveProfiles:profiles,notes,source:"ESPN public game summaries (provisional)"};
+    defensiveProfiles:profiles,matchupModel:"multi-sport-depth",
+    notes,source:"ESPN real player results + stat-specific prior opponent position profiles"};
 }
