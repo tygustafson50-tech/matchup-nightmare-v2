@@ -18,19 +18,16 @@ export const NFL_SECONDARY_RANK_BAND=8;
 export const NFL_COVERAGE_GAMES=4;
 export const NFL_MAX_CANDIDATES=16;
 
-const ROLE_STAT={
-  QB:{passingYards:"passingYards",passAttempts:"passAttempts",
-    passCompletions:"passCompletions",passingTDs:"passingTDs",
-    rushingYards:"rushingYards",rushAttempts:"rushAttempts",rushingTDs:"rushingTDs"},
-  RB:{receptions:"receptions",receivingYards:"receivingYards",targets:"targets",
-    receivingTDs:"receivingTDs",rushingYards:"rushingYards",
-    rushAttempts:"rushAttempts",rushingTDs:"rushingTDs"},
-  WR:{receptions:"receptions",receivingYards:"receivingYards",targets:"targets",
-    receivingTDs:"receivingTDs",rushingYards:"rushingYards",
-    rushAttempts:"rushAttempts",rushingTDs:"rushingTDs"},
-  TE:{receptions:"receptions",receivingYards:"receivingYards",targets:"targets",
-    receivingTDs:"receivingTDs"}
-};
+// All QB/RB/WR/TE prop positions and ALL supported football stat markets
+// are eligible. Real ESPN stat totals and three+ prior recorded samples are
+// still mandatory; rare cross-position plays are never fabricated.
+const ROLE_STAT=Object.fromEntries(["QB","RB","WR","TE"].map(role=>[
+  role,Object.fromEntries([
+    "passingYards","passAttempts","passCompletions","passingTDs",
+    "rushingYards","rushAttempts","rushingTDs",
+    "receptions","receivingYards","targets","receivingTDs"
+  ].map(stat=>[stat,stat]))
+]));
 const laneOf=stat=>["rushingYards","rushAttempts","rushingTDs"].includes(stat)
   ?"rushing":"passing";
 function roleTotals(summary,defenseId,role,stat){
