@@ -12,9 +12,9 @@ const storageKey=(sport,date,league,id)=>PREFIX+
 
 function validCard(c,fixtureId){
   return c&&String(c.fixtureId)===String(fixtureId)&&
-    c.source==="PropLine"&&c.bookKey==="draftkings"&&
-    c.offer?.source==="PropLine"&&c.offer?.bookKey!=="fanduel"&&
-    (c.offer?.bookKey===undefined||c.offer?.bookKey==="draftkings")&&
+    c.source==="PropLine"&&
+    typeof c.bookKey==="string"&&/^[a-z][a-z0-9_]{2,39}$/.test(c.bookKey)&&
+    c.offer?.source==="PropLine"&&c.offer?.bookKey===c.bookKey&&
     finite(c.line)&&c.line>=0&&validInstant(c.quotedAt)&&
     typeof c.stat==="string"&&typeof c.player==="string";
 }
