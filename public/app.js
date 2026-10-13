@@ -76,33 +76,6 @@ function renderCard(c){
     (archived?'<p class="sample-warning">Previously saved research from '+
       safe(kickoff(c.cachedAt))+
       '. The price, line and player availability have NOT been reverified. Do not treat this as an active sportsbook offer.</p>':'')+
-    (c.defenseMatchMethod?.includes("rank")
-      ?'<p class="season-evidence">NFL defensive matchup: '+
-        safe(c.defenseMatchMethod)+
-        ' · Upcoming opponent rank: '+safe(c.upcomingDefenseRank??
-          "not verified")+
-        ' (1 = fewest yards allowed). Historical opponent ranks are season aggregates, not necessarily pregame rankings.</p>':'')+
-    (c.matchupSampleTarget?'<p class="season-evidence nfl-depth-explain">'+
-      '<strong>Strict defense comparison:</strong> '+safe(c.similar.tracked)+
-      ' of '+safe(c.matchupSampleTarget.min)+'–'+safe(c.matchupSampleTarget.max)+
-      ' target distinct VERIFIED defenses. '+
-      (c.positionMatchMethod
-        ?safe(c.positionMatchMethod)+': '
-        :safe(c.position)+' '+safe(c.market)+' allowed: ')+
-      safe(c.upcomingRoleAllowed??"not verified")+
-      '/game from prior recorded box scores.'+
-      (c.positionMatchMethod
-        ?' Recorded usage: '+safe(c.upcomingUsageAllowed??"not verified")+
-          '/game; companion statistic(s): '+
-          safe((c.supportingStatNames||[]).join(", ")||"unavailable")+'.'
-        :'')+
-      (Number.isFinite(c.upcomingRbReceptionsAllowed)?
-        ' RB catches allowed: '+safe(c.upcomingRbReceptionsAllowed)+
-        '/game — only a checkdown proxy, not tracked checkdown throws.':"")+
-      ' Unavailable samples never receive a fabricated value or 100% label.</p>':'')+
-    '<p class="season-evidence">Original book quote last updated '+safe(kickoff(c.quotedAt))+
-      ' · Selected from '+safe(c.quotesConsidered||1)+' real sportsbook line(s)'+
-      ' · Three-season window '+safe(c.seasonWindow.join(" / "))+'</p>'+
     '<div class="scan-stats">'+
       '<div><strong>'+safe(hitText(c.recent))+'</strong><small>Last five current-season games</small></div>'+
       '<div><strong>'+safe(hitText(c.similar))+'</strong><small>Similar defenses — three seasons</small></div>'+
