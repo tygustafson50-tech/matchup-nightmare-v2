@@ -35,6 +35,23 @@ test("every sport accepts a real priced Over selection",()=>{
     assert.equal(x[0].price,-110);
   }
 });
+test("exclude very long and heavily juiced odds but retain -110 through +150 in every sport",()=>{
+  for(const [sport,market,point] of [
+    ["nfl","player_receptions",4.5],
+    ["nba","player_points",22.5],
+    ["mlb","batter_hits",0.5],
+    ["ncaaf","player_pass_yds",199.5],
+    ["ncaab","player_rebounds",5.5],
+    ["soccer","player_assists",0.5]
+  ]){
+    for(const accepted of [-110,-105,-100,100,125,150])
+      assert.equal(quote(sport,market,{name:"Over",point,price:accepted}).length,1,
+        sport+" should allow "+accepted);
+    for(const rejected of [-1000,-120,-111,-99,99,151,3000])
+      assert.equal(quote(sport,market,{name:"Over",point,price:rejected}).length,0,
+        sport+" must reject "+rejected);
+  }
+});
 test("priced yes-only soccer player assists and goals are exact integer milestones",()=>{
   for(const key of ["player_assists","anytime_goal_scorer"]){
     const x=quote("soccer",key,{name:"Yes",point:null});
