@@ -124,8 +124,8 @@ test("raw ESPN summary parser does not invent missing stats",()=>{
 });
 test("gamelog only accepts dated games before event within specified season",()=>{
   const raw={events:{
-    "12345":{id:"12345",date:"2026-09-12T00:00:00Z"},
-    "99999":{id:"99999",date:"2026-10-20T00:00:00Z"},
+    "12345":{id:"12345",gameDate:"2026-09-12T00:00:00Z"},
+    "99999":{id:"99999",gameDate:"2026-10-20T00:00:00Z"},
     "22222":{id:"22222",date:"2026-09-04T00:00:00Z",seasonYear:2025}
   }};
   assert.deepEqual(gamelogEvents(raw,2026,"2026-10-11T00:00:00Z").map(x=>x.id),
