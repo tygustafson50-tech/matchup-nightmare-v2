@@ -70,7 +70,7 @@ function card(injury={label:"Questionable",kind:"questionable",
   detail:"Ankle",checkedAt:when,source:"ESPN team roster"}){
   return {sport:"nfl",player:"Matthew Stafford",team:"Los Angeles Rams",
     opponent:"Buffalo Bills",position:"QB",book:"DraftKings",variant:"standard",
-    line:195.5,recommendation:"OVER",
+    line:195.5,price:-105,recommendation:"OVER",
     offer:{espnPlayerId:"12483",source:"PropLine",bookKey:"draftkings"},
     visuals:{headshotUrl:photo,teamLogo,opponentLogo:otherLogo,injury}};
 }
