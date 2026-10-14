@@ -7,6 +7,9 @@ const PREFIX="matchup-nightmare:last-completed:v1:";
 export const MAX_CACHE_AGE_MS=7*24*60*60*1000;
 const finite=n=>typeof n==="number"&&Number.isFinite(n);
 const validInstant=s=>typeof s==="string"&&Number.isFinite(Date.parse(s));
+const validBookPrice=p=>Number.isInteger(p)&&
+  (p>=-110&&p<=-100||p>=100&&p<=150);
+const PICK_EM=new Set(["prizepicks","underdog","sleeper","dabble","parlayplay"]);
 const storageKey=(sport,date,league,id)=>PREFIX+
   [sport,date,league||"none",id].map(encodeURIComponent).join(":");
 
@@ -14,6 +17,7 @@ function validCard(c,fixtureId){
   return c&&String(c.fixtureId)===String(fixtureId)&&
     c.source==="PropLine"&&
     typeof c.bookKey==="string"&&/^[a-z][a-z0-9_]{2,39}$/.test(c.bookKey)&&
+    !PICK_EM.has(c.bookKey)&&validBookPrice(c.price)&&
     c.offer?.source==="PropLine"&&c.offer?.bookKey===c.bookKey&&
     finite(c.line)&&c.line>=0&&validInstant(c.quotedAt)&&
     typeof c.stat==="string"&&typeof c.player==="string";
