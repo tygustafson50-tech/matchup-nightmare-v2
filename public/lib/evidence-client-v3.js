@@ -164,7 +164,7 @@ export function gamelogEvents(payload,season,cutoff){
   const found=new Map();
   for(const [key,obj] of entries){
     const id=String(obj?.id||obj?.eventId||obj?.event?.id||key||"");
-    const date=obj?.date||obj?.gameDate||obj?.eventDate||obj?.event?.date;
+    const date=obj?.gameDate||obj?.date||obj?.eventDate||obj?.event?.date;
     const y=obj?.season?.year||obj?.seasonYear;
     if(!idOk(id)||!date||!Number.isFinite(Date.parse(date))||
       Date.parse(date)>=Date.parse(cutoff)||y&&Number(y)!==Number(season))continue;
