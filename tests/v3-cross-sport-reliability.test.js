@@ -11,7 +11,7 @@ function quote(sport,key,outcome,opts={}){
     commence_time:"2026-10-12T00:20:00Z",
     bookmakers:[{key:"draftkings",title:"DraftKings",markets:[{
       key,last_update:stamp,suspended_at:opts.suspended?stamp:null,
-      outcomes:[{description:"Verified Athlete",price:-120,...outcome,
+      outcomes:[{description:"Verified Athlete",price:-110,...outcome,
         ...(opts.lastSeenMinutesAgo!=null?{
           last_seen_at:new Date(NOW-opts.lastSeenMinutesAgo*60000).toISOString()
         }:{})}]
@@ -32,7 +32,7 @@ test("every sport accepts a real priced Over selection",()=>{
     const x=quote(sport,key,{name:"Over",point});
     assert.equal(x.length,1,sport+" should retain the sportsbook quote");
     assert.equal(x[0].line,point);
-    assert.equal(x[0].price,-120);
+    assert.equal(x[0].price,-110);
   }
 });
 test("priced yes-only soccer player assists and goals are exact integer milestones",()=>{
