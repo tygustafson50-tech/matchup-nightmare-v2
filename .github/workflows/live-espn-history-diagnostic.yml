@@ -34,4 +34,10 @@ jobs:
           const id=log?.first?.id;
           if(id)await inspect("NFL first historical summary","/api/espn?sport=nfl&kind=summary&gameId="+encodeURIComponent(id));
           await inspect("NFL Seattle roster 2026","/api/espn?sport=nfl&kind=roster&teamId=26&season=2026");
+          const teamSchedule=await inspect("NFL Seattle team schedule 2026","/api/espn?sport=nfl&kind=schedule&teamId=26&season=2026");
+          const completed=(teamSchedule?.body?.events||[]).find(e=>{
+            const t=e?.competitions?.[0]?.status?.type||e?.status?.type;
+            return t?.completed===true||t?.state==="post";
+          });
+          if(completed)await inspect("NFL real completed game summary","/api/espn?sport=nfl&kind=summary&gameId="+completed.id);
           NODE
