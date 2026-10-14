@@ -1,0 +1,37 @@
+name: Diagnose live ESPN history
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  history-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Inspect real player game logs and boxscore delivery
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          const host="https://matchup-nightmare-v2.pages.dev";
+          const inspect=async (label,path)=>{
+            try{
+              const res=await fetch(host+path,{headers:{"accept":"application/json","cache-control":"no-cache"},signal:AbortSignal.timeout(16000)});
+              const body=await res.json();
+              const obj=body.events||body.gameLog||{};
+              const events=Array.isArray(obj)?obj:Object.values(obj);
+              const first=events.find(x=>x&&typeof x==="object")||{};
+              console.log(JSON.stringify({label,status:res.status,keys:Object.keys(body).slice(0,30),
+                eventCount:events.length,firstEvent:first,
+                seasonTypes:body.seasonTypes?.map(x=>({keys:Object.keys(x),cats:x.categories?.map(c=>({name:c.name,events:c.events?.length}))})),
+                rosterCount:body.athletes?.length,players:body.boxscore?.players?.map(x=>({team:x.team?.displayName||x.team?.id,statGroups:x.statistics?.map(s=>({name:s.name,labels:s.labels?.slice(0,12),playerCount:s.athletes?.length,first:s.athletes?.[0]}))})),error:body.error,sourceStatus:body.sourceStatus}).slice(0,7000));
+              return {res,body,first};
+            }catch(e){console.log(label+" error "+String(e));return null;}
+          };
+          await inspect("NFL Kupp gamelog 2026","/api/espn?sport=nfl&kind=gamelog&playerId=2977187&season=2026");
+          const log=await inspect("NFL Kupp gamelog 2025","/api/espn?sport=nfl&kind=gamelog&playerId=2977187&season=2025");
+          const id=log?.first?.id;
+          if(id)await inspect("NFL first historical summary","/api/espn?sport=nfl&kind=summary&gameId="+encodeURIComponent(id));
+          await inspect("NFL Seattle roster 2026","/api/espn?sport=nfl&kind=roster&teamId=26&season=2026");
+          NODE
