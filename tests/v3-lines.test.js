@@ -16,7 +16,7 @@ const event=({id="10",point=0.5,suspended=false,stampAt=stamp(),
     markets:[{key:marketKey,last_update:stampAt,line_type:"alternate",
       suspended_at:suspended?stamp():null,
       outcomes:[
-        {name:"Over",description:player,point,price:-120,
+        {name:"Over",description:player,point,price:-110,
           player_id:"espn:12345",outcome_id:"price1001"},
         {name:"Under",description:player,point,price:100}
       ]}]
@@ -98,7 +98,7 @@ test("the official per-event PLAYER PROPS endpoint is used instead of bulk game 
   const p=body.projections[0];
   assert.equal(p.bookKey,"draftkings");
   assert.equal(p.line,0.5);
-  assert.equal(p.price,-120);
+  assert.equal(p.price,-110);
   assert.equal(p.variant,"alternative");
   assert.equal(p.espnPlayerId,"12345");
   assert.equal(p.gameId,"401999111");
