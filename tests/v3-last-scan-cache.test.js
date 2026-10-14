@@ -11,7 +11,7 @@ const scope=games=>({sport:"nfl",date:"2026-10-11",
   league:"eng.1",games});
 const card=(id=game.id)=>({
   id:"source-id",fixtureId:id,
-  source:"PropLine",bookKey:"draftkings",line:0.5,
+  source:"PropLine",bookKey:"draftkings",line:0.5,price:-105,
   quotedAt:"2026-10-11T21:29:00Z",stat:"rushingYards",
   player:"Jordan Whittington",recommendation:"OVER",
   offer:{source:"PropLine",bookKey:"draftkings",espnPlayerId:"123"},
@@ -90,16 +90,18 @@ test("tampered cached records cannot be represented as verified historical resul
 });
 
 
-test("valid FanDuel and PrizePicks source cards survive quota fallback without inventing prices",()=>{
+test("saved scans only display eligible verified sportsbook prices",()=>{
   const storage=memory(),data=scope([game]);
   const fanDuel={...card(),id:"fd-verified",bookKey:"fanduel",
     offer:{...card().offer,bookKey:"fanduel"}};
   const prizePicks={...card(),id:"pp-verified",bookKey:"prizepicks",
     price:null,offer:{...card().offer,bookKey:"prizepicks"}};
-  const stored=saveCompletedScan({...data,cards:[fanDuel,prizePicks]},storage,now);
+  const expensive={...card(),id:"high-odds",price:3000};
+  const tooJuiced={...card(),id:"too-juiced",price:-120};
+  const stored=saveCompletedScan({...data,
+    cards:[fanDuel,prizePicks,expensive,tooJuiced]},storage,now);
   assert.equal(stored.saved,1);
   const restored=readLastScan(data,storage,now+1000);
-  assert.deepEqual(restored.cards.map(c=>c.bookKey),["fanduel","prizepicks"]);
-  assert.equal(restored.cards[1].price,null);
+  assert.deepEqual(restored.cards.map(c=>c.bookKey),["fanduel"]);
   assert.ok(restored.cards.every(c=>c.cachedAt===stored.savedAt));
 });
