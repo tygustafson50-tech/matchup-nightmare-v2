@@ -87,6 +87,10 @@ const YES_ONLY_MARKETS=new Set([
 // identifiable book returned by the connected provider, not just a whitelist
 // that excludes new or previously unsupported books.
 const validBook=key=>typeof key==="string"&&/^[a-z][a-z0-9_]{2,39}$/.test(key);
+// Only include actual sportsbook OVER quotes in the requested American odds band.
+// -110 to -100 and +100 to +150 are valid; American odds have no -99..+99.
+export const eligibleOverPrice=price=>Number.isInteger(price)&&
+  (price>=-110&&price<=-100||price>=100&&price<=150);
 // Pick'em legs are actual posted thresholds but their +100 is not an
 // individual sportsbook price. Preserve the threshold, hide synthetic odds.
 const DFS_SYNTHETIC_PRICE=new Set([
@@ -191,7 +195,7 @@ const linesFrom=(event,{sport,date,now,diagnostics=null}={})=>{
     return [];
   const offers=[],seen=new Set();
   for(const bookmaker of event.bookmakers){
-    if(!validBook(bookmaker?.key)||bookmaker?.pregame_only===true &&
+    if(!validBook(bookmaker?.key)||DFS_SYNTHETIC_PRICE.has(bookmaker.key)||bookmaker?.pregame_only===true &&
       Date.parse(event.commence_time)<=now)continue;
     if(diagnostics)diagnostics.bookmakerBoards++;
     for(const market of bookmaker.markets||[]){
@@ -201,8 +205,8 @@ const linesFrom=(event,{sport,date,now,diagnostics=null}={})=>{
       if(diagnostics)diagnostics.freshMarkets++;
       for(const outcome of market.outcomes||[]){
         if(diagnostics)diagnostics.selectionsConsidered++;
-        if(!str(outcome?.description)||!Number.isFinite(outcome?.price)||
-          outcome.price===0||!selectionStillOffered(outcome,market))continue;
+        if(!str(outcome?.description)||!eligibleOverPrice(outcome.price)||
+          !selectionStillOffered(outcome,market))continue;
         const selection=quotedSelection(outcome,market,sport);
         if(!selection)continue;
         const [stat,display]=MARKET_MAP[market.key];
