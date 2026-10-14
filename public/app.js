@@ -284,13 +284,16 @@ async function scan(){
     const rejected=[];
     for(const offer of feed.projections||[]){
       // Fail closed if upstream ever exposes another bookmaker by mistake.
-      if(!offer.bookKey||offer.status!=="active")continue;
+      if(!offer.bookKey||offer.status!=="active"||
+         !Number.isInteger(offer.price)||
+         !(offer.price>=-110&&offer.price<=-100||
+           offer.price>=100&&offer.price<=150))continue;
       const matching=chosen.filter(game=>fixtureMatches(offer,game));
       if(matching.length===1)chosenPairs.push({offer,game:matching[0]});
       else if(matching.length>1)rejected.push("Ambiguous fixture for "+offer.player);
     }
     const grouped=groupOffersByPlayerStat(chosenPairs);
-    // Only the selected DraftKings quote is monitored after ranking;
+    // Only the selected verified sportsbook quote is monitored after ranking;
     // alternate points never create additional player/stat cards.
     const preface='<p class="season-evidence">PropLine · Verified player-prop lines retrieved: '+
       safe(feed.sourceFetchedAt)+" · "+chosenPairs.length+
