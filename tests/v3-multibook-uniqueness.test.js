@@ -20,7 +20,7 @@ function offers(books){
   }],{sport:"nfl",date:"2026-10-11",now});
 }
 test("FanDuel and Bovada can provide valid props even with no DraftKings board",()=>{
-  const rows=offers([book("fanduel",-115),book("bovada",-105)]);
+  const rows=offers([book("fanduel",-110),book("bovada",-105)]);
   assert.equal(rows.length,2);
   assert.deepEqual(new Set(rows.map(x=>x.bookKey)),
     new Set(["fanduel","bovada"]));
@@ -29,7 +29,7 @@ test("FanDuel and Bovada can provide valid props even with no DraftKings board",
   assert.equal(groups[0].offers.length,2);
 });
 test("multiple books and alt lines become one player-stat winner",()=>{
-  const rows=offers([book("draftkings",-125),
+  const rows=offers([book("draftkings",-110),
     book("fanduel",-105),book("bovada",-110,1.5)]);
   const groups=groupOffersByPlayerStat(rows.map(offer=>({offer,game})));
   assert.equal(groups.length,1);
@@ -43,11 +43,7 @@ test("multiple books and alt lines become one player-stat winner",()=>{
   assert.equal(chosen.offer.bookKey,"fanduel");
   assert.equal(chosen.quotesConsidered,3);
 });
-test("PrizePicks real projection line is usable without fabricating sportsbook odds",()=>{
+test("pick-em-only sources never appear as sportsbook odds within the selected range",()=>{
   const rows=offers([book("prizepicks",100)]);
-  assert.equal(rows.length,1);
-  assert.equal(rows[0].bookKey,"prizepicks");
-  assert.equal(rows[0].price,null);
-  assert.equal(rows[0].priceIsSynthetic,true);
-  assert.equal(rows[0].line,2.5);
+  assert.equal(rows.length,0);
 });
