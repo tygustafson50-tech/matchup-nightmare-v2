@@ -52,7 +52,7 @@ for(const [sport,position,stat] of cases){
     }));
     const profile=(year,id,teamId)=>
       sport==="nfl"?rank(year,teamId,id):
-        deep(sport,position,stat,year,teamId,id);
+        deep(sport,sport==="mlb"?"BATTER":position,stat,year,teamId,id);
     const pastProfiles=games.map(g=>profile(g.season,g.id,g.opponentId));
     const current=profile(2026,null,"90");
     const result=analyzeVerifiedProp({
