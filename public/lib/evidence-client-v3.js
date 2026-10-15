@@ -388,9 +388,28 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
       const payload=await client.call({...base,kind:"gamelog",
         playerId:player.id,season:String(year)});
       events=gamelogEvents(payload,year,game.date);
-    }catch(error){notes.push(year+": athlete game log unavailable — "+error.message);continue;}
-    // Every found season event is eligible; no fabricated padding and no
-    // silently mixing other seasons. Both old and current teams are allowed.
+    }catch(error){
+      // ESPN's site.web.api athlete gamelog currently answers HTTP 403 in
+      // production, even though official team schedules and boxscores work.
+      // Do not discard a player's entire history because one feed is blocked.
+      notes.push(year+": athlete game log unavailable — "+error.message);
+    }
+    if(!events.length){
+      try{
+        // A completed team schedule is independently recorded by ESPN; the
+        // summary still has to contain THIS athlete's real stat to qualify.
+        // Use recent completed games to control calls for longer seasons.
+        const caps={nfl:22,ncaaf:18,nba:25,ncaab:25,mlb:30,soccer:25};
+        events=completedTeamGames(await schedule(team.id,year),
+          team.id,game.date,year).slice(0,caps[sport]||20);
+        if(events.length)notes.push(year+": athlete history recovered from official completed team fixtures.");
+      }catch(error){
+        notes.push(year+": completed ESPN team schedule unavailable — "+error.message);
+      }
+    }
+    if(!events.length)continue;
+    // All recovered game IDs must still be matched to the official athlete
+    // in each completed ESPN boxscore. A team appearance is not a player stat.
     const complete=await Promise.allSettled(events.map(g=>summary(g.id)));
     for(let i=0;i<events.length;i++){
       if(complete[i].status!=="fulfilled")continue;
