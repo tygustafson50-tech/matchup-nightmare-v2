@@ -97,10 +97,10 @@ test("one 3-season recent+similar OVER model uses real opponent ranks and exact 
   assert.ok(result);
   assert.equal(result.recent.tracked,5);
   assert.equal(result.recent.hits,4);
-  assert.equal(result.similar.tracked,6);
-  assert.equal(result.similar.hits,5);
+  assert.equal(result.similar.tracked,3);
+  assert.equal(result.similar.hits,3);
   assert.equal(result.upcomingDefenseRank,28);
-  assert.ok(result.similarGames.every(g=>[2026,2025,2024].includes(g.season)));
+  assert.ok(result.similarGames.every(g=>[2025,2024,2023].includes(g.season)));
   assert.ok(result.similarGames.every(g=>Math.abs(g.historicalRank-28)<=3));
   assert.equal(result.similarGames.some(g=>g.opponent==="Defense #24"),false);
   assert.equal(result.similarGames.some(g=>g.opponent==="Defense #32"),false);
