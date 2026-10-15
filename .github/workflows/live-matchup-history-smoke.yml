@@ -22,6 +22,19 @@ jobs:
           import {makeEvidenceClient,loadVerifiedEvidence} from "./public/lib/evidence-client-v3.js";
           import {strictDefenseComparison} from "./public/lib/nfl-defense-depth.js";
           const origin="https://matchup-nightmare-v2.pages.dev";
+          let deployed=false;
+          for(let attempt=1;attempt<=18;attempt++){
+            const asset=await fetch(origin+"/lib/evidence-client-v3.js?version="+Date.now(),{
+              cache:"no-store",signal:AbortSignal.timeout(12000)});
+            const source=await asset.text();
+            if(asset.ok&&source.includes("athlete history recovered from official completed team fixtures.")){
+              console.log("Cloudflare production client has deployed the ESPN 403 fallback.");
+              deployed=true;break;
+            }
+            console.log("Waiting for production Pages to deploy new history code: "+attempt);
+            await new Promise(resolve=>setTimeout(resolve,10000));
+          }
+          assert.ok(deployed,"New ESPN history fallback must be deployed to Cloudflare production");
           // Never request or manufacture a betting quote in this test.
           // This inspects only published ESPN past games and defensive ranks.
           const fetcher=(path,options={})=>fetch(origin+path,{
