@@ -69,7 +69,8 @@ export function supportsMarket(sport,position,stat){
 export function seasonWindow(selectedSeason){
   const n=Number(selectedSeason);
   if(!Number.isInteger(n)||n<2000||n>2100)throw Error("Invalid league season.");
-  return [n,n-1,n-2];
+  // The similar-defense sample is the three COMPLETED seasons, never current.
+  return [n-1,n-2,n-3];
 }
 const nonnegative=n=>NUMBER(n)&&n>=0;
 const evidenceRow=g=>({
@@ -199,11 +200,16 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
      !validDate(offer.gameDateLocal)||!offer.id||!offer.bookKey||
      !validDate(now))return null;
   const years=seasonWindow(season),role=positionGroup(offer.sport,offer.position);
-  const available=uniqueGames(games).filter(g=>years.includes(Number(g.season))&&
+  // Current-season games remain eligible ONLY for the recent-five section.
+  const available=uniqueGames(games).filter(g=>(Number(g.season)===Number(season)||
+    years.includes(Number(g.season)))&&
     Date.parse(g.date)<Date.parse(offer.gameDateLocal+"T23:59:59Z")&&
     String(g.playerId)===String(offer.espnPlayerId||g.playerId) &&
     g.stat===offer.stat && g.sport===offer.sport);
   const recent=recentWindow(available,season,offer.gameDateLocal+"T23:59:59Z");
+  // No current-season game can enter a similar-defense count, hit rate,
+  // ranking, or OVER recommendation, regardless of available profiles.
+  const previousSeasonGames=available.filter(g=>years.includes(Number(g.season)));
   const profiles=(defensiveProfiles||[]).filter(p=>p?.verified===true);
   const useStrictNfl=offer.sport==="nfl"&&matchupModel==="nfl-depth";
   const useDeepSport=offer.sport!=="nfl"&&matchupModel==="multi-sport-depth";
@@ -221,7 +227,7 @@ export function analyzeVerifiedProp({offer,season,games,upcomingDefense,
   });
   const comparable=[];
   const reasons=new Set();
-  for(const g of available){
+  for(const g of previousSeasonGames){
     const historic=lookup.get(String(g.id)+"|"+String(g.opponentId));
     const test=useStrictNfl
       ?strictDefenseComparison({target:upcomingDefense,historical:historic,
