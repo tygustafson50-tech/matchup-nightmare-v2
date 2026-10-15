@@ -122,15 +122,20 @@ test("3 true distinct rank-matched defenses yield populated similar results with
     date:"2026-09-"+String(10+i).padStart(2,"0")+"T19:00:00Z",
     source:"ESPN game summary"
   }));
-  const profiles=games.map((g,i)=>({...rank(g.opponentId,2026,11+i,9),
+  const historical=games.map((g,i)=>({
+    ...g,id:"40120000"+i,season:2025,
+    date:"2025-09-"+String(10+i).padStart(2,"0")+"T19:00:00Z"
+  }));
+  const profiles=historical.map((g,i)=>({...rank(g.opponentId,2025,11+i,9),
     gameId:g.id,context:null}));
-  const c=analyzeVerifiedProp({offer,season:2026,games,
+  const c=analyzeVerifiedProp({offer,season:2026,games:[...games,...historical],
     upcomingDefense:rank(2,2026,12,9),upcomingContext:null,
     defensiveProfiles:profiles,matchupModel:"nfl-depth",
     now:"2026-10-12T18:00:00Z"});
   assert.equal(c.similar.tracked,3);
   assert.deepEqual(c.similarGames.map(x=>x.actual).sort((a,b)=>a-b),[65,74,83]);
   assert.ok(c.similarGames.every(x=>x.defenseReason.includes("NOT VERIFIED")));
-  assert.ok(c.similarGames.every(x=>x.matchTier>=3));
+  assert.ok(c.similarGames.every(x=>x.matchTier>=3&&x.season===2025));
+  assert.ok(c.recentGames.every(x=>x.season===2026));
   assert.equal(c.recent.tracked,3);
 });
