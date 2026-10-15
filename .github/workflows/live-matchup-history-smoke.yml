@@ -1,0 +1,67 @@
+name: Live verified matchup history smoke
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify actual Jaxon Smith-Njigba history and defensive matches
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import {makeEvidenceClient,loadVerifiedEvidence} from "./public/lib/evidence-client-v3.js";
+          import {strictDefenseComparison} from "./public/lib/nfl-defense-depth.js";
+          const origin="https://matchup-nightmare-v2.pages.dev";
+          // Never request or manufacture a betting quote in this test.
+          // This inspects only published ESPN past games and defensive ranks.
+          const fetcher=(path,options={})=>fetch(origin+path,{
+            ...options,signal:AbortSignal.timeout(16000)});
+          const response=await fetcher("/api/games?sport=nfl&date=2026-10-15");
+          assert.ok(response.ok,"ESPN fixture scoreboard available");
+          const board=await response.json();
+          const game=board.games.find(g=>[g.home?.id,g.away?.id].includes("26"));
+          assert.ok(game,"2026-10-15 Seattle Seahawks fixture present");
+          const client=makeEvidenceClient({fetcher,concurrency:8});
+          const input=await loadVerifiedEvidence({
+            client,game,offer:{source:"PropLine",sport:"nfl",
+              player:"Jaxon Smith-Njigba",espnPlayerId:"4430878",
+              stat:"receptions"},
+            onStage:msg=>console.log(msg)
+          });
+          const recent=input.games.filter(g=>g.season===2026).slice(0,5);
+          const history=input.games.filter(g=>g.season>=2024);
+          console.log(JSON.stringify({season:input.season,player:input.player.name,
+            recentGameCount:recent.length,historyGames:history.length,
+            recent:recent.map(g=>({date:g.date,vs:g.opponent,actual:g.actual})),
+            hasOpponentRank:!!input.upcomingDefense,
+            historicalRanks:input.defensiveProfiles.length,
+            fetches:client.stats()}));
+          assert.ok(recent.length>=3,"Actual 2026 completed Seahawks game stats should load");
+          assert.ok(recent.every(g=>Number.isFinite(g.actual)),"Recorded reception stats are numeric");
+          assert.ok(input.upcomingDefense?.verified,"Opponent defensive ranks fetched");
+          const profiles=new Map(input.defensiveProfiles.map(p=>[p.gameId+"|"+p.teamId,p]));
+          const matches=history.filter(g=>{
+            const old=profiles.get(g.id+"|"+g.opponentId);
+            return old&&strictDefenseComparison({
+              target:input.upcomingDefense,historical:old,
+              stat:"receptions",role:"WR",
+              targetContext:input.upcomingContext,
+              historicalContext:old.context
+            }).ok;
+          });
+          console.log(JSON.stringify({similarDefenses:
+            [...new Set(matches.map(g=>g.opponentId))].length,
+            matchedGames:matches.length,
+            matches:matches.slice(0,8).map(g=>({date:g.date,vs:g.opponent,actual:g.actual}))}));
+          assert.ok(matches.length>0,"Real matchup history must find defensive matches");
+          NODE
