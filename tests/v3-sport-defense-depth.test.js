@@ -142,15 +142,15 @@ function analyze(sport,stat,position,role,numMatches){
   const upcoming=profile(sport,role,stat,null,20,10,2026,5,
     sport==="soccer"?"eng.1":null);
   const games=[],hist=[];
-  for(let i=0;i<9;i++){
-    const year=i<5?2026:i<7?2025:2024;
+  for(let i=0;i<14;i++){
+    const year=i<5?2026:i<9?2025:i<12?2024:2023;
     const id="ex"+i;
     games.push({id,stat,sport,playerId:"800",
       season:year,actual:6,
       date:year+"-09-"+String(i+1).padStart(2,"0")+"T19:00:00Z",
       opponent:"Actual "+i,opponentId:String(i+100),
       source:"ESPN game summary",verified:true});
-    hist.push({...profile(sport,role,stat,id,i<numMatches?21:50,
+    hist.push({...profile(sport,role,stat,id,i>=5&&i<5+numMatches?21:50,
       10,year,5.1,sport==="soccer"?"eng.1":null),
       teamId:String(i+100)});
   }
@@ -182,7 +182,7 @@ test("all sports target 3–6 sampled distinct verified defenses with no invente
     assert.equal(all.matchupSampleTarget.min,3);
     assert.equal(all.matchupSampleTarget.max,6);
     assert.equal(all.recommendation,"OVER",sport);
-    assert.ok(all.similarGames.every(g=>g.supportingStats.length>0),sport);
+    assert.ok(all.similarGames.every(g=>g.supportingStats.length>0&&g.season<2026),sport);
   }
 });
 test("production forwards the verified deep sport model and shows the actual metrics",()=>{
