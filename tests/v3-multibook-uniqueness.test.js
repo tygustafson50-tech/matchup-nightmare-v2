@@ -44,6 +44,6 @@ test("multiple books and alt lines become one player-stat winner",()=>{
   assert.equal(chosen.quotesConsidered,3);
 });
 test("pick-em-only sources never appear as sportsbook odds within the selected range",()=>{
-  const rows=offers([book("prizepicks",100)]);
+  const rows=offers([book("prizepicks",100),book("draftkings_pick6",100)]);
   assert.equal(rows.length,0);
 });
