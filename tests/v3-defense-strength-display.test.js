@@ -77,13 +77,13 @@ test("every recent and similar NFL game gets its own corresponding season defens
     opponent:"Rams",stat:"receivingYards",market:"Receiving yards",
     line:49.5,variant:"standard",book:"DraftKings",bookKey:"draftkings",
     quotedAt:"2026-10-11T18:00:00Z",gameDateLocal:"2026-10-12"};
-  const games=[0,1,2,3,4,5].map(i=>({
+  const games=[0,1,2,3,4,5,6,7].map(i=>({
     id:"test"+i,playerId:"12",sport:"nfl",stat:"receivingYards",
-    opponent:"Team "+i,opponentId:String(20+i),season:i<4?2026:2025,
-    date:(i<4?"2026":"2025")+"-09-"+String(i+1).padStart(2,"0")+"T19:00:00Z",
+    opponent:"Team "+i,opponentId:String(20+i),season:i<4?2026:i<6?2025:2024,
+    date:(i<4?"2026":i<6?"2025":"2024")+"-09-"+String(i+1).padStart(2,"0")+"T19:00:00Z",
     actual:90-i*3,verified:true,source:"ESPN game summary"
   }));
-  const profiles=games.map((g,i)=>({...nfl(g.opponentId,g.season,10+i,24),gameId:g.id}));
+  const profiles=games.map((g,i)=>({...nfl(g.opponentId,g.season,10+i%5,24),gameId:g.id}));
   const result=analyzeVerifiedProp({offer,season:2026,games,defensiveProfiles:profiles,
     upcomingDefense:nfl(99,2026,12,24),
     matchupModel:"nfl-ranks",now:"2026-10-11T20:00:00Z"});
