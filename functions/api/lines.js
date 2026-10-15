@@ -96,6 +96,9 @@ export const eligibleOverPrice=price=>Number.isInteger(price)&&
 const DFS_SYNTHETIC_PRICE=new Set([
   "prizepicks","underdog","sleeper","dabble","parlayplay"
 ]);
+// DraftKings Pick6 is a pick-em provider, NOT DraftKings Sportsbook.
+const isPickEmBook=key=>DFS_SYNTHETIC_PRICE.has(key)||
+  /(^|_)(pick6|pick_6|pickem|pick_em|pickems)(_|$)/.test(String(key||"").toLowerCase());
 // Only validated selected ESPN fixtures may trigger paid API calls.
 const teamNorm=x=>String(x||"").normalize("NFKD").toLowerCase()
   .replace(/[\u0300-\u036f]/g,"").replace(/\bsaint\b/g,"st")
@@ -195,7 +198,7 @@ const linesFrom=(event,{sport,date,now,diagnostics=null}={})=>{
     return [];
   const offers=[],seen=new Set();
   for(const bookmaker of event.bookmakers){
-    if(!validBook(bookmaker?.key)||DFS_SYNTHETIC_PRICE.has(bookmaker.key)||bookmaker?.pregame_only===true &&
+    if(!validBook(bookmaker?.key)||isPickEmBook(bookmaker.key)||bookmaker?.pregame_only===true &&
       Date.parse(event.commence_time)<=now)continue;
     if(diagnostics)diagnostics.bookmakerBoards++;
     for(const market of bookmaker.markets||[]){
@@ -231,8 +234,8 @@ const linesFrom=(event,{sport,date,now,diagnostics=null}={})=>{
           quoteShape:selection.shape,selectionLabel:selection.selectionLabel,
           minimumStat:selection.minimumStat,
           variant,status:"active",quotedAt:market.last_update,
-          price:DFS_SYNTHETIC_PRICE.has(bookmaker.key)?null:outcome.price,
-          priceIsSynthetic:DFS_SYNTHETIC_PRICE.has(bookmaker.key),
+          price:outcome.price,
+          priceIsSynthetic:false,
           espnPlayerId,providerPlayerId:qualifiedPlayer||null,
           espnTeamId:null,espnOpponentId:null
         });
