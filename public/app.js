@@ -83,7 +83,7 @@ function renderCard(c){
       '. The price, line and player availability have NOT been reverified. Do not treat this as an active sportsbook offer.</p>':'')+
     '<div class="scan-stats">'+
       '<div><strong>'+safe(hitText(c.recent))+'</strong><small>Last five current-season games</small></div>'+
-      '<div><strong>'+safe(hitText(c.similar))+'</strong><small>Similar defenses — three seasons</small></div>'+
+      '<div><strong>'+safe(hitText(c.similar))+'</strong><small>Similar defenses — previous 3 seasons</small></div>'+
       '<div><strong>'+safe(total)+'</strong><small>'+
         (c.matchupSampleTarget?'Distinct similar defenses (3–6 target)':
           'Verified qualifying historical matchups')+'</small></div>'+
@@ -94,7 +94,7 @@ function renderCard(c){
       :rec?"Recommendation: OVER "+safe(c.line)+" "+safe(c.market)+". ":
         "No OVER recommendation. ")+
       safe(c.why)+'</p>'+
-    historyBlock("Similar Defenses — Last 3 Seasons",c.similarGames,
+    historyBlock("Similar Defenses — Previous 3 Seasons",c.similarGames,
       c.line,true,c.market)+
     historyBlock("Recent Matchups — Last 5 Games",c.recentGames,
       c.line,false,c.market)+
