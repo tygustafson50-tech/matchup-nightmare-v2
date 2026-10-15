@@ -27,8 +27,14 @@ jobs:
             const asset=await fetch(origin+"/lib/evidence-client-v3.js?version="+Date.now(),{
               cache:"no-store",signal:AbortSignal.timeout(12000)});
             const source=await asset.text();
-            if(asset.ok&&source.includes("athlete history recovered from official completed team fixtures.")){
-              console.log("Cloudflare production client has deployed the ESPN 403 fallback.");
+            const research=await fetch(origin+"/lib/research-v3.js?version="+Date.now(),{
+              cache:"no-store",signal:AbortSignal.timeout(12000)});
+            const researchSource=await research.text();
+            if(asset.ok&&research.ok&&
+              source.includes("const years=[season,season-1,season-2,season-3]")&&
+              researchSource.includes("const previousSeasonGames=available.filter")&&
+              researchSource.includes("return [n-1,n-2,n-3]")){
+              console.log("Cloudflare production has deployed the previous-three-season matching rule.");
               deployed=true;break;
             }
             console.log("Waiting for production Pages to deploy new history code: "+attempt);
@@ -52,7 +58,7 @@ jobs:
             onStage:msg=>console.log(msg)
           });
           const recent=input.games.filter(g=>g.season===2026).slice(0,5);
-          const history=input.games.filter(g=>g.season>=2024);
+          const history=input.games.filter(g=>g.season<input.season&&g.season>=input.season-3);
           console.log(JSON.stringify({season:input.season,player:input.player.name,
             recentGameCount:recent.length,historyGames:history.length,
             recent:recent.map(g=>({date:g.date,vs:g.opponent,actual:g.actual})),
@@ -76,5 +82,7 @@ jobs:
             [...new Set(matches.map(g=>g.opponentId))].length,
             matchedGames:matches.length,
             matches:matches.slice(0,8).map(g=>({date:g.date,vs:g.opponent,actual:g.actual}))}));
-          assert.ok(matches.length>0,"Real matchup history must find defensive matches");
+          assert.ok(matches.length>0,"Real prior-season matchup history must find defensive matches");
+          assert.ok(matches.every(g=>g.season<input.season&&
+            g.season>=input.season-3),"Similar opponents cannot be current-season games");
           NODE
