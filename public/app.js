@@ -285,6 +285,7 @@ async function scan(){
     for(const offer of feed.projections||[]){
       // Fail closed if upstream ever exposes another bookmaker by mistake.
       if(!offer.bookKey||offer.status!=="active"||
+         /(^|_)(pick6|pick_6|pickem|pick_em|pickems)(_|$)/.test(offer.bookKey)||
          !Number.isInteger(offer.price)||
          !(offer.price>=-110&&offer.price<=-100||
            offer.price>=100&&offer.price<=150))continue;
