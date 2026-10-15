@@ -106,16 +106,16 @@ const offer={id:"real-quote",source:"PropLine",sport:"nfl",status:"active",
 function analyzed(matches){
   const up=defense(99,2026,25,15,223,117),target=ctx(4.8,4.8);
   const games=[],profiles=[];
-  for(let i=0;i<8;i++){
-    const year=i<5?2026:i<7?2025:2024;
+  for(let i=0;i<13;i++){
+    const year=i<5?2026:i<9?2025:i<11?2024:2023;
     const id="match"+i;
     games.push({id,date:year+"-09-"+String(i+2).padStart(2,"0")+"T20:00:00Z",
       season:year,stat:"receptions",sport:"nfl",playerId:"42",
       opponentId:String(i+10),actual:i%5===0?2:6,opponent:"Example "+i,
       team:"A",source:"ESPN game summary",verified:true});
     // Nonqualifiers differ BOTH by >5 ranks and >10% pass yardage.
-    profiles.push({...defense(i+10,year,i<matches?25+i%3:15,17,
-      i<matches?226:300,119),
+    profiles.push({...defense(i+10,year,i>=5&&i<5+matches?25+i%3:15,17,
+      i>=5&&i<5+matches?226:300,119),
       gameId:id,context:ctx(5,5)});
   }
   return analyzeVerifiedProp({offer,season:2026,games,
@@ -137,6 +137,7 @@ test("3–6 confirmed defenses can support OVER but never more than six",()=>{
   assert.equal(three.recommendation,"OVER");
   const all=analyzed(8);
   assert.equal(all.similar.tracked,6);
+  assert.ok(all.similarGames.every(g=>g.season<2026));
   assert.equal(all.matchupSampleTarget.min,3);
   assert.equal(all.matchupSampleTarget.max,6);
   assert.ok(all.similarGames.every(x=>x.contextGames>=3));
