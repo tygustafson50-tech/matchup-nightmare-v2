@@ -95,7 +95,7 @@ test("ESPN recorded results pass through the real rank-based research and remain
     variant:"standard",quotedAt:"2026-10-11T19:00:00Z",
     gameDateLocal:"2026-10-12",espnPlayerId:"33"};
   const history=games.map((g,i)=>({
-    ...g,season:2026-i,sport:"nfl",playerId:"33",
+    ...g,season:2025-i,date:(2025-i)+g.date.slice(4),sport:"nfl",playerId:"33",
     stat:"receivingYards",opponentId:String(100+i),
     source:"ESPN game summary",verified:true
   }));
