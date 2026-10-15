@@ -3,7 +3,8 @@
  * A saved scan is HISTORICAL evidence, not a live bookmaker market. It can
  * never carry over to a different sport, league, date, game, or started game.
  */
-const PREFIX="matchup-nightmare:last-completed:v1:";
+// Invalidate cached scans produced under the old current-season similarity rule.
+const PREFIX="matchup-nightmare:last-completed:v2:";
 export const MAX_CACHE_AGE_MS=7*24*60*60*1000;
 const finite=n=>typeof n==="number"&&Number.isFinite(n);
 const validInstant=s=>typeof s==="string"&&Number.isFinite(Date.parse(s));
