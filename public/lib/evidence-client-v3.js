@@ -369,7 +369,8 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
   const enemy=([game.home,game.away]).find(t=>t!==team);
   if(!enemy?.id)throw Error("Opposing team ID could not be verified.");
   const base={sport,...(sport==="soccer"?{league}:{})};
-  const years=[season,season-1,season-2];
+  // Current season feeds recent-five only; previous three feed comparisons.
+  const years=[season,season-1,season-2,season-3];
   const records=[],notes=[],summaryCache=new Map(),schedules=new Map();
   const summary=id=>{
     if(!summaryCache.has(id))summaryCache.set(id,client.call({...base,kind:"summary",gameId:id}));
@@ -445,7 +446,7 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
       if(!asked.has(key))asked.set(key,{teamId:String(teamId),year});
     };
     add(enemy.id,season);
-    for(const row of records)add(row.opponentId,row.season);
+    for(const row of records.filter(g=>g.season!==season))add(row.opponentId,row.season);
     const needs=[...asked.values()];
     const responses=await Promise.allSettled(needs.map(({teamId,year})=>
       client.call({sport:"nfl",kind:"teamstats",teamId,season:String(year)})));
@@ -459,7 +460,7 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
       if(parsed)rankingByTeamSeason.set(entry.teamId+"|"+entry.year,parsed);
     }
     const selected=rankingByTeamSeason.get(String(enemy.id)+"|"+season)||null;
-    const profiles=records.map(g=>{
+    const profiles=records.filter(g=>g.season!==season).map(g=>{
       const defensive=rankingByTeamSeason.get(g.opponentId+"|"+g.season);
       return defensive?{...defensive,gameId:g.id}:null;
     }).filter(Boolean);
@@ -470,7 +471,7 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
     // Fetch additional position-specific pregame coverage ONLY for defenses
     // that pass both published league-rank gates. This cuts ESPN requests
     // versus fetching arbitrary deep coverage for every team in NFL history.
-    const ranked=records.map(g=>{
+    const ranked=records.filter(g=>g.season!==season).map(g=>{
       const profile=rankingByTeamSeason.get(g.opponentId+"|"+g.season);
       const rank=selected&&profile?strictDefenseGate(selected,profile,offer.stat):
         {ok:false};
@@ -483,14 +484,9 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
     // Try multiple seasons if ESPN lacks an early-game context, but do not
     // spend the entire quota on repeated matches against the same defense.
     const candidate=[],perDefense=new Map();
-    // Current-season opponent rosters expose verified athlete positions,
-    // while ESPN historical 2024/25 rosters are frequently empty. Check
-    // current-season position coverage first, then the closest historical
-    // defense profiles, without changing defense-only final selection.
-    const priority=[
-      ...ranked.filter(x=>Number(x.game.season)===Number(season)),
-      ...ranked.filter(x=>Number(x.game.season)!==Number(season))
-    ];
+    // Only earlier completed seasons can contribute similar matchups;
+    // rank matches have already excluded all current-season player games.
+    const priority=ranked;
     for(const row of priority){
       const id=row.game.opponentId;
       const count=perDefense.get(id)||0;
@@ -550,7 +546,7 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
   const role=positionGroup(sport,player.position);
   const desired=[{teamId:String(enemy.id),season,cutoff:game.date,
     gameId:null,kind:"target"}];
-  for(const row of records)desired.push({teamId:row.opponentId,
+  for(const row of records.filter(g=>g.season!==season))desired.push({teamId:row.opponentId,
     season:row.season,cutoff:row.date,gameId:row.id,kind:"historical"});
   const unique=new Map(desired.map(x=>[
     [x.teamId,x.season,x.cutoff].join("|"),x]));
