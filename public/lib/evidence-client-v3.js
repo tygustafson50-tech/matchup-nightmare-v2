@@ -446,7 +446,9 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
       if(!asked.has(key))asked.set(key,{teamId:String(teamId),year});
     };
     add(enemy.id,season);
-    for(const row of records.filter(g=>g.season!==season))add(row.opponentId,row.season);
+    // Keep current-season opponent rankings for badges on recent games.
+    // Historical SIMILAR selection still filters to earlier seasons below.
+    for(const row of records)add(row.opponentId,row.season);
     const needs=[...asked.values()];
     const responses=await Promise.allSettled(needs.map(({teamId,year})=>
       client.call({sport:"nfl",kind:"teamstats",teamId,season:String(year)})));
@@ -460,7 +462,7 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
       if(parsed)rankingByTeamSeason.set(entry.teamId+"|"+entry.year,parsed);
     }
     const selected=rankingByTeamSeason.get(String(enemy.id)+"|"+season)||null;
-    const profiles=records.filter(g=>g.season!==season).map(g=>{
+    const profiles=records.map(g=>{
       const defensive=rankingByTeamSeason.get(g.opponentId+"|"+g.season);
       return defensive?{...defensive,gameId:g.id}:null;
     }).filter(Boolean);
@@ -546,7 +548,9 @@ export async function loadVerifiedEvidence({client,offer,game,league="eng.1",onS
   const role=positionGroup(sport,player.position);
   const desired=[{teamId:String(enemy.id),season,cutoff:game.date,
     gameId:null,kind:"target"}];
-  for(const row of records.filter(g=>g.season!==season))desired.push({teamId:row.opponentId,
+  // Recent games still receive their defensive badges; the analyzer
+  // forbids those current-season games from entering historical matches.
+  for(const row of records)desired.push({teamId:row.opponentId,
     season:row.season,cutoff:row.date,gameId:row.id,kind:"historical"});
   const unique=new Map(desired.map(x=>[
     [x.teamId,x.season,x.cutoff].join("|"),x]));
