@@ -18,7 +18,7 @@ const defense=(season,teamId,gameId,allowed,volume,asOf)=>({
 });
 function dataset(){
   const profiles=[],games=[];
-  for(const year of [2026,2025,2024]){
+  for(const year of [2026,2025,2024,2023]){
     for(let i=0;i<8;i++){
       const id=String(year*100+i),date=year+"-09-"+String(i+1).padStart(2,"0")+"T19:00:00Z";
       const allowed=70+i*10,volume=10+i*2;
@@ -35,8 +35,8 @@ function dataset(){
   profiles.push(upcoming);
   return {profiles,games,upcoming};
 }
-test("3 seasons exactly, no extension to a fourth season",()=>{
-  assert.deepEqual(seasonWindow(2026),[2026,2025,2024]);
+test("similar matchups use exactly three PREVIOUS seasons, never current",()=>{
+  assert.deepEqual(seasonWindow(2026),[2025,2024,2023]);
   assert.equal(positionGroup("nfl","WR"),"WR");
   assert.equal(positionGroup("nba","PG"),"PG");
   assert.equal(positionGroup("soccer","ST"),"F");
@@ -44,7 +44,7 @@ test("3 seasons exactly, no extension to a fourth season",()=>{
 test("today's exact current PropLine line is evaluated independently in each game",()=>{
   const data=dataset();
   const old=data.games[0];
-  data.games.push({...old,id:"unknown-season",season:2023,date:"2023-08-01T19:00:00Z",
+  data.games.push({...old,id:"unknown-season",season:2022,date:"2022-08-01T19:00:00Z",
     actual:999});
   const result=analyzeVerifiedProp({
     offer,season:2026,games:data.games,upcomingDefense:data.upcoming,
@@ -54,7 +54,9 @@ test("today's exact current PropLine line is evaluated independently in each gam
   assert.equal(result.recent.tracked,5);
   assert.equal(result.recent.hits,5);
   assert.equal(result.recent.percent,100);
-  assert.ok(result.similarGames.every(g=>[2026,2025,2024].includes(g.season)));
+  assert.ok(result.recentGames.every(g=>g.season===2026));
+  assert.ok(result.similarGames.length>0);
+  assert.ok(result.similarGames.every(g=>[2025,2024,2023].includes(g.season)));
   assert.equal(result.similarGames.some(g=>g.id==="unknown-season"),false);
   assert.equal(result.similar.tracked,result.similarGames.length);
   assert.equal(result.similar.hits,result.similarGames.filter(g=>g.actual>49.5).length);
@@ -181,9 +183,9 @@ test("MLB hitter comparable pitching profiles do not require unavailable invente
   const current={sport:"mlb",stat:"hits",position:"BATTER",verified:true,
     teamId:"2",season:2026,gameId:null,pregameGames:6,asOf:"2026-10-11T00:00:00Z",
     metrics:{allowed:8,volume:32}};
-  const historical={...current,teamId:"3",gameId:"mlb1",
+  const historical={...current,teamId:"3",gameId:"mlb1",season:2025,
     metrics:{allowed:7,volume:30}};
-  const game={id:"mlb1",date:"2026-09-20T00:00:00Z",season:2026,
+  const game={id:"mlb1",date:"2025-09-20T00:00:00Z",season:2025,
     playerId:"199",stat:"hits",sport:"mlb",team:"Real Team",
     opponent:"Other Team",opponentId:"3",actual:2,
     source:"ESPN game summary",verified:true};
