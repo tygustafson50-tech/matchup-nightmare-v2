@@ -17,7 +17,9 @@ function validCard(c,fixtureId){
   return c&&String(c.fixtureId)===String(fixtureId)&&
     c.source==="PropLine"&&
     typeof c.bookKey==="string"&&/^[a-z][a-z0-9_]{2,39}$/.test(c.bookKey)&&
-    !PICK_EM.has(c.bookKey)&&validBookPrice(c.price)&&
+    !PICK_EM.has(c.bookKey)&&
+    !/(^|_)(pick6|pick_6|pickem|pick_em|pickems)(_|$)/.test(c.bookKey)&&
+    validBookPrice(c.price)&&
     c.offer?.source==="PropLine"&&c.offer?.bookKey===c.bookKey&&
     finite(c.line)&&c.line>=0&&validInstant(c.quotedAt)&&
     typeof c.stat==="string"&&typeof c.player==="string";
