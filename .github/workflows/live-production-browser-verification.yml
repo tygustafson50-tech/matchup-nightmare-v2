@@ -1,0 +1,126 @@
+name: Verify live production browser scan
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Chromium browser
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Verify live endpoints and actual user scan without mocks
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import {chromium} from "playwright";
+          const origin="https://matchup-nightmare-v2.pages.dev";
+          const request=async(path)=>{
+            const res=await fetch(origin+path,{headers:{"accept":"application/json","cache-control":"no-cache"},signal:AbortSignal.timeout(25000)});
+            const type=res.headers.get("content-type")||"";
+            const body=await res.text();
+            if(!/json/i.test(type)||/^\s*</.test(body))throw Error(path+" returned HTML/non-JSON: "+res.status+" "+type+" "+body.slice(0,80));
+            let data;try{data=JSON.parse(body)}catch(e){throw Error(path+" invalid JSON "+e.message)}
+            console.log("ENDPOINT "+JSON.stringify({path,status:res.status,type,keys:Object.keys(data).slice(0,12),error:data.error,sourceStatus:data.sourceStatus}));
+            return {res,data};
+          };
+          const health=await request("/api/health");
+          assert.equal(health.res.status,200,"Health must return HTTP 200 JSON");
+          const nfl=await request("/api/games?sport=nfl&date=2026-10-25");
+          assert.equal(nfl.res.status,200,"NFL schedule must return HTTP 200 JSON");
+          assert.ok(Array.isArray(nfl.data.games)&&nfl.data.games.length>0,"NFL scheduled games must be present");
+          const roster=await request("/api/espn?sport=nfl&kind=roster&teamId=26&season=2026");
+          assert.equal(roster.res.status,200,"Seahawks ESPN roster must be JSON");
+          const schedule=await request("/api/espn?sport=nfl&kind=schedule&teamId=26&season=2026");
+          assert.equal(schedule.res.status,200,"Seahawks ESPN schedule must be JSON");
+          const completed=(schedule.data.events||[]).find(x=>x.status?.type?.completed||x.competitions?.[0]?.status?.type?.completed);
+          assert.ok(completed,"Completed Seattle game must be available");
+          const summary=await request("/api/espn?sport=nfl&kind=summary&gameId="+completed.id);
+          assert.equal(summary.res.status,200,"Completed ESPN boxscore must return JSON");
+          assert.ok(Array.isArray(summary.data.boxscore?.players)&&summary.data.boxscore.players.length>0,"Boxscore players must be available");
+          const log=await request("/api/espn?sport=nfl&kind=gamelog&playerId=4430878&season=2026");
+          console.log("GAMELOG "+JSON.stringify({status:log.res.status,sourceStatus:log.data.sourceStatus,hasGameLog:!!log.data.events||!!log.data.seasonTypes,expectedFallbackIfBlocked:log.res.status===502}));
+          const browser=await chromium.launch({headless:true,args:["--no-sandbox"]});
+          const context=await browser.newContext({timezoneId:"America/Chicago",viewport:{width:1440,height:1000}});
+          const page=await context.newPage();
+          const issues=[],network=[];
+          page.on("pageerror",e=>issues.push("PAGEERROR "+e.message));
+          page.on("response",async r=>{
+            const u=r.url();
+            if(!u.startsWith(origin+"/api/"))return;
+            const ct=r.headers()["content-type"]||"";
+            const entry={path:new URL(u).pathname,status:r.status(),type:ct};
+            network.push(entry);
+            if(/html/i.test(ct))issues.push("API HTML fallback "+JSON.stringify(entry));
+          });
+          await page.goto(origin,{waitUntil:"domcontentloaded",timeout:45000});
+          await page.waitForSelector("#sports button[data-s='nfl']",{timeout:15000});
+          const choices=[{sport:"nfl",date:"2026-10-25"},{sport:"nba",date:"2026-10-24"},{sport:"nba",date:"2026-10-25"}];
+          let verified=null;
+          for(const choice of choices){
+            await page.locator("#sports button[data-s='"+choice.sport+"']").click();
+            await page.locator("#date").fill(choice.date);
+            await page.locator("#date").dispatchEvent("change");
+            await page.waitForFunction(()=>!document.querySelector("#scheduleStatus").textContent.includes("Loading"),{timeout:25000}).catch(()=>{});
+            const gameButtons=page.locator("#games button.game");
+            const count=await gameButtons.count();
+            console.log("BROWSER DATE "+JSON.stringify({choice,gameCount:count,scheduleStatus:await page.locator("#scheduleStatus").innerText()}));
+            if(!count)continue;
+            const names=await gameButtons.allTextContents();
+            // Select at most two genuine ESPN fixtures, never a fabricated game.
+            for(let i=0;i<Math.min(count,2);i++)await gameButtons.nth(i).click();
+            await page.locator("#scanSelected").click();
+            await page.waitForFunction(()=>document.querySelector("#scanSelected").textContent.includes("Scan Selected Games"),{timeout:300000}).catch(e=>issues.push("SCAN TIMEOUT "+choice.sport+" "+choice.date+" "+e.message));
+            const cards=page.locator(".scan-card");
+            const cardCount=await cards.count();
+            const progress=await page.locator("#scanProgress").innerText();
+            const output=await page.locator("#scanOutput").innerText();
+            console.log("BROWSER SCAN "+JSON.stringify({choice,names:names.slice(0,2),cardCount,progress,output:output.slice(0,1500),network:network.slice(-12),issues:issues.slice(-10)}));
+            if(cardCount){
+              const card=cards.first();
+              const name=await card.locator(".player-name, .player-card-name, h3, h2").first().innerText().catch(()=>card.innerText());
+              const recent=card.locator(".verified-game-history:not(.verified-similar-history) .verified-game-entry");
+              const similar=card.locator(".verified-similar-history .verified-game-entry");
+              const recentRows=await recent.count(),similarRows=await similar.count();
+              const recentActual=await recent.locator(".verified-actual-number").allTextContents();
+              const similarActual=await similar.locator(".verified-actual-number").allTextContents();
+              const similarDates=await similar.locator(".game-log-date").allTextContents();
+              const recentDates=await recent.locator(".game-log-date").allTextContents();
+              const contextText=await card.locator(".verified-similar-history").innerText();
+              const record={choice,fixture:names.slice(0,2),name:name.slice(0,120),recentRows,similarRows,recentActual,similarActual,recentDates,similarDates,contextText:contextText.slice(0,1000),progress};
+              console.log("ACTUAL CARD "+JSON.stringify(record));
+              if(recentRows>=3&&similarRows>0&&
+                 recentActual.every(v=>Number.isFinite(Number(v)))&&
+                 similarActual.every(v=>Number.isFinite(Number(v)))&&
+                 recentDates.every(v=>/2026/.test(v))&&
+                 similarDates.every(v=>/2023|2024|2025/.test(v))&&
+                 !issues.length&&
+                 !/LAST SAVED SCAN|NOT LIVE/.test(output)){
+                verified=record;
+                await page.screenshot({path:"live-browser-verified.png",fullPage:true});
+                break;
+              }
+            }
+          }
+          await browser.close();
+          console.log("NETWORK SUMMARY "+JSON.stringify({total:network.length,byPath:network.reduce((a,r)=>(a[r.path]=(a[r.path]||0)+1,a),{}),issues}));
+          assert.ok(verified,"No live browser-rendered ESPN Recent 5 and three-season similar-defense player card was verified with a real PropLine line.");
+          console.log("VERIFIED END TO END "+JSON.stringify(verified));
+          NODE
+      - name: Upload screenshot when verified
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-browser-scan-screenshot
+          path: live-browser-verified.png
+          if-no-files-found: ignore
