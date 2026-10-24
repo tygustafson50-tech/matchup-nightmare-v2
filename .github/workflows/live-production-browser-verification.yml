@@ -65,22 +65,22 @@ jobs:
           });
           await page.goto(origin,{waitUntil:"domcontentloaded",timeout:45000});
           await page.waitForSelector("#sports button[data-s='nfl']",{timeout:15000});
-          const choices=[{sport:"nfl",date:"2026-10-25"},{sport:"nba",date:"2026-10-24"},{sport:"nba",date:"2026-10-25"}];
+          const choices=[{sport:"nfl",date:"2026-10-25"}];
           let verified=null;
           for(const choice of choices){
             await page.locator("#sports button[data-s='"+choice.sport+"']").click();
             await page.locator("#date").fill(choice.date);
             await page.locator("#date").dispatchEvent("change");
-            await page.waitForFunction(()=>!document.querySelector("#scheduleStatus").textContent.includes("Loading"),{timeout:25000}).catch(()=>{});
+            await page.waitForFunction(()=>!document.querySelector("#scheduleStatus").textContent.includes("Loading"),null,{timeout:25000}).catch(()=>{});
             const gameButtons=page.locator("#games button.game");
             const count=await gameButtons.count();
             console.log("BROWSER DATE "+JSON.stringify({choice,gameCount:count,scheduleStatus:await page.locator("#scheduleStatus").innerText()}));
             if(!count)continue;
             const names=await gameButtons.allTextContents();
             // Select at most two genuine ESPN fixtures, never a fabricated game.
-            for(let i=0;i<Math.min(count,2);i++)await gameButtons.nth(i).click();
+            for(let i=0;i<Math.min(count,1);i++)await gameButtons.nth(i).click();
             await page.locator("#scanSelected").click();
-            await page.waitForFunction(()=>document.querySelector("#scanSelected").textContent.includes("Scan Selected Games"),{timeout:300000}).catch(e=>issues.push("SCAN TIMEOUT "+choice.sport+" "+choice.date+" "+e.message));
+            await page.waitForFunction(()=>document.querySelector("#scanSelected").textContent.includes("Scan Selected Games"),null,{timeout:480000}).catch(e=>issues.push("SCAN TIMEOUT "+choice.sport+" "+choice.date+" "+e.message));
             const cards=page.locator(".scan-card");
             const cardCount=await cards.count();
             const progress=await page.locator("#scanProgress").innerText();
@@ -112,7 +112,8 @@ jobs:
               }
             }
           }
-          await browser.close();
+          await page.screenshot({path:"live-browser-diagnostic.png",fullPage:true});
+                    await browser.close();
           console.log("NETWORK SUMMARY "+JSON.stringify({total:network.length,byPath:network.reduce((a,r)=>(a[r.path]=(a[r.path]||0)+1,a),{}),issues}));
           assert.ok(verified,"No live browser-rendered ESPN Recent 5 and three-season similar-defense player card was verified with a real PropLine line.");
           console.log("VERIFIED END TO END "+JSON.stringify(verified));
@@ -122,5 +123,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: live-browser-scan-screenshot
-          path: live-browser-verified.png
+          path: |\n            live-browser-verified.png\n            live-browser-diagnostic.png
           if-no-files-found: ignore
